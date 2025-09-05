@@ -13,10 +13,18 @@ define( 'DB_PASSWORD', '' ); // Update this with your local MySQL password
 define( 'DB_HOST', 'localhost' );
 
 // ** Debug settings for local development ** //
-define( 'WP_DEBUG', true );
-define( 'WP_DEBUG_LOG', true );
-define( 'WP_DEBUG_DISPLAY', false );
-define( 'SCRIPT_DEBUG', true );
+if ( ! defined( 'WP_DEBUG' ) ) {
+	define( 'WP_DEBUG', true );
+}
+if ( ! defined( 'WP_DEBUG_LOG' ) ) {
+	define( 'WP_DEBUG_LOG', true );
+}
+if ( ! defined( 'WP_DEBUG_DISPLAY' ) ) {
+	define( 'WP_DEBUG_DISPLAY', false );
+}
+if ( ! defined( 'SCRIPT_DEBUG' ) ) {
+	define( 'SCRIPT_DEBUG', true );
+}
 
 // ** Local URLs ** //
 define( 'WP_HOME', 'http://localhost:8000' );
@@ -26,7 +34,9 @@ define( 'WP_SITEURL', 'http://localhost:8000' );
 define( 'DISALLOW_FILE_EDIT', false ); // Allow file editing in local development
 
 // ** Performance settings for local development ** //
-define( 'WP_CACHE', false ); // Disable caching during development
+if ( ! defined( 'WP_CACHE' ) ) {
+	define( 'WP_CACHE', false ); // Disable caching during development
+}
 
 // ** Email settings for local development ** //
 // Prevent emails from being sent during local development
