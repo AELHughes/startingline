@@ -1,0 +1,61 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "fooevents-calendar/fooevents-calendar-shortcode",
+  "version": "0.1.0",
+  "title": "FooEvents Calendar",
+  "category": "widgets",
+  "icon": "tickets",
+  "description": "Displays events, pages and posts in a calendar.",
+  "example": {},
+  "supports": {
+    "html": false
+  },
+  "textdomain": "fooevents-calendar-shortcode",
+  "editorScript": "file:./index.js",
+  "editorStyle": "file:./index.css",
+  "style": "file:./style-index.css",
+  "viewScript": "file:./view.js",
+  "attributes": {
+    "firstDay": {
+      "type": "string",
+      "default": "0"
+    },
+    "defaultView": {
+      "type": "string",
+      "default": ""
+    },
+    "defaultTimeFormat": {
+      "type": "string",
+      "default": "H.mm"
+    },
+    "defaultDate": {
+      "type": "string",
+      "default": ""
+    },
+    "limitEvents": {
+      "type": "boolean",
+      "default": false
+    },
+    "numberOfEvents": {
+      "type": "number",
+      "default": 10
+    },
+    "id": {
+      "type": "string",
+      "default": ""
+    },
+    "weekends": {
+      "type": "boolean",
+      "default": true
+    },
+    "productIDs": {
+      "type": "array",
+      "default": []
+    },
+    "hashtags": {
+      "type": "array",
+      "default": []
+    }
+  }
+}

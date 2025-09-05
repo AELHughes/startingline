@@ -1,0 +1,117 @@
+# WordPress Core
+# Note: if you want to stage/commit a particular file even though it is on this list, you can use git add -f filename.ext
+
+# WordPress specific files
+wp-config.php
+wp-config-local.php
+wp-config-production.php
+wp-content/uploads/
+wp-content/blogs.dir/
+wp-content/upgrade/
+wp-content/backup-db/
+wp-content/advanced-cache.php
+wp-content/wp-cache-config.php
+wp-content/cache/
+wp-content/w3tc-config/
+
+# WP-CLI
+wp-cli.local.yml
+
+# Database files
+*.sql
+*.sql.gz
+database/
+
+# Log files
+*.log
+wp-content/debug.log
+error_log
+
+# htaccess files for security (we'll handle this separately)
+.htaccess.bk
+.htaccess.*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Node modules and build files
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Sass
+.sass-cache/
+*.css.map
+
+# Composer
+vendor/
+composer.lock
+
+# Backup files
+*.bak
+backup/
+backups/
+
+# Temporary files
+tmp/
+temp/
+
+# Cache files
+wp-content/cache/*
+wp-content/w3tc-config/*
+wp-content/litespeed/
+wp-content/gravatars/
+
+# Plugin specific caches
+wp-content/ewww/
+
+# WooCommerce specific
+wp-content/uploads/wc-logs/
+
+# Custom development files
+local-config.php
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# PHP configuration files that may contain sensitive info
+php.ini
+.user.ini
+
+# LiteSpeed specific
+litespeed.conf
+
+# WordPress multisite
+wp-content/blogs.dir/
+wp-content/sites/
+
+# WordPress updates
+/wp-admin/
+/wp-includes/
+
+# WordPress root files that should be managed by WordPress core
+/wp-*.php
+!/wp-config-sample.php
+/xmlrpc.php
+/readme.html
+/license.txt
+
+# But keep these custom files if they exist
+!wp-config-local.php
+!wp-config-production.php

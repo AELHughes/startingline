@@ -1,0 +1,15 @@
+/*--------------------------------------------------------------
+# Icons
+--------------------------------------------------------------*/
+.thewebs-svg-iconset {
+	display: inline-flex;
+	align-self: center;
+}
+.thewebs-svg-iconset svg {
+	height:1em;
+	width:1em;
+}
+.thewebs-svg-iconset.svg-baseline svg {
+	top: .125em;
+	position: relative;
+}
