@@ -1514,91 +1514,143 @@ add_action('woocommerce_checkout_create_order_fee_item', function( $item, $cart 
 				error_log("SL Debug: ticket $ticket_id final result stored: $value");
 			});
 
-		/* 4) Add temp license custom field to FooEvents attendee forms */
-		add_filter('fooevents_custom_attendee_fields', 'sl_add_temp_license_custom_field', 10, 2);
+		/* 4) Process temp license selection from custom attendee field during checkout */
+		add_action('init', 'sl_setup_temp_license_processing');
 
 /**
- * Add temp license custom field to FooEvents attendee forms
- * Only shows when the event product has temp license enabled
+ * Set up temp license processing hooks
  */
-function sl_add_temp_license_custom_field($fields, $product_id) {
-	// Check if this event has temp license enabled
-	$temp_license_fee = get_post_meta($product_id, '_sl_temp_license_fee', true);
-	if (empty($temp_license_fee) || floatval($temp_license_fee) <= 0) {
-		return $fields; // No temp license for this event
-	}
-
-	// Add the temp license field
-	$fields['temp_license'] = array(
-		'type' => 'select',
-		'label' => 'Temporary Racing License',
-		'required' => true,
-		'options' => array(
-			'no' => 'No - I have my own license',
-			'yes' => 'Yes - I need a temporary license (+£' . number_format(floatval($temp_license_fee), 2) . ')'
-		),
-		'default' => 'no'
-	);
-
-	return $fields;
+function sl_setup_temp_license_processing() {
+	// Hook into when custom attendee fields are processed
+	add_action('woocommerce_checkout_update_order_meta', 'sl_process_temp_license_from_custom_fields', 5);
+	
+	// Hook into ticket creation to save individual temp license selections
+	add_action('fooevents_create_ticket', 'sl_save_temp_license_to_ticket', 10);
 }
 
 /**
- * Set up hooks for processing temp license selections
+ * Process temp license selections from custom attendee fields and add fees
  */
-add_action('fooevents_save_attendee_details', 'sl_process_temp_license_selection', 10, 3);
-add_action('fooevents_update_attendee_details', 'sl_process_temp_license_selection', 10, 3);
-
-/**
- * Process temp license selection from custom field and add fees to order
- */
-function sl_process_temp_license_selection($attendee_id, $order_id, $attendee_details) {
-	if (empty($attendee_details['temp_license']) || $attendee_details['temp_license'] !== 'yes') {
-		return; // No temp license selected
-	}
-
-	// Get the product ID from the attendee
-	$product_id = get_post_meta($attendee_id, 'WooCommerceEventsProductID', true);
-	if (!$product_id) {
-		return;
-	}
-
-	// Get the temp license fee
-	$fee_amount = get_post_meta($product_id, '_sl_temp_license_fee', true);
-	if (empty($fee_amount) || floatval($fee_amount) <= 0) {
-		return;
-	}
-
-	// Add fee to the order
+function sl_process_temp_license_from_custom_fields($order_id) {
 	$order = wc_get_order($order_id);
 	if (!$order) {
 		return;
 	}
 
-	$product_title = get_the_title($product_id);
-	$fee_name = "Temporary licence - {$product_title}";
-	
-	// Check if fee already exists for this attendee
-	$existing_fee = false;
-	foreach ($order->get_fees() as $fee_item) {
-		if ($fee_item->get_name() === $fee_name && 
-			$fee_item->get_meta('_attendee_id') == $attendee_id) {
-			$existing_fee = true;
-			break;
+	// Process each order item
+	foreach ($order->get_items() as $item_id => $item) {
+		$product_id = $item->get_product_id();
+		$quantity = $item->get_quantity();
+		
+		// Check if this product has temp license fee configured
+		$temp_license_fee = get_post_meta($product_id, '_sl_temp_license_fee', true);
+		if (empty($temp_license_fee) || floatval($temp_license_fee) <= 0) {
+			continue;
+		}
+
+		$temp_license_count = 0;
+		
+		// Check custom attendee field data for temp license selections
+		for ($i = 1; $i <= $quantity; $i++) {
+			$field_name = "WooCommerceEventsCustomAttendeeFieldscaf_temp_license_001_" . $product_id . "_" . $i;
+			
+			if (isset($_POST[$field_name])) {
+				$temp_license_value = sanitize_text_field($_POST[$field_name]);
+				
+				// Check if this attendee selected temp license
+				if (strpos($temp_license_value, 'Yes -') === 0) {
+					$temp_license_count++;
+				}
+				
+				error_log("SL Debug: Product $product_id, Attendee $i, Field: $field_name, Value: $temp_license_value");
+			}
+		}
+
+		// Add fees for each temp license selected
+		if ($temp_license_count > 0) {
+			$product_title = get_the_title($product_id);
+			
+			for ($i = 1; $i <= $temp_license_count; $i++) {
+				$fee_item = new WC_Order_Item_Fee();
+				$fee_item->set_name("Temporary licence - {$product_title}");
+				$fee_item->set_amount(floatval($temp_license_fee));
+				$fee_item->set_total(floatval($temp_license_fee));
+				$fee_item->add_meta_data('_sl_temp_license', 1, true);
+				$fee_item->add_meta_data('_sl_temp_license_pid', $product_id, true);
+				
+				$order->add_item($fee_item);
+			}
+			
+			// Store count on order item for export logic
+			$item->add_meta_data('_sl_temp_licences', $temp_license_count, true);
+			
+			error_log("SL Debug: Added $temp_license_count temp license fees for product $product_id");
 		}
 	}
 
-	if (!$existing_fee) {
-		$fee_item = new WC_Order_Item_Fee();
-		$fee_item->set_name($fee_name);
-		$fee_item->set_amount(floatval($fee_amount));
-		$fee_item->set_total(floatval($fee_amount));
-		$fee_item->add_meta_data('_sl_temp_license', 1, true);
-		$fee_item->add_meta_data('_sl_temp_license_pid', $product_id, true);
-		$fee_item->add_meta_data('_attendee_id', $attendee_id, true);
-		
-		$order->add_item($fee_item);
-		$order->calculate_totals();
-		$order->save();
+	// Recalculate totals
+	$order->calculate_totals();
+	$order->save();
+}
+
+/**
+ * Save temp license selection to individual ticket when it's created
+ */
+function sl_save_temp_license_to_ticket($ticket_id) {
+	$order_id = get_post_meta($ticket_id, 'WooCommerceEventsOrderID', true);
+	$product_id = get_post_meta($ticket_id, 'WooCommerceEventsProductID', true);
+	
+	if (!$order_id || !$product_id) {
+		return;
 	}
+	
+	// Get ticket's position among all tickets for this order+product
+	global $wpdb;
+	$ticket_ids = $wpdb->get_col($wpdb->prepare("
+		SELECT p.ID 
+		FROM {$wpdb->posts} p
+		INNER JOIN {$wpdb->postmeta} m1 ON p.ID = m1.post_id AND m1.meta_key = 'WooCommerceEventsOrderID'
+		INNER JOIN {$wpdb->postmeta} m2 ON p.ID = m2.post_id AND m2.meta_key = 'WooCommerceEventsProductID'
+		WHERE p.post_type = 'event_magic_tickets' 
+		AND m1.meta_value = %s 
+		AND m2.meta_value = %s
+		ORDER BY p.ID ASC
+	", $order_id, $product_id));
+	
+	$position = array_search($ticket_id, $ticket_ids);
+	if ($position === false) {
+		return;
+	}
+	
+	$attendee_number = $position + 1; // Convert to 1-based
+	
+	// Check if this attendee selected temp license from custom field
+	$custom_fields = get_post_meta($ticket_id, 'WooCommerceEventsCustomAttendeeFields', true);
+	$temp_license_selected = false;
+	
+	if (is_array($custom_fields)) {
+		foreach ($custom_fields as $field_uid => $field_value) {
+			// Look for our temp license field
+			if ($field_uid === 'caf_temp_license_001' && strpos($field_value, 'Yes -') === 0) {
+				$temp_license_selected = true;
+				break;
+			}
+		}
+	}
+	
+	// Save to ticket meta for export
+	$value = $temp_license_selected ? 'yes' : 'no';
+	$label = $temp_license_selected ? 'Yes' : 'No';
+	
+	update_post_meta($ticket_id, '_sl_attendee_temp_license', $value);
+	update_post_meta($ticket_id, 'temp_license', $label);
+	
+	// Also update the custom attendee fields with our standardized format
+	if (!is_array($custom_fields)) {
+		$custom_fields = array();
+	}
+	$custom_fields['temp_license'] = $label;
+	update_post_meta($ticket_id, 'WooCommerceEventsCustomAttendeeFields', $custom_fields);
+	
+	error_log("SL Debug: Ticket $ticket_id (attendee #$attendee_number) temp license: $value");
 }
