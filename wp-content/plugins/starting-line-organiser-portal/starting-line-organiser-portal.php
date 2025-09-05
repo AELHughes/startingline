@@ -2996,19 +2996,29 @@ public function render_event_merch_block() {
 					);
 
 					/* === TEMP LICENCE: per-attendee truth ===
-					   Priority:
-					   1) ticket meta _sl_attendee_temp_license (yes/no)
-					   2) order item meta _sl_temp_lic_yes_idx -> contains 1-based attendee indexes
-					   3) fallback inference from _sl_temp_licences (count) vs _qty for that order item
-					   4) otherwise keep "No"
+					   New approach: Read from FooEvents custom attendee field first,
+					   then fallback to legacy stored flags and heuristics
 					*/
-					$flag = get_post_meta( $tid, '_sl_attendee_temp_license', true ); // 'yes'|'no'|''
-					error_log("SL Export Debug: ticket $tid, flag='$flag'");
-
-					if ($flag !== '' && $flag !== null) {
-						$row['temp_license'] = ( strtolower((string)$flag) === 'yes' || $flag === '1' ) ? 'Yes' : 'No';
-						error_log("SL Export Debug: ticket $tid using direct flag: {$row['temp_license']}");
+					
+					// Priority 1: Check FooEvents custom attendee field
+					$custom_fields = get_post_meta($tid, 'WooCommerceEventsCustomAttendeeFields', true);
+					$temp_license_custom = '';
+					if (is_array($custom_fields) && isset($custom_fields['temp_license'])) {
+						$temp_license_custom = strtolower(trim($custom_fields['temp_license']));
+					}
+					
+					if ($temp_license_custom === 'yes' || $temp_license_custom === 'no') {
+						$row['temp_license'] = ($temp_license_custom === 'yes') ? 'Yes' : 'No';
+						error_log("SL Export Debug: ticket $tid using custom field: {$row['temp_license']}");
 					} else {
+						// Priority 2: Check stored flag from our hook
+						$flag = get_post_meta( $tid, '_sl_attendee_temp_license', true ); // 'yes'|'no'|''
+						error_log("SL Export Debug: ticket $tid, custom_field='$temp_license_custom', flag='$flag'");
+
+						if ($flag !== '' && $flag !== null) {
+							$row['temp_license'] = ( strtolower((string)$flag) === 'yes' || $flag === '1' ) ? 'Yes' : 'No';
+							error_log("SL Export Debug: ticket $tid using stored flag: {$row['temp_license']}");
+						} else {
 						// Calculate attendee index by finding this ticket's position among all tickets for same order+product
 						$order_id = $this->meta_value($meta,'WooCommerceEventsOrderID');
 						$product_id = $this->meta_value($meta,'WooCommerceEventsProductID');
@@ -3132,6 +3142,7 @@ public function render_event_merch_block() {
 							}
 						}
 						// else: remain 'No' (no guesswork)
+						}
 					}
 
 					// order status + merchandise (unchanged)
