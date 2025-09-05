@@ -1421,43 +1421,95 @@ add_action('woocommerce_checkout_create_order_fee_item', function( $item, $cart 
 			/* 3b) When FooEvents creates each ticket, mark that attendee yes/no and write to exporter-visible meta. */
 			add_action('fooevents_create_ticket', function ($ticket_id) {
 
-				$order_item_id = (int) get_post_meta($ticket_id, 'WooCommerceEventsOrderItemID', true);
-				if (!$order_item_id) {
-					error_log("SL Debug: ticket $ticket_id has no order_item_id");
+				// Get ticket details
+				$order_id = get_post_meta($ticket_id, 'WooCommerceEventsOrderID', true);
+				$product_id = get_post_meta($ticket_id, 'WooCommerceEventsProductID', true);
+				
+				if (!$order_id || !$product_id) {
+					error_log("SL Debug: ticket $ticket_id missing order_id ($order_id) or product_id ($product_id)");
 					return;
 				}
 
-				// Attendee number on the ticket is 1-based
-				$idx = (int) get_post_meta($ticket_id, 'WooCommerceEventsAttendeeNumber', true);
-				if ($idx <= 0) {
-					error_log("SL Debug: ticket $ticket_id has no attendee number");
+				// Calculate this ticket's attendee position (1-based) by finding its position among all tickets for same order+product
+				global $wpdb;
+				$ticket_ids = $wpdb->get_col($wpdb->prepare("
+					SELECT p.ID 
+					FROM {$wpdb->posts} p
+					INNER JOIN {$wpdb->postmeta} m1 ON p.ID = m1.post_id AND m1.meta_key = 'WooCommerceEventsOrderID'
+					INNER JOIN {$wpdb->postmeta} m2 ON p.ID = m2.post_id AND m2.meta_key = 'WooCommerceEventsProductID'
+					WHERE p.post_type = 'event_magic_tickets' 
+					AND m1.meta_value = %s 
+					AND m2.meta_value = %s
+					ORDER BY p.ID ASC
+				", $order_id, $product_id));
+				
+				$position = array_search($ticket_id, $ticket_ids);
+				if ($position === false) {
+					error_log("SL Debug: ticket $ticket_id not found in ticket list");
 					return;
 				}
+				
+				$attendee_idx = $position + 1; // Convert to 1-based
+				error_log("SL Debug: ticket $ticket_id is attendee #$attendee_idx (position $position of " . count($ticket_ids) . " tickets)");
 
-				// "Yes" indices saved on the order item at checkout
-				$yes_idx = (array) wc_get_order_item_meta($order_item_id, '_sl_temp_lic_yes_idx', true);
-				$yes_idx = array_map('intval', $yes_idx);
+				// Check if this attendee selected temp license
+				$order = wc_get_order($order_id);
+				$temp_license_selected = false;
+				
+				if ($order) {
+					foreach ($order->get_items() as $item) {
+						if ($item->get_product_id() == $product_id || $item->get_variation_id() == $product_id) {
+							// Check specific attendee selections first
+							$yes_raw = $item->get_meta('_sl_temp_lic_yes_idx', true);
+							$yes_arr = is_array($yes_raw) ? $yes_raw : (array) $yes_raw;
+							$yes_arr = array_map('intval', array_filter($yes_arr));
+							
+							if (!empty($yes_arr)) {
+								$temp_license_selected = in_array($attendee_idx, $yes_arr, true);
+								error_log("SL Debug: ticket $ticket_id found specific selections: " . print_r($yes_arr, true) . ", attendee #$attendee_idx selected: " . ($temp_license_selected ? 'yes' : 'no'));
+							} else {
+								// Fallback to count-based inference (for existing data)
+								$yes_count = (int) $item->get_meta('_sl_temp_licences', true);
+								$qty = (int) $item->get_quantity();
+								
+								if ($qty <= 1) {
+									$temp_license_selected = ($yes_count > 0);
+								} elseif ($yes_count === 0) {
+									$temp_license_selected = false;
+								} elseif ($yes_count === $qty) {
+									$temp_license_selected = true;
+								} else {
+									// Use the heuristics we developed
+									if ($yes_count == 1) {
+										$temp_license_selected = ($attendee_idx == $qty); // last attendee
+									} elseif ($yes_count == 2 && $qty == 3) {
+										$temp_license_selected = ($attendee_idx == 1 || $attendee_idx == 3); // first + last
+									} else {
+										// Default: last N attendees
+										$first_yes_position = $qty - $yes_count + 1;
+										$temp_license_selected = ($attendee_idx >= $first_yes_position);
+									}
+								}
+								error_log("SL Debug: ticket $ticket_id using count-based inference: yes_count=$yes_count, qty=$qty, attendee #$attendee_idx selected: " . ($temp_license_selected ? 'yes' : 'no'));
+							}
+							break;
+						}
+					}
+				}
 
-				error_log("SL Debug: ticket $ticket_id, attendee #$idx, order_item $order_item_id, yes_idx: " . print_r($yes_idx, true));
+				$value = $temp_license_selected ? 'yes' : 'no';
+				$label = $temp_license_selected ? 'Yes' : 'No';
 
-				// Accept either 1-based (correct) or 0-based (older attempts)
-				$hit = in_array($idx, $yes_idx, true) || in_array($idx - 1, $yes_idx, true);
-
-				$value = $hit ? 'yes' : 'no';
-				$label = $hit ? 'Yes' : 'No';
-
-				error_log("SL Debug: ticket $ticket_id result: $value (hit=$hit)");
-
-				// Our own flag
+				// Store the selection on the ticket
 				update_post_meta($ticket_id, '_sl_attendee_temp_license', $value);
-
-				// What your CSV exporter is reading (column header is "temp_license")
 				update_post_meta($ticket_id, 'temp_license', $label);
 
-				// Also write to common FooEvents custom-field stores (harmless if unused)
+				// Also write to FooEvents custom-field stores
 				update_post_meta($ticket_id, 'WooCommerceEventsCustomAttendeeField_temp_license', $label);
 				$fields = get_post_meta($ticket_id, 'WooCommerceEventsCustomAttendeeFields', true);
 				if (!is_array($fields)) $fields = array();
 				$fields['temp_license'] = $label;
 				update_post_meta($ticket_id, 'WooCommerceEventsCustomAttendeeFields', $fields);
+				
+				error_log("SL Debug: ticket $ticket_id final result stored: $value");
 			});
