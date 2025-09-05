@@ -3064,8 +3064,18 @@ public function render_event_merch_block() {
 												$mapped = false;
 											} elseif ($yes_count === $qty) {
 												$mapped = true;
+											} elseif ($yes_count > 0 && $yes_count < $qty) {
+												// Partial selection: use a smarter heuristic
+												// If we have N licenses for M attendees (N < M), 
+												// assign to the LAST N attendees (not first)
+												// This is because typically people add temp license for additional attendees
+												$first_yes_position = $qty - $yes_count + 1;
+												$mapped = ($att_idx >= $first_yes_position);
+												error_log("SL Export Debug: ticket $tid partial selection - yes_count: $yes_count, qty: $qty, first_yes_pos: $first_yes_position, att_idx: $att_idx, mapped: " . ($mapped ? 'true' : 'false'));
 											}
-											error_log("SL Export Debug: ticket $tid count inference - yes_count: $yes_count, qty: $qty, mapped: " . ($mapped === null ? 'null' : ($mapped ? 'true' : 'false')));
+											if (!isset($first_yes_position)) {
+												error_log("SL Export Debug: ticket $tid count inference - yes_count: $yes_count, qty: $qty, mapped: " . ($mapped === null ? 'null' : ($mapped ? 'true' : 'false')));
+											}
 										}
 										break;
 									}
