@@ -3009,38 +3009,67 @@ public function render_event_merch_block() {
 						$row['temp_license'] = ( strtolower((string)$flag) === 'yes' || $flag === '1' ) ? 'Yes' : 'No';
 						error_log("SL Export Debug: ticket $tid using direct flag: {$row['temp_license']}");
 					} else {
-						$order_item_id = (int) $this->meta_value($meta,'WooCommerceEventsOrderItemID');
-						$att_idx       = (int) $this->meta_value($meta,'WooCommerceEventsAttendeeNumber'); // 1-based
-						$mapped        = null;
+						// Calculate attendee index by finding this ticket's position among all tickets for same order+product
+						$order_id = $this->meta_value($meta,'WooCommerceEventsOrderID');
+						$product_id = $this->meta_value($meta,'WooCommerceEventsProductID');
+						$mapped = null;
+						$att_idx = 0;
+						
+						if ($order_id && $product_id) {
+							// Get all tickets for this order+product combination, ordered by ticket ID
+							global $wpdb;
+							$ticket_ids = $wpdb->get_col($wpdb->prepare("
+								SELECT p.ID 
+								FROM {$wpdb->posts} p
+								INNER JOIN {$wpdb->postmeta} m1 ON p.ID = m1.post_id AND m1.meta_key = 'WooCommerceEventsOrderID'
+								INNER JOIN {$wpdb->postmeta} m2 ON p.ID = m2.post_id AND m2.meta_key = 'WooCommerceEventsProductID'
+								WHERE p.post_type = 'event_magic_tickets' 
+								AND m1.meta_value = %s 
+								AND m2.meta_value = %s
+								ORDER BY p.ID ASC
+							", $order_id, $product_id));
+							
+							// Find this ticket's 1-based position
+							$position = array_search($tid, $ticket_ids);
+							if ($position !== false) {
+								$att_idx = $position + 1; // Convert to 1-based
+								error_log("SL Export Debug: ticket $tid calculated attendee index: $att_idx (position $position in " . count($ticket_ids) . " tickets)");
+							}
+						}
 
-						if ($order_item_id && function_exists('wc_get_order_item_meta')) {
-							// 2) explicit list of yes-indexes
-							$yes_raw = wc_get_order_item_meta( $order_item_id, '_sl_temp_lic_yes_idx', true );
-							$yes_arr = is_array($yes_raw)
-								? $yes_raw
-								: preg_split('/[,\s]+/', (string) $yes_raw, -1, PREG_SPLIT_NO_EMPTY);
-							$yes_arr = array_map('intval', (array) $yes_arr);
-
-							error_log("SL Export Debug: ticket $tid fallback - order_item $order_item_id, att_idx $att_idx, yes_arr: " . print_r($yes_arr, true));
-
-							if ($att_idx > 0 && !empty($yes_arr)) {
-								$mapped = in_array($att_idx, $yes_arr, true);
-								error_log("SL Export Debug: ticket $tid mapped via yes_arr: " . ($mapped ? 'true' : 'false'));
-							} else {
-								// 3) infer from totals if we can
-								$yes_count = (int) wc_get_order_item_meta( $order_item_id, '_sl_temp_licences', true );
-								$qty       = (int) wc_get_order_item_meta( $order_item_id, '_qty', true );
-
-								error_log("SL Export Debug: ticket $tid infer - yes_count: $yes_count, qty: $qty");
-
-								if ($qty <= 1) {
-									$mapped = ($yes_count > 0);
-								} elseif ($yes_count === 0) {
-									$mapped = false;
-								} elseif ($yes_count === $qty) {
-									$mapped = true;
+						// Now check if this attendee index was marked for temp license
+						if ($att_idx > 0 && $order_id) {
+							$order = wc_get_order($order_id);
+							if ($order) {
+								foreach ($order->get_items() as $item) {
+									if ($item->get_product_id() == $product_id || $item->get_variation_id() == $product_id) {
+										$yes_raw = $item->get_meta('_sl_temp_lic_yes_idx', true);
+										$yes_arr = is_array($yes_raw) ? $yes_raw : (array) $yes_raw;
+										$yes_arr = array_map('intval', array_filter($yes_arr));
+										
+										error_log("SL Export Debug: ticket $tid att_idx $att_idx, yes_arr: " . print_r($yes_arr, true));
+										
+										if (!empty($yes_arr) && in_array($att_idx, $yes_arr, true)) {
+											$mapped = true;
+										} elseif (!empty($yes_arr)) {
+											$mapped = false; // explicit no because others were marked yes
+										} else {
+											// Check total count inference
+											$yes_count = (int) $item->get_meta('_sl_temp_licences', true);
+											$qty = (int) $item->get_quantity();
+											
+											if ($qty <= 1) {
+												$mapped = ($yes_count > 0);
+											} elseif ($yes_count === 0) {
+												$mapped = false;
+											} elseif ($yes_count === $qty) {
+												$mapped = true;
+											}
+											error_log("SL Export Debug: ticket $tid count inference - yes_count: $yes_count, qty: $qty, mapped: " . ($mapped === null ? 'null' : ($mapped ? 'true' : 'false')));
+										}
+										break;
+									}
 								}
-								error_log("SL Export Debug: ticket $tid inferred mapped: " . ($mapped === null ? 'null' : ($mapped ? 'true' : 'false')));
 							}
 						}
 
@@ -3048,44 +3077,31 @@ public function render_event_merch_block() {
 							$row['temp_license'] = $mapped ? 'Yes' : 'No';
 							error_log("SL Export Debug: ticket $tid final result from fallback: {$row['temp_license']}");
 						} else {
-							// Additional fallback: look for fee items with temp license matching this order
-							if (!empty($row['order_id'])) {
+							// Final fallback: fee-based heuristic using calculated attendee index
+							if (!empty($row['order_id']) && $att_idx > 0) {
 								$order = wc_get_order($row['order_id']);
 								if ($order) {
 									$temp_license_fee_count = 0;
-									$total_attendees = 0;
 									
-									// Count temp license fees and total attendees for this event
+									// Count temp license fees for this product
 									foreach ($order->get_fees() as $fee_item) {
 										$is_temp = (stripos($fee_item->get_name(), 'Temporary licence') === 0)
 												|| ((int) $fee_item->get_meta('_sl_temp_license') === 1);
 										if ($is_temp) {
 											$fee_pid = (int) $fee_item->get_meta('_sl_temp_license_pid');
-											// Check if this fee is for the same event product
-											if ($fee_pid == $this->meta_value($meta,'WooCommerceEventsProductID')) {
+											if (!$fee_pid || $fee_pid == $product_id) {
 												$temp_license_fee_count++;
 											}
 										}
 									}
 									
-									// Count total attendees for this product in the order
-									foreach ($order->get_items() as $item) {
-										if ($item->get_product_id() == $this->meta_value($meta,'WooCommerceEventsProductID')) {
-											$total_attendees += $item->get_quantity();
-										}
+									// Assign temp licenses to first N attendees
+									if ($temp_license_fee_count > 0 && $att_idx <= $temp_license_fee_count) {
+										$row['temp_license'] = 'Yes';
+									} else {
+										$row['temp_license'] = 'No';
 									}
-									
-									// If we have fees and attendees, try to map them reasonably
-									if ($temp_license_fee_count > 0 && $total_attendees > 0) {
-										// Simple heuristic: if there are fewer temp licenses than attendees,
-										// assign them to the first N attendees
-										if ($att_idx <= $temp_license_fee_count) {
-											$row['temp_license'] = 'Yes';
-										} else {
-											$row['temp_license'] = 'No';
-										}
-										error_log("SL Export Debug: ticket $tid fee-based heuristic (att#$att_idx, fees:$temp_license_fee_count, total:$total_attendees): {$row['temp_license']}");
-									}
+									error_log("SL Export Debug: ticket $tid fee-based heuristic (att#$att_idx, fees:$temp_license_fee_count): {$row['temp_license']}");
 								}
 							}
 						}
