@@ -97,13 +97,19 @@ if ( ! defined( 'WP_DEBUG' ) ) {
 }
 
 // Log errors to /wp-content/debug.log (recommended)
-define('WP_DEBUG_LOG', true);
+if ( ! defined( 'WP_DEBUG_LOG' ) ) {
+	define('WP_DEBUG_LOG', true);
+}
 
 // Show errors on the page (turn OFF on production)
-define('WP_DEBUG_DISPLAY', true);
+if ( ! defined( 'WP_DEBUG_DISPLAY' ) ) {
+	define('WP_DEBUG_DISPLAY', true);
+}
 
 // Optional: show more detailed script notices
-define('SCRIPT_DEBUG', true);
+if ( ! defined( 'SCRIPT_DEBUG' ) ) {
+	define('SCRIPT_DEBUG', true);
+}
 
 // (Optional) If a plugin/theme causes a white screen, disable the fatal error handler to see raw errors
 // define('WP_DISABLE_FATAL_ERROR_HANDLER', true);
