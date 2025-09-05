@@ -1327,7 +1327,7 @@ function sl_temp_lic_fee_for_product( $product_id ) {
 				WC()->session->__unset('sl_temp_lic_counts_by_pid');
 			}
 		});
-		END OLD TEMP LICENSE SYSTEM */
+		/* END OLD TEMP LICENSE SYSTEM */
 
 
 /* OLD TEMP LICENSE SYSTEM PART 2 - DISABLED
@@ -1365,7 +1365,7 @@ add_action('woocommerce_checkout_create_order_fee_item', function( $item, $cart 
     // Fallback: tag as temp licence without a pid (older orders / edge cases)
     $item->add_meta_data('_sl_temp_license', 1, true);
 }, 10, 2);
-END OLD TEMP LICENSE SYSTEM PART 2 */
+/* END OLD TEMP LICENSE SYSTEM PART 2 */
 
 		/* OLD TEMP LICENSE SYSTEM PART 3 - DISABLED
 		/** FooEvents — Temporary Licence per attendee (store choices on order + ticket) */
@@ -1520,7 +1520,7 @@ END OLD TEMP LICENSE SYSTEM PART 2 */
 				
 				error_log("SL Debug: ticket $ticket_id final result stored: $value");
 			});
-			END OLD TEMP LICENSE SYSTEM PART 3 */
+			/* END OLD TEMP LICENSE SYSTEM PART 3 */
 
 		/* 4) Process temp license selection from custom attendee field during checkout */
 		add_action('init', 'sl_setup_temp_license_processing');
