@@ -1196,12 +1196,22 @@ function sl_temp_lic_fee_for_product( $product_id ) {
 						disabled: true
 					  }).appendTo($block);
 
+					  // Add backup flat format as well
+					  $('<input>', {
+						type: 'hidden',
+						'data-sl-yes-flat': true,
+						name: 'sl_temp_lic_flat[]',
+						value: bind.key + ':' + String(idx1),
+						disabled: true
+					  }).appendTo($block);
+
 					  // restore selection after checkout refreshes
 					  try {
 						var mem = sessionStorage.getItem('sl_temp_lic::'+bind.key+'::'+idx1);
 						if (mem === 'yes') {
 						  $block.find('input[type=radio][value=yes]').prop('checked', true);
 						  $block.find('input[data-sl-yes]').prop('disabled', false);
+						  $block.find('input[data-sl-yes-flat]').prop('disabled', false);
 						}
 					  } catch(e){}
 					} 
@@ -1240,6 +1250,7 @@ function sl_temp_lic_fee_for_product( $product_id ) {
 				  var $row = $(this).closest('[data-sl-temp-lic]');
 				  var v = $row.find('input[type=radio]:checked').val();
 				  $row.find('input[data-sl-yes]').prop('disabled', v !== 'yes'); // only post on "Yes"
+				  $row.find('input[data-sl-yes-flat]').prop('disabled', v !== 'yes'); // backup format too
 
 				  // persist per attendee across refreshes
 				  var ck = $row.attr('data-ck'), idx1 = $row.attr('data-idx1');
@@ -1358,9 +1369,15 @@ add_action('woocommerce_checkout_create_order_fee_item', function( $item, $cart 
 
 				$yes_idx = array();
 
+				// Debug: log all POST data related to temp licenses
+				error_log("SL Debug: Processing cart item $cart_item_key");
+				error_log("SL Debug: POST sl_temp_lic: " . print_r($_POST['sl_temp_lic'] ?? 'not set', true));
+				error_log("SL Debug: POST sl_temp_lic_flat: " . print_r($_POST['sl_temp_lic_flat'] ?? 'not set', true));
+
 				// Preferred structured format: sl_temp_lic[<cart_key>][] = [1,3,...]
 				if ( ! empty($_POST['sl_temp_lic'][$cart_item_key]) ) {
 					$yes_idx = array_map('intval', (array) $_POST['sl_temp_lic'][$cart_item_key]);
+					error_log("SL Debug: Found structured format for $cart_item_key: " . print_r($yes_idx, true));
 				}
 
 				// Backup flat format: sl_temp_lic_flat[] = "<cart_key>:<idx>"
@@ -1371,6 +1388,23 @@ add_action('woocommerce_checkout_create_order_fee_item', function( $item, $cart 
 						if ( preg_match('/^([a-f0-9]{32}):(\d+)$/i', (string) $pair, $m) ) {
 							if ( strtolower($m[1]) === $k ) $yes_idx[] = (int) $m[2];
 						}
+					}
+					error_log("SL Debug: Found flat format for $cart_item_key: " . print_r($yes_idx, true));
+				}
+
+				// Additional fallback: look for individual fields in the $_POST array
+				if ( empty($yes_idx) ) {
+					foreach ( $_POST as $key => $value ) {
+						// Look for pattern sl_temp_lic[cart_key][index] = attendee_number
+						if ( preg_match('/^sl_temp_lic\[' . preg_quote($cart_item_key, '/') . '\]\[(\d+)\]$/i', $key, $m) ) {
+							$attendee_idx = (int) $value;
+							if ( $attendee_idx > 0 ) {
+								$yes_idx[] = $attendee_idx;
+							}
+						}
+					}
+					if ( $yes_idx ) {
+						error_log("SL Debug: Found individual field format for $cart_item_key: " . print_r($yes_idx, true));
 					}
 				}
 

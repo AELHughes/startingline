@@ -3046,6 +3046,48 @@ public function render_event_merch_block() {
 
 						if ($mapped !== null) {
 							$row['temp_license'] = $mapped ? 'Yes' : 'No';
+							error_log("SL Export Debug: ticket $tid final result from fallback: {$row['temp_license']}");
+						} else {
+							// Additional fallback: look for fee items with temp license matching this order
+							if (!empty($row['order_id'])) {
+								$order = wc_get_order($row['order_id']);
+								if ($order) {
+									$temp_license_fee_count = 0;
+									$total_attendees = 0;
+									
+									// Count temp license fees and total attendees for this event
+									foreach ($order->get_fees() as $fee_item) {
+										$is_temp = (stripos($fee_item->get_name(), 'Temporary licence') === 0)
+												|| ((int) $fee_item->get_meta('_sl_temp_license') === 1);
+										if ($is_temp) {
+											$fee_pid = (int) $fee_item->get_meta('_sl_temp_license_pid');
+											// Check if this fee is for the same event product
+											if ($fee_pid == $this->meta_value($meta,'WooCommerceEventsProductID')) {
+												$temp_license_fee_count++;
+											}
+										}
+									}
+									
+									// Count total attendees for this product in the order
+									foreach ($order->get_items() as $item) {
+										if ($item->get_product_id() == $this->meta_value($meta,'WooCommerceEventsProductID')) {
+											$total_attendees += $item->get_quantity();
+										}
+									}
+									
+									// If we have fees and attendees, try to map them reasonably
+									if ($temp_license_fee_count > 0 && $total_attendees > 0) {
+										// Simple heuristic: if there are fewer temp licenses than attendees,
+										// assign them to the first N attendees
+										if ($att_idx <= $temp_license_fee_count) {
+											$row['temp_license'] = 'Yes';
+										} else {
+											$row['temp_license'] = 'No';
+										}
+										error_log("SL Export Debug: ticket $tid fee-based heuristic (att#$att_idx, fees:$temp_license_fee_count, total:$total_attendees): {$row['temp_license']}");
+									}
+								}
+							}
 						}
 						// else: remain 'No' (no guesswork)
 					}
