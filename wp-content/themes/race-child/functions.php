@@ -1514,12 +1514,8 @@ add_action('woocommerce_checkout_create_order_fee_item', function( $item, $cart 
 				error_log("SL Debug: ticket $ticket_id final result stored: $value");
 			});
 
-		} // end if checkout form check
-
 		/* 4) Add temp license custom field to FooEvents attendee forms */
 		add_filter('fooevents_custom_attendee_fields', 'sl_add_temp_license_custom_field', 10, 2);
-	}
-}
 
 /**
  * Add temp license custom field to FooEvents attendee forms
