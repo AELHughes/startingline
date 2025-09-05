@@ -1377,31 +1377,42 @@ add_action('woocommerce_checkout_create_order_fee_item', function( $item, $cart 
 				if ( $yes_idx ) {
 					$yes_idx = array_values(array_unique(array_filter($yes_idx, function($n){ return $n > 0; })));
 					if ( $yes_idx ) {
-						// Save e.g. [1,3] meaning attendee #1 and #3 in this line chose “Yes”
+						// Save e.g. [1,3] meaning attendee #1 and #3 in this line chose "Yes"
 						$item->add_meta_data('_sl_temp_lic_yes_idx', $yes_idx, true);
+						error_log("SL Debug: Saving temp license yes_idx for cart item {$cart_item_key}: " . print_r($yes_idx, true));
 					}
 				}
 			}, 10, 2);
 
 			/* 3b) When FooEvents creates each ticket, mark that attendee yes/no and write to exporter-visible meta. */
-			add_action('fooevents_ticket_created', function ($ticket_id) {
+			add_action('fooevents_create_ticket', function ($ticket_id) {
 
 				$order_item_id = (int) get_post_meta($ticket_id, 'WooCommerceEventsOrderItemID', true);
-				if (!$order_item_id) return;
+				if (!$order_item_id) {
+					error_log("SL Debug: ticket $ticket_id has no order_item_id");
+					return;
+				}
 
 				// Attendee number on the ticket is 1-based
 				$idx = (int) get_post_meta($ticket_id, 'WooCommerceEventsAttendeeNumber', true);
-				if ($idx <= 0) return;
+				if ($idx <= 0) {
+					error_log("SL Debug: ticket $ticket_id has no attendee number");
+					return;
+				}
 
-				// “Yes” indices saved on the order item at checkout
+				// "Yes" indices saved on the order item at checkout
 				$yes_idx = (array) wc_get_order_item_meta($order_item_id, '_sl_temp_lic_yes_idx', true);
 				$yes_idx = array_map('intval', $yes_idx);
+
+				error_log("SL Debug: ticket $ticket_id, attendee #$idx, order_item $order_item_id, yes_idx: " . print_r($yes_idx, true));
 
 				// Accept either 1-based (correct) or 0-based (older attempts)
 				$hit = in_array($idx, $yes_idx, true) || in_array($idx - 1, $yes_idx, true);
 
 				$value = $hit ? 'yes' : 'no';
 				$label = $hit ? 'Yes' : 'No';
+
+				error_log("SL Debug: ticket $ticket_id result: $value (hit=$hit)");
 
 				// Our own flag
 				update_post_meta($ticket_id, '_sl_attendee_temp_license', $value);

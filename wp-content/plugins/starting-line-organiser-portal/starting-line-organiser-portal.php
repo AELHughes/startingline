@@ -3003,9 +3003,11 @@ public function render_event_merch_block() {
 					   4) otherwise keep "No"
 					*/
 					$flag = get_post_meta( $tid, '_sl_attendee_temp_license', true ); // 'yes'|'no'|''
+					error_log("SL Export Debug: ticket $tid, flag='$flag'");
 
 					if ($flag !== '' && $flag !== null) {
 						$row['temp_license'] = ( strtolower((string)$flag) === 'yes' || $flag === '1' ) ? 'Yes' : 'No';
+						error_log("SL Export Debug: ticket $tid using direct flag: {$row['temp_license']}");
 					} else {
 						$order_item_id = (int) $this->meta_value($meta,'WooCommerceEventsOrderItemID');
 						$att_idx       = (int) $this->meta_value($meta,'WooCommerceEventsAttendeeNumber'); // 1-based
@@ -3019,12 +3021,17 @@ public function render_event_merch_block() {
 								: preg_split('/[,\s]+/', (string) $yes_raw, -1, PREG_SPLIT_NO_EMPTY);
 							$yes_arr = array_map('intval', (array) $yes_arr);
 
+							error_log("SL Export Debug: ticket $tid fallback - order_item $order_item_id, att_idx $att_idx, yes_arr: " . print_r($yes_arr, true));
+
 							if ($att_idx > 0 && !empty($yes_arr)) {
 								$mapped = in_array($att_idx, $yes_arr, true);
+								error_log("SL Export Debug: ticket $tid mapped via yes_arr: " . ($mapped ? 'true' : 'false'));
 							} else {
 								// 3) infer from totals if we can
 								$yes_count = (int) wc_get_order_item_meta( $order_item_id, '_sl_temp_licences', true );
 								$qty       = (int) wc_get_order_item_meta( $order_item_id, '_qty', true );
+
+								error_log("SL Export Debug: ticket $tid infer - yes_count: $yes_count, qty: $qty");
 
 								if ($qty <= 1) {
 									$mapped = ($yes_count > 0);
@@ -3033,6 +3040,7 @@ public function render_event_merch_block() {
 								} elseif ($yes_count === $qty) {
 									$mapped = true;
 								}
+								error_log("SL Export Debug: ticket $tid inferred mapped: " . ($mapped === null ? 'null' : ($mapped ? 'true' : 'false')));
 							}
 						}
 
