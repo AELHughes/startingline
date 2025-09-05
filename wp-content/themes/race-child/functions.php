@@ -1514,97 +1514,95 @@ add_action('woocommerce_checkout_create_order_fee_item', function( $item, $cart 
 				error_log("SL Debug: ticket $ticket_id final result stored: $value");
 			});
 
+		} // end if checkout form check
+
 		/* 4) Add temp license custom field to FooEvents attendee forms */
-		add_filter('fooevents_custom_attendee_fields', array($this, 'add_temp_license_custom_field'), 10, 2);
+		add_filter('fooevents_custom_attendee_fields', 'sl_add_temp_license_custom_field', 10, 2);
+	}
+}
+
+/**
+ * Add temp license custom field to FooEvents attendee forms
+ * Only shows when the event product has temp license enabled
+ */
+function sl_add_temp_license_custom_field($fields, $product_id) {
+	// Check if this event has temp license enabled
+	$temp_license_fee = get_post_meta($product_id, '_sl_temp_license_fee', true);
+	if (empty($temp_license_fee) || floatval($temp_license_fee) <= 0) {
+		return $fields; // No temp license for this event
 	}
 
-	/**
-	 * Add temp license custom field to FooEvents attendee forms
-	 * Only shows when the event product has temp license enabled
-	 */
-	public function add_temp_license_custom_field($fields, $product_id) {
-		// Check if this event has temp license enabled
-		$temp_license_fee = get_post_meta($product_id, '_sl_temp_license_fee', true);
-		if (empty($temp_license_fee) || floatval($temp_license_fee) <= 0) {
-			return $fields; // No temp license for this event
-		}
+	// Add the temp license field
+	$fields['temp_license'] = array(
+		'type' => 'select',
+		'label' => 'Temporary Racing License',
+		'required' => true,
+		'options' => array(
+			'no' => 'No - I have my own license',
+			'yes' => 'Yes - I need a temporary license (+£' . number_format(floatval($temp_license_fee), 2) . ')'
+		),
+		'default' => 'no'
+	);
 
-		// Add the temp license field
-		$fields['temp_license'] = array(
-			'type' => 'select',
-			'label' => 'Temporary Racing License',
-			'required' => true,
-			'options' => array(
-				'no' => 'No - I have my own license',
-				'yes' => 'Yes - I need a temporary license (+£' . number_format(floatval($temp_license_fee), 2) . ')'
-			),
-			'default' => 'no'
-		);
+	return $fields;
+}
 
-		return $fields;
+/**
+ * Set up hooks for processing temp license selections
+ */
+add_action('fooevents_save_attendee_details', 'sl_process_temp_license_selection', 10, 3);
+add_action('fooevents_update_attendee_details', 'sl_process_temp_license_selection', 10, 3);
+
+/**
+ * Process temp license selection from custom field and add fees to order
+ */
+function sl_process_temp_license_selection($attendee_id, $order_id, $attendee_details) {
+	if (empty($attendee_details['temp_license']) || $attendee_details['temp_license'] !== 'yes') {
+		return; // No temp license selected
 	}
 
-	/**
-	 * Hook into attendee form processing to handle temp license selection
-	 * This will be called when attendee details are saved
-	 */
-	public function __construct() {
-		// Hook into FooEvents attendee processing to handle temp license fees
-		add_action('fooevents_save_attendee_details', array($this, 'process_temp_license_selection'), 10, 3);
-		add_action('fooevents_update_attendee_details', array($this, 'process_temp_license_selection'), 10, 3);
+	// Get the product ID from the attendee
+	$product_id = get_post_meta($attendee_id, 'WooCommerceEventsProductID', true);
+	if (!$product_id) {
+		return;
 	}
 
-	/**
-	 * Process temp license selection from custom field and add fees to order
-	 */
-	public function process_temp_license_selection($attendee_id, $order_id, $attendee_details) {
-		if (empty($attendee_details['temp_license']) || $attendee_details['temp_license'] !== 'yes') {
-			return; // No temp license selected
-		}
+	// Get the temp license fee
+	$fee_amount = get_post_meta($product_id, '_sl_temp_license_fee', true);
+	if (empty($fee_amount) || floatval($fee_amount) <= 0) {
+		return;
+	}
 
-		// Get the product ID from the attendee
-		$product_id = get_post_meta($attendee_id, 'WooCommerceEventsProductID', true);
-		if (!$product_id) {
-			return;
-		}
+	// Add fee to the order
+	$order = wc_get_order($order_id);
+	if (!$order) {
+		return;
+	}
 
-		// Get the temp license fee
-		$fee_amount = get_post_meta($product_id, '_sl_temp_license_fee', true);
-		if (empty($fee_amount) || floatval($fee_amount) <= 0) {
-			return;
+	$product_title = get_the_title($product_id);
+	$fee_name = "Temporary licence - {$product_title}";
+	
+	// Check if fee already exists for this attendee
+	$existing_fee = false;
+	foreach ($order->get_fees() as $fee_item) {
+		if ($fee_item->get_name() === $fee_name && 
+			$fee_item->get_meta('_attendee_id') == $attendee_id) {
+			$existing_fee = true;
+			break;
 		}
+	}
 
-		// Add fee to the order
-		$order = wc_get_order($order_id);
-		if (!$order) {
-			return;
-		}
-
-		$product_title = get_the_title($product_id);
-		$fee_name = "Temporary licence - {$product_title}";
+	if (!$existing_fee) {
+		$fee_item = new WC_Order_Item_Fee();
+		$fee_item->set_name($fee_name);
+		$fee_item->set_amount(floatval($fee_amount));
+		$fee_item->set_total(floatval($fee_amount));
+		$fee_item->add_meta_data('_sl_temp_license', 1, true);
+		$fee_item->add_meta_data('_sl_temp_license_pid', $product_id, true);
+		$fee_item->add_meta_data('_attendee_id', $attendee_id, true);
 		
-		// Check if fee already exists for this attendee
-		$existing_fee = false;
-		foreach ($order->get_fees() as $fee_item) {
-			if ($fee_item->get_name() === $fee_name && 
-				$fee_item->get_meta('_attendee_id') == $attendee_id) {
-				$existing_fee = true;
-				break;
-			}
-		}
-
-		if (!$existing_fee) {
-			$fee_item = new WC_Order_Item_Fee();
-			$fee_item->set_name($fee_name);
-			$fee_item->set_amount(floatval($fee_amount));
-			$fee_item->set_total(floatval($fee_amount));
-			$fee_item->add_meta_data('_sl_temp_license', 1, true);
-			$fee_item->add_meta_data('_sl_temp_license_pid', $product_id, true);
-			$fee_item->add_meta_data('_attendee_id', $attendee_id, true);
-			
-			$order->add_item($fee_item);
-			$order->calculate_totals();
-			$order->save();
-		}
+		$order->add_item($fee_item);
+		$order->calculate_totals();
+		$order->save();
 	}
 }
