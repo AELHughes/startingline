@@ -198,50 +198,7 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative h-96 md:h-[500px] overflow-hidden">
-        {/* Simple test with first image */}
-        <div className="absolute inset-0">
-          <img
-            src="/images/MTBSlide.jpg"
-            alt="Mountain Biking Event"
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              console.error('Image failed to load:', e.currentTarget.src);
-              e.currentTarget.style.backgroundColor = '#ff0000';
-            }}
-            onLoad={() => console.log('Image loaded successfully!')}
-          />
-          <div className="absolute inset-0 bg-black bg-opacity-30" />
-        </div>
-        
-        {/* Text overlay */}
-        <div className="absolute inset-0 flex items-center justify-center z-10">
-          <div className="text-center text-white max-w-4xl mx-auto px-4">
-            <h1 className="text-4xl md:text-6xl font-bold mb-6 drop-shadow-2xl">
-              Your Next Adventure Starts Here
-            </h1>
-            <p className="text-xl md:text-2xl mb-8 opacity-90 drop-shadow-xl">
-              Discover and join amazing cycling, running, and triathlon events across South Africa
-            </p>
-          </div>
-        </div>
-        
-        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-10">
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/events">
-              <Button size="lg" className="bg-blue-600 hover:bg-blue-700">
-                Browse Events
-                <ChevronRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
-            <Link href="/register">
-              <Button size="lg" variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20">
-                Organise Event
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
+      <HeroSlider images={heroImages} />
 
       {/* Search and Filter Section */}
       <section className="py-12 bg-white">

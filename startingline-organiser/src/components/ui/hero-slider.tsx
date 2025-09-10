@@ -64,17 +64,29 @@ export default function HeroSlider({
               alt={image.alt}
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-black bg-opacity-20" />
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/50" />
             {/* Individual slide text overlay */}
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center text-white max-w-4xl mx-auto px-4">
-                <div className="bg-black bg-opacity-30 rounded-lg p-6 backdrop-blur-sm">
+                <div className="p-6">
                   <h2 className="text-3xl md:text-5xl font-bold mb-4 drop-shadow-2xl">
                     {image.title}
                   </h2>
                   <p className="text-lg md:text-xl mb-6 opacity-90 drop-shadow-xl">
                     {image.subtitle}
                   </p>
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <Button size="lg" className="bg-blue-600 hover:bg-blue-700">
+                      Browse Events
+                    </Button>
+                    <Button 
+                      size="lg" 
+                      variant="outline" 
+                      className="bg-white/20 border-white text-white hover:bg-white/30 backdrop-blur-sm"
+                    >
+                      Organise Event
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
