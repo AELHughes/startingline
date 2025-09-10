@@ -207,7 +207,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       console.log('🔍 Referential constraints:', refConstraints)
       
     } catch (fkError) {
-      console.log('⚠️ Could not query constraint info:', fkError.message)
+      console.log('⚠️ Could not query constraint info:', fkError)
     }
 
     // STEP 2: Try to find what users exist in potential target tables
