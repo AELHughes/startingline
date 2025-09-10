@@ -209,6 +209,27 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     console.log('🔍 Using auth_user_id as organiser_id (correct approach):', userLookup.auth_user_id)
     eventFields.organiser_id = userLookup.auth_user_id
     
+    // 🔍 DEBUGGING: Check if Sam's auth user actually exists in Supabase
+    console.log('🔍 Verifying auth user exists in Supabase auth system...')
+    try {
+      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(userLookup.auth_user_id)
+      
+      if (authError) {
+        console.log('❌ Error fetching auth user:', authError.message, authError.code)
+      } else if (authUser?.user) {
+        console.log('✅ Auth user EXISTS in Supabase:', {
+          id: authUser.user.id,
+          email: authUser.user.email,
+          created_at: authUser.user.created_at,
+          email_confirmed_at: authUser.user.email_confirmed_at
+        })
+      } else {
+        console.log('❌ Auth user NOT FOUND - this explains the foreign key error!')
+      }
+    } catch (authCheckError) {
+      console.log('❌ Exception checking auth user:', authCheckError)
+    }
+    
     try {
       // Create the event
       const event = await supabase.createEvent(eventFields)
