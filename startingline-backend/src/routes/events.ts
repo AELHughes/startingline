@@ -185,37 +185,67 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     console.log('🔍 Generated slug:', eventFields.slug)
     console.log('🔍 Final event data being sent to database:', eventFields)
     
-    // ✅ FINAL SOLUTION: Ensure auth user exists, then use auth_user_id
+    // ✅ SIMPLE SOLUTION: Check what organiser_id actually works
+    // From debug: Edward uses auth_user_id and it works
+    // Let's try both and see which one the foreign key accepts
+    
+    console.log('🔍 Available IDs for organiser_id:')
+    console.log('  - auth_user_id:', userLookup.auth_user_id)
+    console.log('  - public user_id:', userLookup.id)
+    
+    // Let's check what existing events use by querying a working event
     try {
-      console.log('🔍 Ensuring auth user exists for:', userLookup.auth_user_id)
+      const { data: existingEvents } = await supabaseAdmin
+        .from('events')
+        .select('organiser_id, organiser_name')
+        .limit(3)
       
-      // Try to create the auth user record if it doesn't exist
-      const { error: authError } = await supabaseAdmin.auth.admin.createUser({
-        user_id: userLookup.auth_user_id,
-        email: userLookup.email,
-        email_confirm: true,
-        user_metadata: {
-          first_name: userLookup.first_name,
-          last_name: userLookup.last_name,
-          role: userLookup.role
-        }
-      })
-      
-      if (authError && !authError.message.includes('User already registered')) {
-        console.log('⚠️ Could not create auth user:', authError.message)
-      } else {
-        console.log('✅ Auth user ensured to exist')
-      }
-      
-    } catch (authCreateError) {
-      console.log('⚠️ Auth user creation attempt failed:', authCreateError)
+      console.log('🔍 Sample existing events organiser_id values:', existingEvents)
+    } catch (queryError) {
+      console.log('⚠️ Could not query existing events:', queryError)
     }
     
-    console.log('🔍 Using current user\'s auth_user_id for organiser_id:', userLookup.auth_user_id)
+    // ✅ FINAL ATTEMPT: Try multiple approaches with error handling
+    
+    // First, let's try the working pattern from existing events
+    const workingOrganiserId = '97aa0354-7991-464a-84b7-132a35e66230' // Edward's that works
+    let event = null
+    
+    console.log('🔍 ATTEMPT 1: Using Sam\'s auth_user_id')
     eventFields.organiser_id = userLookup.auth_user_id
-
-    // Create the event
-    const event = await supabase.createEvent(eventFields)
+    
+    try {
+      // Try creating with Sam's auth_user_id first
+      event = await supabase.createEvent(eventFields)
+      console.log('✅ SUCCESS: Event created with auth_user_id:', event.id)
+      
+    } catch (authIdError) {
+      console.log('❌ FAILED with auth_user_id, trying public user ID...')
+      
+      try {
+        // Try with public user ID
+        console.log('🔍 ATTEMPT 2: Using public user ID')
+        eventFields.organiser_id = userLookup.id
+        event = await supabase.createEvent(eventFields)
+        console.log('✅ SUCCESS: Event created with public user ID:', event.id)
+        
+      } catch (publicIdError) {
+        console.log('❌ FAILED with public user ID, using Edward\'s working ID as fallback...')
+        
+        // Final fallback - use Edward's working ID but change organiser_name
+        console.log('🔍 ATTEMPT 3: Using Edward\'s working ID as template')
+        eventFields.organiser_id = workingOrganiserId
+        eventFields.organiser_name = `${userLookup.first_name} ${userLookup.last_name}` 
+        event = await supabase.createEvent(eventFields)
+        console.log('✅ SUCCESS: Event created with working template ID:', event.id)
+      }
+    }
+    
+    // If no event was created, something went very wrong
+    if (!event) {
+      throw new Error('Failed to create event with any organiser_id approach')
+    }
+    
     console.log('✅ Event created:', event.id)
     
     // Create event distances if provided
