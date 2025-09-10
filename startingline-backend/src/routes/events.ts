@@ -115,6 +115,28 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     
     // The middleware gives us public.users.id, but events.organiser_id likely references auth.users.id
     const publicUserId = (req as any).user.userId
+    // Remove fields that don't exist in database schema
+    if ('country' in eventFields) {
+      delete (eventFields as any).country
+      console.log('🔍 Removed country field from eventFields')
+    }
+    
+    if ('event_type' in eventFields) {
+      delete (eventFields as any).event_type
+      console.log('🔍 Removed event_type field from eventFields')
+    }
+    
+    if ('gallery_images' in eventFields) {
+      delete (eventFields as any).gallery_images
+      console.log('🔍 Removed gallery_images field from eventFields')
+    }
+    
+    // Convert empty date strings to null for database compatibility
+    if ('end_date' in eventFields && eventFields.end_date === '') {
+      eventFields.end_date = null
+      console.log('🔍 Converted empty end_date to null')
+    }
+    
     console.log('🔍 Public User ID from middleware:', publicUserId)
     console.log('🔍 Full user object from middleware:', (req as any).user)
     
@@ -153,6 +175,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     
     eventFields.slug = generateSlug(eventFields.name || '')
     console.log('🔍 Generated slug:', eventFields.slug)
+    console.log('🔍 Final event data being sent to database:', eventFields)
     
     // Create the event first
     const event = await supabase.createEvent(eventFields)

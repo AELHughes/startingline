@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Trash2, Plus, Upload, Check, AlertCircle, Calendar, MapPin, Users, DollarSign, Package, Image as ImageIcon } from 'lucide-react'
+import { Trash2, Plus, Upload, Check, AlertCircle, Calendar, MapPin, Users, DollarSign, Package, Image as ImageIcon, CheckCircle, Circle } from 'lucide-react'
 
 interface EventDistance {
   id?: string
@@ -56,7 +56,6 @@ interface FormData {
   address: string
   city: string
   province: string
-  country: string
   latitude?: number
   longitude?: number
 
@@ -77,6 +76,7 @@ interface FormData {
 const CATEGORIES = [
   { value: 'road-cycling', label: 'Road Cycling' },
   { value: 'road-running', label: 'Road Running' },
+  { value: 'trail-running', label: 'Trail Running' },
   { value: 'mountain-biking', label: 'Mountain Biking' },
   { value: 'triathlon', label: 'Triathlon' }
 ]
@@ -109,7 +109,6 @@ export default function EventCreateForm() {
     address: '',
     city: '',
     province: '',
-    country: 'South Africa',
     license_required: false,
     temp_license_fee: 0,
     license_details: '',
@@ -123,6 +122,53 @@ export default function EventCreateForm() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [activeTab, setActiveTab] = useState('basic')
 
+  // Tab completion checking functions
+  const isBasicInfoComplete = (): boolean => {
+    return !!(
+      formData.name.trim() && 
+      formData.category && 
+      formData.event_type &&
+      formData.start_date && 
+      formData.start_time &&
+      (formData.event_type === 'single' || formData.end_date)
+    )
+  }
+
+  const isLocationComplete = (): boolean => {
+    return !!(
+      formData.address.trim() && 
+      formData.city.trim() && 
+      formData.province
+    )
+  }
+
+  const isDistancesComplete = (): boolean => {
+    return formData.distances.length > 0 && 
+           formData.distances.every(d => d.name.trim() && d.distance_km > 0 && d.price >= 0)
+  }
+
+  const isMerchandiseComplete = (): boolean => {
+    // Only show as complete if merchandise items are actually added and properly filled out
+    return formData.merchandise.length > 0 && 
+           formData.merchandise.every(m => m.name.trim() && m.price > 0 && m.description.trim())
+  }
+
+  // Completion indicator component
+  const CompletionIndicator = ({ isComplete }: { isComplete: boolean }) => {
+    if (isComplete) {
+      return <CheckCircle className="h-3 w-3 text-green-500" />
+    }
+    return <Circle className="h-3 w-3 text-gray-400" />
+  }
+
+  // Required/Optional indicator component
+  const RequiredIndicator = ({ isOptional }: { isOptional?: boolean }) => {
+    if (isOptional) {
+      return <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Optional</span>
+    }
+    return <span className="text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded-full">Required</span>
+  }
+
   // Form validation
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -132,6 +178,17 @@ export default function EventCreateForm() {
     if (!formData.category) newErrors.category = 'Category is required'
     if (!formData.start_date) newErrors.start_date = 'Start date is required'
     if (!formData.start_time) newErrors.start_time = 'Start time is required'
+    
+    // Date validation
+    if (formData.start_date) {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0) // Reset time to start of day
+      const startDate = new Date(formData.start_date)
+      if (startDate < today) {
+        newErrors.start_date = 'Start date cannot be in the past'
+      }
+    }
+    
     if (formData.event_type === 'multi' && !formData.end_date) {
       newErrors.end_date = 'End date is required for multi-day events'
     }
@@ -426,31 +483,114 @@ export default function EventCreateForm() {
     }
   }
 
+  // Navigation helpers
+  const tabs = ['basic', 'location', 'distances', 'merchandise']
+  const currentTabIndex = tabs.indexOf(activeTab)
+  const isFirstTab = currentTabIndex === 0
+  const isLastTab = currentTabIndex === tabs.length - 1
+
+  const goToNextTab = () => {
+    if (!isLastTab) {
+      setActiveTab(tabs[currentTabIndex + 1])
+    }
+  }
+
+  const goToPreviousTab = () => {
+    if (!isFirstTab) {
+      setActiveTab(tabs[currentTabIndex - 1])
+    }
+  }
+
+  // Check if current tab is valid to enable Next button
+  const isCurrentTabValid = () => {
+    switch (activeTab) {
+      case 'basic':
+        return isBasicInfoComplete()
+      case 'location':
+        return isLocationComplete()
+      case 'distances':
+        return isDistancesComplete()
+      case 'merchandise':
+        return true // Merchandise is optional
+      default:
+        return false
+    }
+  }
+
   return (
     <div className="container mx-auto px-4 py-6 max-w-4xl">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Create New Event</h1>
-        <p className="text-gray-600 mt-2">Fill in the details to create your event</p>
+      <div className="mb-6 flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Create New Event</h1>
+          <p className="text-gray-600 mt-2">Fill in the details to create your event</p>
+        </div>
+        
+        {/* Create Event Button - Top Right */}
+        <Button
+          type="submit"
+          form="event-form"
+          disabled={createEventMutation.isPending || uploading || !isBasicInfoComplete() || !isLocationComplete() || !isDistancesComplete()}
+          className="min-w-32"
+        >
+          {createEventMutation.isPending ? (
+            'Creating...'
+          ) : (
+            <>
+              <Check className="h-4 w-4 mr-2" />
+              Create Event
+            </>
+          )}
+        </Button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form id="event-form" onSubmit={handleSubmit} className="space-y-6">
+        {/* Progress Bar */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm font-medium text-gray-700">Progress</span>
+            <span className="text-sm text-gray-500">{currentTabIndex + 1} of {tabs.length} completed</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div 
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-in-out"
+              style={{ width: `${((currentTabIndex + 1) / tabs.length) * 100}%` }}
+            />
+          </div>
+        </div>
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="basic" className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Basic Info
+            <TabsTrigger value="basic" className="flex flex-col items-center gap-1 py-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Basic Info
+                <CompletionIndicator isComplete={isBasicInfoComplete()} />
+              </div>
+              <RequiredIndicator />
             </TabsTrigger>
-            <TabsTrigger value="location" className="flex items-center gap-2">
-              <MapPin className="h-4 w-4" />
-              Location
+            <TabsTrigger value="location" className="flex flex-col items-center gap-1 py-3">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Location
+                <CompletionIndicator isComplete={isLocationComplete()} />
+              </div>
+              <RequiredIndicator />
             </TabsTrigger>
-            <TabsTrigger value="distances" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Distances
+            <TabsTrigger value="distances" className="flex flex-col items-center gap-1 py-3">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Distances
+                <CompletionIndicator isComplete={isDistancesComplete()} />
+              </div>
+              <RequiredIndicator />
             </TabsTrigger>
-            <TabsTrigger value="merchandise" className="flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              Merchandise
+            <TabsTrigger value="merchandise" className="flex flex-col items-center gap-1 py-3">
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4" />
+                Merchandise
+                <CompletionIndicator isComplete={isMerchandiseComplete()} />
+              </div>
+              <RequiredIndicator isOptional />
             </TabsTrigger>
           </TabsList>
 
@@ -469,7 +609,7 @@ export default function EventCreateForm() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
-                    <Label htmlFor="name">Event Name *</Label>
+                    <Label htmlFor="name" className="mb-2 font-medium">Event Name *</Label>
                     <Input
                       id="name"
                       value={formData.name}
@@ -481,7 +621,7 @@ export default function EventCreateForm() {
                   </div>
 
                   <div>
-                    <Label htmlFor="category">Category *</Label>
+                    <Label htmlFor="category" className="mb-2 font-medium">Category *</Label>
                     <Select
                       value={formData.category}
                       onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
@@ -501,7 +641,7 @@ export default function EventCreateForm() {
                   </div>
 
                   <div>
-                    <Label htmlFor="event_type">Event Type *</Label>
+                    <Label htmlFor="event_type" className="mb-2 font-medium">Event Type *</Label>
                     <Select
                       value={formData.event_type}
                       onValueChange={(value: 'single' | 'multi') => {
@@ -525,19 +665,20 @@ export default function EventCreateForm() {
                   </div>
 
                   <div>
-                    <Label htmlFor="start_date">Start Date *</Label>
+                    <Label htmlFor="start_date" className="mb-2 font-medium">Start Date *</Label>
                     <Input
                       id="start_date"
                       type="date"
                       value={formData.start_date}
                       onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
                       className={errors.start_date ? 'border-red-500' : ''}
+                      min={new Date().toISOString().split('T')[0]}
                     />
                     {errors.start_date && <p className="text-sm text-red-500 mt-1">{errors.start_date}</p>}
                   </div>
 
                   <div>
-                    <Label htmlFor="end_date">
+                    <Label htmlFor="end_date" className="mb-2 font-medium">
                       End Date {formData.event_type === 'multi' ? '*' : ''}
                     </Label>
                     <Input
@@ -548,6 +689,7 @@ export default function EventCreateForm() {
                       className={errors.end_date ? 'border-red-500' : ''}
                       disabled={formData.event_type === 'single'}
                       placeholder={formData.event_type === 'single' ? 'Single day event' : ''}
+                      min={formData.start_date || new Date().toISOString().split('T')[0]}
                     />
                     {errors.end_date && <p className="text-sm text-red-500 mt-1">{errors.end_date}</p>}
                     {formData.event_type === 'single' && (
@@ -556,7 +698,7 @@ export default function EventCreateForm() {
                   </div>
 
                   <div>
-                    <Label htmlFor="start_time">Start Time *</Label>
+                    <Label htmlFor="start_time" className="mb-2 font-medium">Start Time *</Label>
                     <Input
                       id="start_time"
                       type="time"
@@ -569,7 +711,7 @@ export default function EventCreateForm() {
                 </div>
 
                 <div>
-                  <Label htmlFor="description">Description</Label>
+                  <Label htmlFor="description" className="mb-2 font-medium">Description</Label>
                   <Textarea
                     id="description"
                     value={formData.description}
@@ -644,7 +786,7 @@ export default function EventCreateForm() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="venue_name">Venue Name</Label>
+                  <Label htmlFor="venue_name" className="mb-2 font-medium">Venue Name</Label>
                   <Input
                     id="venue_name"
                     value={formData.venue_name}
@@ -654,7 +796,7 @@ export default function EventCreateForm() {
                 </div>
 
                 <div>
-                  <Label htmlFor="address">Address *</Label>
+                  <Label htmlFor="address" className="mb-2 font-medium">Address *</Label>
                   <Input
                     id="address"
                     value={formData.address}
@@ -667,7 +809,7 @@ export default function EventCreateForm() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="city">City *</Label>
+                    <Label htmlFor="city" className="mb-2 font-medium">City *</Label>
                     <Input
                       id="city"
                       value={formData.city}
@@ -679,7 +821,7 @@ export default function EventCreateForm() {
                   </div>
 
                   <div>
-                    <Label htmlFor="province">Province *</Label>
+                    <Label htmlFor="province" className="mb-2 font-medium">Province *</Label>
                     <Select
                       value={formData.province}
                       onValueChange={(value) => setFormData(prev => ({ ...prev, province: value }))}
@@ -715,7 +857,7 @@ export default function EventCreateForm() {
                   {formData.license_required && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="temp_license_fee">License Fee (R)</Label>
+                        <Label htmlFor="temp_license_fee" className="mb-2 font-medium">License Fee (R)</Label>
                         <Input
                           id="temp_license_fee"
                           type="number"
@@ -728,7 +870,7 @@ export default function EventCreateForm() {
                       </div>
 
                       <div>
-                        <Label htmlFor="license_details">License Details</Label>
+                        <Label htmlFor="license_details" className="mb-2 font-medium">License Details</Label>
                         <Textarea
                           id="license_details"
                           value={formData.license_details}
@@ -780,7 +922,7 @@ export default function EventCreateForm() {
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div>
-                            <Label htmlFor={`distance_${index}_name`}>Distance Name *</Label>
+                            <Label htmlFor={`distance_${index}_name`} className="mb-2 font-medium">Distance Name *</Label>
                             <Input
                               id={`distance_${index}_name`}
                               value={distance.name}
@@ -794,7 +936,7 @@ export default function EventCreateForm() {
                           </div>
 
                           <div>
-                            <Label htmlFor={`distance_${index}_distance`}>Distance (km) *</Label>
+                            <Label htmlFor={`distance_${index}_distance`} className="mb-2 font-medium">Distance (km) *</Label>
                             <Input
                               id={`distance_${index}_distance`}
                               type="number"
@@ -811,7 +953,7 @@ export default function EventCreateForm() {
                           </div>
 
                           <div>
-                            <Label htmlFor={`distance_${index}_price`}>Price (R) *</Label>
+                            <Label htmlFor={`distance_${index}_price`} className="mb-2 font-medium">Price (R) *</Label>
                             <Input
                               id={`distance_${index}_price`}
                               type="number"
@@ -828,7 +970,7 @@ export default function EventCreateForm() {
                           </div>
 
                           <div>
-                            <Label htmlFor={`distance_${index}_min_age`}>Minimum Age</Label>
+                            <Label htmlFor={`distance_${index}_min_age`} className="mb-2 font-medium">Minimum Age</Label>
                             <Input
                               id={`distance_${index}_min_age`}
                               type="number"
@@ -840,7 +982,7 @@ export default function EventCreateForm() {
                           </div>
 
                           <div>
-                            <Label htmlFor={`distance_${index}_entry_limit`}>Entry Limit</Label>
+                            <Label htmlFor={`distance_${index}_entry_limit`} className="mb-2 font-medium">Entry Limit</Label>
                             <Input
                               id={`distance_${index}_entry_limit`}
                               type="number"
@@ -852,7 +994,7 @@ export default function EventCreateForm() {
                           </div>
 
                           <div>
-                            <Label htmlFor={`distance_${index}_start_time`}>Start Time</Label>
+                            <Label htmlFor={`distance_${index}_start_time`} className="mb-2 font-medium">Start Time</Label>
                             <Input
                               id={`distance_${index}_start_time`}
                               type="time"
@@ -888,7 +1030,7 @@ export default function EventCreateForm() {
 
                         {distance.free_for_seniors && (
                           <div className="mt-4">
-                            <Label htmlFor={`distance_${index}_senior_age`}>Senior Age Threshold</Label>
+                            <Label htmlFor={`distance_${index}_senior_age`} className="mb-2 font-medium">Senior Age Threshold</Label>
                             <Input
                               id={`distance_${index}_senior_age`}
                               type="number"
@@ -947,7 +1089,7 @@ export default function EventCreateForm() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <Label htmlFor={`merch_${merchIndex}_name`}>Item Name *</Label>
+                            <Label htmlFor={`merch_${merchIndex}_name`} className="mb-2 font-medium">Item Name *</Label>
                             <Input
                               id={`merch_${merchIndex}_name`}
                               value={merch.name}
@@ -961,7 +1103,7 @@ export default function EventCreateForm() {
                           </div>
 
                           <div>
-                            <Label htmlFor={`merch_${merchIndex}_price`}>Price (R) *</Label>
+                            <Label htmlFor={`merch_${merchIndex}_price`} className="mb-2 font-medium">Price (R) *</Label>
                             <Input
                               id={`merch_${merchIndex}_price`}
                               type="number"
@@ -979,7 +1121,7 @@ export default function EventCreateForm() {
                         </div>
 
                         <div className="mt-4">
-                          <Label htmlFor={`merch_${merchIndex}_description`}>Description</Label>
+                          <Label htmlFor={`merch_${merchIndex}_description`} className="mb-2 font-medium">Description</Label>
                           <Textarea
                             id={`merch_${merchIndex}_description`}
                             value={merch.description}
@@ -991,7 +1133,7 @@ export default function EventCreateForm() {
 
                         {/* Merchandise Image */}
                         <div className="mt-4">
-                          <Label>Item Image</Label>
+                          <Label className="mb-2 font-medium">Item Image</Label>
                           <div className="mt-2">
                             {merch.image_url ? (
                               <div className="relative w-32 h-32">
@@ -1039,7 +1181,7 @@ export default function EventCreateForm() {
                         {/* Variations */}
                         <div className="mt-6 space-y-4">
                           <div className="flex items-center justify-between">
-                            <Label className="text-base font-medium">Variations</Label>
+                            <Label className="text-base font-medium mb-2">Variations</Label>
                             <Button
                               type="button"
                               variant="outline"
@@ -1124,30 +1266,67 @@ export default function EventCreateForm() {
           </TabsContent>
         </Tabs>
 
-        {/* Submit Button */}
+        {/* Progressive Navigation */}
         <div className="flex items-center justify-between pt-6 border-t">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.push('/dashboard')}
-          >
-            Cancel
-          </Button>
-
-          <Button
-            type="submit"
-            disabled={createEventMutation.isPending || uploading}
-            className="min-w-32"
-          >
-            {createEventMutation.isPending ? (
-              'Creating...'
-            ) : (
-              <>
-                <Check className="h-4 w-4 mr-2" />
-                Create Event
-              </>
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push('/dashboard')}
+            >
+              Cancel
+            </Button>
+            
+            {!isFirstTab && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={goToPreviousTab}
+                className="flex items-center gap-2"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Previous
+              </Button>
             )}
-          </Button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Progress indicator */}
+            <span className="text-sm text-gray-500">
+              Step {currentTabIndex + 1} of {tabs.length}
+            </span>
+            
+            {!isLastTab ? (
+              <Button
+                type="button"
+                onClick={goToNextTab}
+                disabled={!isCurrentTabValid()}
+                className="flex items-center gap-2"
+              >
+                Next
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => {
+                  // Scroll to top to make the Create Event button visible
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }}
+                className="flex items-center gap-2"
+                variant="outline"
+              >
+                Ready to Create
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Error Display */}

@@ -132,7 +132,7 @@ export default function LoginPage() {
               )}
 
               <div>
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="email" className="mb-2 font-medium">Email address</Label>
                 <Input
                   id="email"
                   type="email"
@@ -148,7 +148,7 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="mb-2 font-medium">Password</Label>
                 <div className="relative">
                   <Input
                     id="password"
