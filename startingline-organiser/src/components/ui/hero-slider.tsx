@@ -64,7 +64,20 @@ export default function HeroSlider({
               alt={image.alt}
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-black bg-opacity-30" />
+            <div className="absolute inset-0 bg-black bg-opacity-20" />
+            {/* Individual slide text overlay */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center text-white max-w-4xl mx-auto px-4">
+                <div className="bg-black bg-opacity-30 rounded-lg p-6 backdrop-blur-sm">
+                  <h2 className="text-3xl md:text-5xl font-bold mb-4 drop-shadow-2xl">
+                    {image.title}
+                  </h2>
+                  <p className="text-lg md:text-xl mb-6 opacity-90 drop-shadow-xl">
+                    {image.subtitle}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         ))}
       </div>

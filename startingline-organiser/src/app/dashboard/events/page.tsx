@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEvents } from '@/hooks/use-events'
+import { useMyEvents } from '@/hooks/use-events'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,7 +26,7 @@ const STATUS_LABELS = {
 
 export default function EventsPage() {
   const router = useRouter()
-  const { data: events = [], isLoading } = useEvents()
+  const { data: events = [], isLoading } = useMyEvents()
   
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')

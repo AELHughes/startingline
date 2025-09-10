@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
 import { useEvents } from '@/hooks/use-events'
 import { useAuth } from '@/contexts/auth-context'
@@ -28,25 +28,31 @@ import {
 import HeroSlider from '@/components/ui/hero-slider'
 import type { Event } from '@/lib/supabase-api'
 
-// Hero images from WordPress (as provided in our chat history)
+// Hero images from local public/images folder
 const heroImages = [
   {
-    src: 'https://startingline.co.za/wp-content/uploads/2024/01/hero-1.jpg',
-    alt: 'Cycling Event',
-    title: 'Join the Ultimate Cycling Experience',
-    subtitle: 'Discover amazing cycling events across South Africa'
+    src: '/images/MTBSlide.jpg',
+    alt: 'Mountain Biking Event',
+    title: 'Conquer the Trails',
+    subtitle: 'Experience the thrill of mountain biking across South Africa\'s most challenging terrain'
   },
   {
-    src: 'https://startingline.co.za/wp-content/uploads/2024/01/hero-2.jpg',
-    alt: 'Running Event',
+    src: '/images/RoadRunningSlide.jpg',
+    alt: 'Road Running Event',
     title: 'Run Your Best Race',
-    subtitle: 'From 5K fun runs to marathons, find your perfect race'
+    subtitle: 'From 5K fun runs to marathons, find your perfect race on the road'
   },
   {
-    src: 'https://startingline.co.za/wp-content/uploads/2024/01/hero-3.jpg',
+    src: '/images/TrailSlide.jpg',
+    alt: 'Trail Running Event',
+    title: 'Hit the Trails',
+    subtitle: 'Discover breathtaking trail running adventures in nature\'s playground'
+  },
+  {
+    src: '/images/TriSlide.jpg',
     alt: 'Triathlon Event',
     title: 'Triathlon Excellence',
-    subtitle: 'Swim, bike, run - conquer the ultimate challenge'
+    subtitle: 'Swim, bike, run - conquer the ultimate endurance challenge'
   }
 ]
 
@@ -192,30 +198,47 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative">
-        <HeroSlider images={heroImages} />
-        <div className="absolute inset-0 bg-black bg-opacity-40" />
-        <div className="absolute inset-0 flex items-center justify-center">
+      <section className="relative h-96 md:h-[500px] overflow-hidden">
+        {/* Simple test with first image */}
+        <div className="absolute inset-0">
+          <img
+            src="/images/MTBSlide.jpg"
+            alt="Mountain Biking Event"
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              console.error('Image failed to load:', e.currentTarget.src);
+              e.currentTarget.style.backgroundColor = '#ff0000';
+            }}
+            onLoad={() => console.log('Image loaded successfully!')}
+          />
+          <div className="absolute inset-0 bg-black bg-opacity-30" />
+        </div>
+        
+        {/* Text overlay */}
+        <div className="absolute inset-0 flex items-center justify-center z-10">
           <div className="text-center text-white max-w-4xl mx-auto px-4">
-            <h1 className="text-4xl md:text-6xl font-bold mb-6">
+            <h1 className="text-4xl md:text-6xl font-bold mb-6 drop-shadow-2xl">
               Your Next Adventure Starts Here
             </h1>
-            <p className="text-xl md:text-2xl mb-8 opacity-90">
+            <p className="text-xl md:text-2xl mb-8 opacity-90 drop-shadow-xl">
               Discover and join amazing cycling, running, and triathlon events across South Africa
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/events">
-                <Button size="lg" className="bg-blue-600 hover:bg-blue-700">
-                  Browse Events
-                  <ChevronRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
-              <Link href="/register">
-                <Button size="lg" variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20">
-                  Organise Event
-                </Button>
-              </Link>
-            </div>
+          </div>
+        </div>
+        
+        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-10">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link href="/events">
+              <Button size="lg" className="bg-blue-600 hover:bg-blue-700">
+                Browse Events
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+            <Link href="/register">
+              <Button size="lg" variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20">
+                Organise Event
+              </Button>
+            </Link>
           </div>
         </div>
       </section>

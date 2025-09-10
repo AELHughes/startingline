@@ -346,15 +346,34 @@ export const eventsApi = {
   // Get my events (for organisers)
   getMyEvents: async (): Promise<Event[]> => {
     try {
-      console.log('🔍 Fetching all events for organizer dashboard...')
+      console.log('🔍 Fetching events for current organizer...')
 
-      // Use simple query to avoid complex join issues
+      // Get the current user from localStorage
+      const userStr = localStorage.getItem('user')
+      if (!userStr) {
+        console.log('❌ No user found in localStorage')
+        throw new Error('User not authenticated')
+      }
+
+      const user = JSON.parse(userStr)
+      console.log('🔍 Current user:', { 
+        id: user.id, 
+        auth_user_id: user.auth_user_id, 
+        email: user.email 
+      })
+
+      // Filter events by the current user's auth_user_id (this is what's stored as organiser_id)
       const { data, error } = await supabase
         .from('events')
         .select('*')
+        .eq('organiser_id', user.auth_user_id)
         .order('created_at', { ascending: false })
 
-      console.log('🔍 Events query result:', { data, error })
+      console.log('🔍 My events query result for auth_user_id', user.auth_user_id, ':', { 
+        eventCount: data?.length || 0, 
+        error,
+        events: data?.map(e => ({ id: e.id, name: e.name, organiser_id: e.organiser_id }))
+      })
 
       if (error) {
         console.error('❌ Events query error:', error)
@@ -362,7 +381,7 @@ export const eventsApi = {
       }
 
       if (!data || data.length === 0) {
-        console.log('ℹ️ No events found')
+        console.log('ℹ️ No events found for auth_user_id', user.auth_user_id)
         return []
       }
 
