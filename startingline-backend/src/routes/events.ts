@@ -154,9 +154,9 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     
     console.log('🔍 User lookup result:', userLookup)
     
-    // Use auth_user_id for the organiser_id foreign key
-    eventFields.organiser_id = userLookup.auth_user_id
-    console.log('🔍 Setting organiser_id to auth_user_id:', eventFields.organiser_id)
+    // Use public user ID for the organiser_id foreign key (events table references public.users.id)
+    eventFields.organiser_id = userLookup.id
+    console.log('🔍 Setting organiser_id to public user ID:', eventFields.organiser_id)
     
     // Add organizer name information for better display
     eventFields.organiser_name = `${userLookup.first_name} ${userLookup.last_name}`.trim()

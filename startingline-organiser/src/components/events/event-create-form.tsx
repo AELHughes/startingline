@@ -239,18 +239,23 @@ export default function EventCreateForm() {
 
       const eventData = {
         ...formData,
-        // Events are created as drafts by default and go through approval workflow
-        status: 'draft',
+        // Events are created pending approval by admin
+        status: 'pending_approval',
         // Map venue_name to venue for backend compatibility
         venue: formData.venue_name,
         // Map primary_image_url to image_url for backend compatibility  
         image_url: formData.primary_image_url
       }
 
-      await createEventMutation.mutateAsync(eventData)
+      const createdEvent = await createEventMutation.mutateAsync(eventData)
 
-      // Success - redirect to dashboard
-      router.push('/dashboard')
+      // Success - redirect to the created event's details page
+      if (createdEvent?.slug) {
+        router.push(`/events/${createdEvent.slug}`)
+      } else {
+        // Fallback to dashboard if no slug available
+        router.push('/dashboard')
+      }
     } catch (error: any) {
       console.error('Create event error:', error)
       setErrors({ submit: error.message || 'Failed to create event' })
