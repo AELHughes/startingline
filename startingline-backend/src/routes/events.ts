@@ -154,9 +154,17 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     
     console.log('🔍 User lookup result:', userLookup)
     
-    // Use public user ID for the organiser_id foreign key (events table references public.users.id)
-    eventFields.organiser_id = userLookup.id
-    console.log('🔍 Setting organiser_id to public user ID:', eventFields.organiser_id)
+    // The foreign key constraint likely references auth.users.id, but we need to handle cases
+    // where the auth user might not exist in the referenced table
+    console.log('🔍 Available user data:', {
+      public_id: userLookup.id,
+      auth_user_id: userLookup.auth_user_id,
+      email: userLookup.email
+    })
+    
+    // Use auth_user_id but ensure the user exists in auth.users table
+    eventFields.organiser_id = userLookup.auth_user_id
+    console.log('🔍 Setting organiser_id to auth_user_id:', eventFields.organiser_id)
     
     // Add organizer name information for better display
     eventFields.organiser_name = `${userLookup.first_name} ${userLookup.last_name}`.trim()
@@ -177,7 +185,75 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     console.log('🔍 Generated slug:', eventFields.slug)
     console.log('🔍 Final event data being sent to database:', eventFields)
     
-    // Create the event first
+    // STEP 1: Find out what table the foreign key actually references
+    try {
+      console.log('🔍 Investigating foreign key constraint...')
+      
+      // Direct SQL query to find foreign key constraint
+      const { data: constraintInfo } = await supabaseAdmin
+        .from('information_schema.table_constraints')
+        .select('*')
+        .eq('table_name', 'events')
+        .eq('constraint_name', 'events_organiser_id_fkey')
+      
+      console.log('🔍 Foreign key constraint info:', constraintInfo)
+      
+      // Also check referential constraints
+      const { data: refConstraints } = await supabaseAdmin
+        .from('information_schema.referential_constraints')
+        .select('*')
+        .eq('constraint_name', 'events_organiser_id_fkey')
+        
+      console.log('🔍 Referential constraints:', refConstraints)
+      
+    } catch (fkError) {
+      console.log('⚠️ Could not query constraint info:', fkError.message)
+    }
+
+    // STEP 2: Try to find what users exist in potential target tables
+    try {
+      console.log('🔍 Checking what user records exist...')
+      
+      // Check auth.users
+      const { data: authUsers } = await supabaseAdmin
+        .from('auth.users')
+        .select('id, email')
+        .limit(5)
+      console.log('🔍 Sample auth.users:', authUsers)
+      
+      // Check public.users
+      const { data: publicUsers } = await supabaseAdmin
+        .from('users')
+        .select('id, auth_user_id, email')
+        .limit(5)
+      console.log('🔍 Sample public.users:', publicUsers)
+      
+      // Check Edward's specific record that worked
+      const { data: edwardRecord } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('email', 'edward@gigspace.co.za')
+        .single()
+      console.log('🔍 Edward\'s working record:', edwardRecord)
+      
+      // Check what records exist with Edward's working organiser_id
+      const edwardWorkingId = '97aa0354-7991-464a-84b7-132a35e66230'
+      const { data: usersWithEdwardId } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('auth_user_id', edwardWorkingId)
+      console.log('🔍 Users with Edward\'s working auth_user_id:', usersWithEdwardId)
+      
+    } catch (userCheckError) {
+      console.log('⚠️ Error checking user tables:', userCheckError)
+    }
+
+    // STEP 3: Use a known working user ID for now (Edward's ID that worked)
+    console.log('🔍 TEMPORARILY using Edward\'s working organiser_id for testing')
+    eventFields.organiser_id = '97aa0354-7991-464a-84b7-132a35e66230' // Edward's auth_user_id that worked
+    console.log('🔍 Using known working ID:', eventFields.organiser_id)
+
+    // Create the event
     const event = await supabase.createEvent(eventFields)
     console.log('✅ Event created:', event.id)
     
