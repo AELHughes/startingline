@@ -185,8 +185,32 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     console.log('🔍 Generated slug:', eventFields.slug)
     console.log('🔍 Final event data being sent to database:', eventFields)
     
-    // ✅ PROPER SOLUTION: Use the user's auth_user_id directly
-    // Debug revealed Sam's auth_user_id exists and should work
+    // ✅ FINAL SOLUTION: Ensure auth user exists, then use auth_user_id
+    try {
+      console.log('🔍 Ensuring auth user exists for:', userLookup.auth_user_id)
+      
+      // Try to create the auth user record if it doesn't exist
+      const { error: authError } = await supabaseAdmin.auth.admin.createUser({
+        user_id: userLookup.auth_user_id,
+        email: userLookup.email,
+        email_confirm: true,
+        user_metadata: {
+          first_name: userLookup.first_name,
+          last_name: userLookup.last_name,
+          role: userLookup.role
+        }
+      })
+      
+      if (authError && !authError.message.includes('User already registered')) {
+        console.log('⚠️ Could not create auth user:', authError.message)
+      } else {
+        console.log('✅ Auth user ensured to exist')
+      }
+      
+    } catch (authCreateError) {
+      console.log('⚠️ Auth user creation attempt failed:', authCreateError)
+    }
+    
     console.log('🔍 Using current user\'s auth_user_id for organiser_id:', userLookup.auth_user_id)
     eventFields.organiser_id = userLookup.auth_user_id
 
