@@ -205,13 +205,49 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       console.log('⚠️ Could not query existing events:', queryError)
     }
     
-    // ✅ CORRECT SOLUTION: Always use public user ID from users table
-    console.log('🔍 Using PUBLIC user ID as organiser_id (correct approach):', userLookup.id)
-    eventFields.organiser_id = userLookup.id // This is the public.users.id that should be used
+    // ✅ CORRECT SOLUTION: Use auth_user_id (as established previously)
+    console.log('🔍 Using auth_user_id as organiser_id (correct approach):', userLookup.auth_user_id)
+    eventFields.organiser_id = userLookup.auth_user_id
     
-    // Create the event
-    const event = await supabase.createEvent(eventFields)
-    console.log('✅ Event created:', event.id)
+    try {
+      // Create the event
+      const event = await supabase.createEvent(eventFields)
+      console.log('✅ Event created:', event.id)
+    } catch (createError) {
+      console.log('❌ Event creation failed with auth_user_id:', createError.message)
+      
+      // If foreign key constraint, try to create the auth user first
+      if (createError.message.includes('foreign key constraint')) {
+        console.log('🔧 Attempting to create missing auth user record...')
+        
+        try {
+          const { error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email: userLookup.email,
+            email_confirm: true,
+            user_metadata: {
+              first_name: userLookup.first_name,
+              last_name: userLookup.last_name,
+              role: userLookup.role
+            }
+          })
+          
+          if (authError && !authError.message.includes('already registered')) {
+            console.log('⚠️ Could not create auth user:', authError.message)
+            throw createError // Re-throw original error
+          }
+          
+          console.log('✅ Auth user created/confirmed, retrying event creation...')
+          const event = await supabase.createEvent(eventFields)
+          console.log('✅ Event created after auth user fix:', event.id)
+          
+        } catch (authFixError) {
+          console.log('❌ Auth user creation failed:', authFixError)
+          throw createError // Re-throw original error
+        }
+      } else {
+        throw createError // Re-throw if not foreign key issue
+      }
+    }
     
     // Create event distances if provided
     if (distances && distances.length > 0) {
