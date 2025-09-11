@@ -145,9 +145,10 @@ export default function AdminEventsPage() {
 
   // Filter events based on search and filters
   const filteredEvents = events.filter(event => {
+    const organiserName = `${event.organiser_first_name || ''} ${event.organiser_last_name || ''}`.trim()
     const matchesSearch = !searchTerm || 
       event.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      event.organiser_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      organiserName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       event.city?.toLowerCase().includes(searchTerm.toLowerCase())
 
     const matchesStatus = statusFilter === 'all' || event.status === statusFilter
@@ -164,6 +165,63 @@ export default function AdminEventsPage() {
   const handleRejectEvent = async (eventId: string) => {
     // TODO: Implement reject event API call
     console.log('Reject event:', eventId)
+  }
+
+  const handleAdminAction = (event: any, action: 'approve' | 'reject' | 'request_info') => {
+    setSelectedEvent(event)
+    setAdminAction(action)
+    setAdminNote('')
+    setShowAdminModal(true)
+  }
+
+  const handleSubmitAdminAction = async () => {
+    if (!selectedEvent) return
+
+    let status = ''
+    switch (adminAction) {
+      case 'approve':
+        status = 'published'
+        break
+      case 'reject':
+        status = 'cancelled'
+        break
+      case 'request_info':
+        status = 'pending_approval' // Keep as pending but send note
+        break
+    }
+
+    try {
+      await updateEventStatusMutation.mutateAsync({
+        eventId: selectedEvent.id,
+        status,
+        adminNote: adminNote.trim() || undefined
+      })
+
+      setShowAdminModal(false)
+      setSelectedEvent(null)
+      setAdminNote('')
+    } catch (error) {
+      console.error('Failed to update event status:', error)
+      alert('Failed to update event status')
+    }
+  }
+
+  const getActionTitle = () => {
+    switch (adminAction) {
+      case 'approve': return 'Approve Event'
+      case 'reject': return 'Reject Event'
+      case 'request_info': return 'Request More Information'
+      default: return 'Admin Action'
+    }
+  }
+
+  const getActionDescription = () => {
+    switch (adminAction) {
+      case 'approve': return 'This will publish the event and make it live for participants to register.'
+      case 'reject': return 'This will reject the event and notify the organiser.'
+      case 'request_info': return 'This will ask the organiser to provide more information or make changes.'
+      default: return ''
+    }
   }
 
   return (
@@ -417,7 +475,6 @@ export default function AdminEventsPage() {
         )}
       </div>
 
-      {/* Admin Action Modal */}
       <Dialog open={showAdminModal} onOpenChange={setShowAdminModal}>
         <DialogContent className="sm:max-w-[525px]">
           <DialogHeader>
