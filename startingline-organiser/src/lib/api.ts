@@ -410,6 +410,176 @@ export const userApi = {
 }
 
 // ============================================
+// NOTIFICATIONS API
+// ============================================
+
+export const notificationsApi = {
+  // Get user notifications
+  getNotifications: async (limit = 50): Promise<any[]> => {
+    try {
+      console.log('🔍 Fetching notifications')
+      
+      const response = await fetch(`${API_BASE}/api/notifications?limit=${limit}`, {
+        headers: getAuthHeaders()
+      })
+
+      const notifications = await handleApiResponse<any[]>(response)
+      console.log('✅ Retrieved', notifications.length, 'notifications')
+      return notifications
+    } catch (error) {
+      console.error('❌ Get notifications error:', error)
+      return []
+    }
+  },
+
+  // Get unread notification count
+  getUnreadCount: async (): Promise<number> => {
+    try {
+      const response = await fetch(`${API_BASE}/api/notifications/unread-count`, {
+        headers: getAuthHeaders()
+      })
+
+      const result = await handleApiResponse<{ count: number }>(response)
+      return result.count
+    } catch (error) {
+      console.error('❌ Get unread count error:', error)
+      return 0
+    }
+  },
+
+  // Mark notification as read
+  markAsRead: async (notificationId: string): Promise<void> => {
+    try {
+      const response = await fetch(`${API_BASE}/api/notifications/${notificationId}/read`, {
+        method: 'PUT',
+        headers: getAuthHeaders()
+      })
+
+      await handleApiResponse(response)
+      console.log('✅ Marked notification as read:', notificationId)
+    } catch (error) {
+      console.error('❌ Mark notification read error:', error)
+      throw error
+    }
+  },
+
+  // Mark all notifications as read
+  markAllAsRead: async (): Promise<void> => {
+    try {
+      const response = await fetch(`${API_BASE}/api/notifications/mark-all-read`, {
+        method: 'PUT',
+        headers: getAuthHeaders()
+      })
+
+      await handleApiResponse(response)
+      console.log('✅ Marked all notifications as read')
+    } catch (error) {
+      console.error('❌ Mark all notifications read error:', error)
+      throw error
+    }
+  }
+}
+
+// ============================================
+// MESSAGES API
+// ============================================
+
+export const messagesApi = {
+  // Get user messages
+  getMessages: async (limit = 50): Promise<any[]> => {
+    try {
+      console.log('🔍 Fetching messages')
+      
+      const response = await fetch(`${API_BASE}/api/messages?limit=${limit}`, {
+        headers: getAuthHeaders()
+      })
+
+      const messages = await handleApiResponse<any[]>(response)
+      console.log('✅ Retrieved', messages.length, 'messages')
+      return messages
+    } catch (error) {
+      console.error('❌ Get messages error:', error)
+      return []
+    }
+  },
+
+  // Get unread message count
+  getUnreadCount: async (): Promise<number> => {
+    try {
+      const response = await fetch(`${API_BASE}/api/messages/unread-count`, {
+        headers: getAuthHeaders()
+      })
+
+      const result = await handleApiResponse<{ count: number }>(response)
+      return result.count
+    } catch (error) {
+      console.error('❌ Get unread message count error:', error)
+      return 0
+    }
+  },
+
+  // Get message thread
+  getThread: async (messageId: string): Promise<any[]> => {
+    try {
+      console.log('🔍 Fetching message thread:', messageId)
+      
+      const response = await fetch(`${API_BASE}/api/messages/${messageId}/thread`, {
+        headers: getAuthHeaders()
+      })
+
+      const thread = await handleApiResponse<any[]>(response)
+      console.log('✅ Retrieved message thread with', thread.length, 'messages')
+      return thread
+    } catch (error) {
+      console.error('❌ Get message thread error:', error)
+      throw error
+    }
+  },
+
+  // Send message
+  sendMessage: async (messageData: {
+    recipientId: string
+    subject: string
+    body: string
+    eventId?: string
+    parentMessageId?: string
+  }): Promise<any> => {
+    try {
+      console.log('🔍 Sending message:', messageData.subject)
+      
+      const response = await fetch(`${API_BASE}/api/messages`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(messageData)
+      })
+
+      const message = await handleApiResponse<any>(response)
+      console.log('✅ Message sent successfully')
+      return message
+    } catch (error) {
+      console.error('❌ Send message error:', error)
+      throw error
+    }
+  },
+
+  // Mark message as read
+  markAsRead: async (messageId: string): Promise<void> => {
+    try {
+      const response = await fetch(`${API_BASE}/api/messages/${messageId}/read`, {
+        method: 'PUT',
+        headers: getAuthHeaders()
+      })
+
+      await handleApiResponse(response)
+      console.log('✅ Marked message as read:', messageId)
+    } catch (error) {
+      console.error('❌ Mark message read error:', error)
+      throw error
+    }
+  }
+}
+
+// ============================================
 // STORAGE API
 // ============================================
 

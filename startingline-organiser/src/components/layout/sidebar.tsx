@@ -11,12 +11,14 @@ import {
   Settings,
   BarChart3,
   Users,
-  FileText
+  FileText,
+  MessageSquare
 } from 'lucide-react'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
   { name: 'Events', href: '/dashboard/events', icon: Calendar },
+  { name: 'Messages', href: '/dashboard/messages', icon: MessageSquare },
   { name: 'Profile', href: '/dashboard/profile', icon: User },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Participants', href: '/dashboard/participants', icon: Users },

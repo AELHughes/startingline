@@ -7,6 +7,8 @@ import dotenv from 'dotenv'
 import authRoutes from './routes/auth-local' // Using local PostgreSQL auth
 import eventsRoutes from './routes/events-local' // Using local PostgreSQL events
 import storageRoutes from './routes/storage-local' // Using local file storage
+import notificationsRoutes from './routes/notifications'
+import messagesRoutes from './routes/messages'
 // import usersRoutes from './routes/users'
 import debugRoutes from './routes/debug'
 import ticketsRoutes from './routes/tickets'
@@ -48,6 +50,8 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/events', eventsRoutes)
 app.use('/api/storage', storageRoutes)
+app.use('/api/notifications', notificationsRoutes)
+app.use('/api/messages', messagesRoutes)
 // app.use('/api/users', usersRoutes)
 app.use('/api/debug', debugRoutes)
 app.use('/api/tickets', ticketsRoutes)

@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express'
-import { pool, createAuditTrailEntry, getEventAuditTrail } from '../lib/database'
+import { pool, createAuditTrailEntry, getEventAuditTrail, createNotification } from '../lib/database'
 import { authenticateToken, requireOrganiser, requireOrganiserOrAdmin, optionalAuth } from '../middleware/auth-local'
 import type { ApiResponse, Event, CreateEventData } from '../types'
 
@@ -520,23 +520,32 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
     
     const updatedEvent = result.rows[0]
     
-    // Create audit trail entries for significant changes
+    // Create audit trail entries and notifications for significant changes
     if (updates.status && updates.status !== originalEvent.status) {
       let actionType = ''
       let message = ''
+      let notificationTitle = ''
+      let notificationMessage = ''
       
       if (updates.status === 'pending_approval') {
         actionType = 'submitted_for_approval'
         message = 'Event submitted for admin approval'
+        notificationTitle = 'Event Submitted for Approval'
+        notificationMessage = `Your event "${updatedEvent.name}" has been submitted for approval and is now being reviewed by administrators.`
       } else if (updates.status === 'published') {
         actionType = 'published'
         message = 'Event published and made live'
+        notificationTitle = 'Event Published'
+        notificationMessage = `Great news! Your event "${updatedEvent.name}" has been approved and is now live for participants to register.`
       } else if (updates.status === 'cancelled') {
         actionType = 'cancelled'
         message = 'Event cancelled'
+        notificationTitle = 'Event Cancelled'
+        notificationMessage = `Your event "${updatedEvent.name}" has been cancelled.`
       }
       
       if (actionType) {
+        // Create audit trail entry
         await createAuditTrailEntry(
           id,
           actionType,
@@ -544,6 +553,22 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
           userRole === 'admin' ? 'admin' : 'organiser',
           message
         )
+        
+        // Create notification for event owner (if status was changed by admin)
+        if (userRole === 'admin' && originalEvent.organiser_id !== userId) {
+          await createNotification(
+            originalEvent.organiser_id,
+            'status_change',
+            notificationTitle,
+            notificationMessage,
+            `/dashboard/events/${id}/history`,
+            {
+              event_id: id,
+              previous_status: originalEvent.status,
+              new_status: updates.status
+            }
+          )
+        }
       }
     }
     

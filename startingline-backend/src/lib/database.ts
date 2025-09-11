@@ -416,6 +416,193 @@ export async function getEventAuditTrail(eventId: string) {
   return result.rows
 }
 
+// Notification Functions
+export async function createNotification(
+  userId: string,
+  type: string,
+  title: string,
+  message: string,
+  link?: string,
+  metadata?: any
+) {
+  const query = `
+    INSERT INTO notifications (user_id, type, title, message, link, metadata)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    RETURNING *
+  `
+  const values = [userId, type, title, message, link, metadata ? JSON.stringify(metadata) : null]
+  
+  const result = await pool.query(query, values)
+  return result.rows[0]
+}
+
+export async function getUserNotifications(userId: string, limit = 50) {
+  const query = `
+    SELECT * FROM notifications
+    WHERE user_id = $1
+    ORDER BY created_at DESC
+    LIMIT $2
+  `
+  
+  const result = await pool.query(query, [userId, limit])
+  return result.rows
+}
+
+export async function getUnreadNotificationCount(userId: string) {
+  const query = `
+    SELECT COUNT(*) as count FROM notifications
+    WHERE user_id = $1 AND read_at IS NULL
+  `
+  
+  const result = await pool.query(query, [userId])
+  return parseInt(result.rows[0].count)
+}
+
+export async function markNotificationAsRead(notificationId: string, userId: string) {
+  const query = `
+    UPDATE notifications 
+    SET read_at = CURRENT_TIMESTAMP
+    WHERE id = $1 AND user_id = $2
+    RETURNING *
+  `
+  
+  const result = await pool.query(query, [notificationId, userId])
+  return result.rows[0]
+}
+
+export async function markAllNotificationsAsRead(userId: string) {
+  const query = `
+    UPDATE notifications 
+    SET read_at = CURRENT_TIMESTAMP
+    WHERE user_id = $1 AND read_at IS NULL
+    RETURNING *
+  `
+  
+  const result = await pool.query(query, [userId])
+  return result.rows
+}
+
+// Message Functions
+export async function createMessage(
+  eventId: string | null,
+  senderId: string,
+  recipientId: string,
+  subject: string,
+  body: string,
+  parentMessageId?: string
+) {
+  const query = `
+    INSERT INTO messages (event_id, sender_id, recipient_id, subject, body, parent_message_id)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    RETURNING *
+  `
+  const values = [eventId, senderId, recipientId, subject, body, parentMessageId || null]
+  
+  const result = await pool.query(query, values)
+  return result.rows[0]
+}
+
+export async function getUserMessages(userId: string, limit = 50) {
+  const query = `
+    SELECT 
+      m.*,
+      sender.first_name as sender_first_name,
+      sender.last_name as sender_last_name,
+      sender.email as sender_email,
+      sender.role as sender_role,
+      recipient.first_name as recipient_first_name,
+      recipient.last_name as recipient_last_name,
+      recipient.email as recipient_email,
+      recipient.role as recipient_role,
+      e.name as event_name
+    FROM messages m
+    JOIN users sender ON m.sender_id = sender.id
+    JOIN users recipient ON m.recipient_id = recipient.id
+    LEFT JOIN events e ON m.event_id = e.id
+    WHERE m.sender_id = $1 OR m.recipient_id = $1
+    ORDER BY m.created_at DESC
+    LIMIT $2
+  `
+  
+  const result = await pool.query(query, [userId, limit])
+  return result.rows
+}
+
+export async function getMessageThread(messageId: string, userId: string) {
+  const query = `
+    WITH RECURSIVE message_thread AS (
+      -- Base case: get the root message or the specified message
+      SELECT 
+        m.*,
+        sender.first_name as sender_first_name,
+        sender.last_name as sender_last_name,
+        sender.email as sender_email,
+        sender.role as sender_role,
+        recipient.first_name as recipient_first_name,
+        recipient.last_name as recipient_last_name,
+        recipient.email as recipient_email,
+        recipient.role as recipient_role,
+        e.name as event_name,
+        0 as depth
+      FROM messages m
+      JOIN users sender ON m.sender_id = sender.id
+      JOIN users recipient ON m.recipient_id = recipient.id
+      LEFT JOIN events e ON m.event_id = e.id
+      WHERE m.id = $1
+        AND (m.sender_id = $2 OR m.recipient_id = $2)
+      
+      UNION ALL
+      
+      -- Recursive case: get all replies
+      SELECT 
+        m.*,
+        sender.first_name as sender_first_name,
+        sender.last_name as sender_last_name,
+        sender.email as sender_email,
+        sender.role as sender_role,
+        recipient.first_name as recipient_first_name,
+        recipient.last_name as recipient_last_name,
+        recipient.email as recipient_email,
+        recipient.role as recipient_role,
+        e.name as event_name,
+        mt.depth + 1
+      FROM messages m
+      JOIN users sender ON m.sender_id = sender.id
+      JOIN users recipient ON m.recipient_id = recipient.id
+      LEFT JOIN events e ON m.event_id = e.id
+      JOIN message_thread mt ON m.parent_message_id = mt.id
+      WHERE (m.sender_id = $2 OR m.recipient_id = $2)
+    )
+    SELECT * FROM message_thread
+    ORDER BY created_at ASC
+  `
+  
+  const result = await pool.query(query, [messageId, userId])
+  return result.rows
+}
+
+export async function markMessageAsRead(messageId: string, userId: string) {
+  const query = `
+    UPDATE messages 
+    SET read_at = CURRENT_TIMESTAMP
+    WHERE id = $1 AND recipient_id = $2
+    RETURNING *
+  `
+  
+  const result = await pool.query(query, [messageId, userId])
+  return result.rows[0]
+}
+
+export async function getUnreadMessageCount(userId: string) {
+  const query = `
+    SELECT COUNT(*) as count FROM messages
+    WHERE recipient_id = $1 AND read_at IS NULL
+  `
+  
+  const result = await pool.query(query, [userId])
+  return parseInt(result.rows[0].count)
+}
+
 // Export the pool for direct queries if needed
 export { pool }
 export default pool
