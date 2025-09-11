@@ -322,51 +322,51 @@ export default function AdminEventDetailPage() {
                     <p className="text-gray-900">{event.license_details}</p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
 
-            {/* Overview Comments */}
-            {sectionComments['overview'] && (
-              <div className="mt-6">
-                <Label className="text-sm font-medium text-gray-600">Comments</Label>
-                <div className="bg-yellow-50 p-3 rounded-md text-sm">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <p className="text-gray-800">{sectionComments['overview']}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        by System Administrator • {new Date().toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="flex space-x-1 ml-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleAddComment('overview')}
-                        className="h-6 px-2 text-xs"
-                      >
-                        <Edit className="w-3 h-3" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setSectionComments(prev => {
-                            const newComments = { ...prev }
-                            delete newComments['overview']
-                            const hasComments = Object.values(newComments).some(comment => comment.trim() !== '')
-                            setShowSubmitComments(hasComments)
-                            return newComments
-                          })
-                        }}
-                        className="h-6 px-2 text-xs text-red-600 hover:bg-red-50"
-                      >
-                        <XCircle className="w-3 h-3" />
-                      </Button>
+                {/* Overview Comments */}
+                {sectionComments['overview'] && (
+                  <div className="mt-6">
+                    <Label className="text-sm font-medium text-gray-600">Comments</Label>
+                    <div className="bg-yellow-50 p-3 rounded-md text-sm">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <p className="text-gray-800">{sectionComments['overview']}</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            by System Administrator • {new Date().toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="flex space-x-1 ml-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleAddComment('overview')}
+                            className="h-6 px-2 text-xs"
+                          >
+                            <Edit className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSectionComments(prev => {
+                                const newComments = { ...prev }
+                                delete newComments['overview']
+                                const hasComments = Object.values(newComments).some(comment => comment.trim() !== '')
+                                setShowSubmitComments(hasComments)
+                                return newComments
+                              })
+                            }}
+                            className="h-6 px-2 text-xs text-red-600 hover:bg-red-50"
+                          >
+                            <XCircle className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            )}
+                )}
+              </CardContent>
+            </Card>
 
             <Card>
               <CardHeader>
