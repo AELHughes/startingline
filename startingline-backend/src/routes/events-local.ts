@@ -981,4 +981,133 @@ router.put('/admin/:id/status', authenticateToken, async (req: Request, res: Res
   }
 })
 
+// Admin statistics endpoint
+router.get('/admin/stats', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userRole = req.localUser!.role
+    
+    if (userRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only administrators can access this endpoint'
+      } as ApiResponse)
+    }
+    
+    // Get event stats
+    const eventStatsQuery = `
+      SELECT 
+        COUNT(*) as total_events,
+        COUNT(CASE WHEN status = 'published' THEN 1 END) as active_events,
+        COUNT(CASE WHEN status = 'pending_approval' THEN 1 END) as pending_events,
+        COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft_events,
+        COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_events
+      FROM events
+    `
+    
+    // Get organiser stats
+    const organiserStatsQuery = `
+      SELECT COUNT(*) as total_organisers
+      FROM users
+      WHERE role = 'organiser'
+    `
+    
+    const [eventStats, organiserStats] = await Promise.all([
+      pool.query(eventStatsQuery),
+      pool.query(organiserStatsQuery)
+    ])
+    
+    const stats = {
+      totalEvents: parseInt(eventStats.rows[0].total_events),
+      activeEvents: parseInt(eventStats.rows[0].active_events),
+      pendingEvents: parseInt(eventStats.rows[0].pending_events),
+      draftEvents: parseInt(eventStats.rows[0].draft_events),
+      cancelledEvents: parseInt(eventStats.rows[0].cancelled_events),
+      totalOrganisers: parseInt(organiserStats.rows[0].total_organisers)
+    }
+    
+    console.log('✅ Admin stats retrieved:', stats)
+    
+    res.json({
+      success: true,
+      data: stats,
+      message: 'Admin statistics retrieved successfully'
+    } as ApiResponse)
+    
+  } catch (error: any) {
+    console.error('❌ Admin get stats error:', error.message)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch admin statistics'
+    } as ApiResponse)
+  }
+})
+
+// Admin recent events endpoint
+router.get('/admin/recent', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userRole = req.localUser!.role
+    
+    if (userRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only administrators can access this endpoint'
+      } as ApiResponse)
+    }
+    
+    const limit = parseInt(req.query.limit as string) || 5
+    
+    const query = `
+      SELECT 
+        e.id,
+        e.name,
+        e.status,
+        e.created_at,
+        e.updated_at,
+        u.first_name as organiser_first_name,
+        u.last_name as organiser_last_name,
+        u.email as organiser_email
+      FROM events e
+      JOIN users u ON e.organiser_id = u.id
+      ORDER BY e.updated_at DESC
+      LIMIT $1
+    `
+    
+    const result = await pool.query(query, [limit])
+    
+    // Format the results with relative time
+    const recentEvents = result.rows.map(event => ({
+      ...event,
+      organiser_name: `${event.organiser_first_name} ${event.organiser_last_name}`,
+      time_ago: getTimeAgo(event.updated_at)
+    }))
+    
+    console.log('✅ Admin recent events retrieved:', recentEvents.length)
+    
+    res.json({
+      success: true,
+      data: recentEvents,
+      message: 'Recent events retrieved successfully'
+    } as ApiResponse)
+    
+  } catch (error: any) {
+    console.error('❌ Admin get recent events error:', error.message)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch recent events'
+    } as ApiResponse)
+  }
+})
+
+// Helper function to get relative time
+function getTimeAgo(date: Date): string {
+  const now = new Date()
+  const diffInSeconds = Math.floor((now.getTime() - new Date(date).getTime()) / 1000)
+  
+  if (diffInSeconds < 60) return 'Just now'
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`
+  if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} days ago`
+  return `${Math.floor(diffInSeconds / 2592000)} months ago`
+}
+
 export default router

@@ -444,6 +444,42 @@ export const userApi = {
       console.error('❌ Admin update event status error:', error)
       throw error
     }
+  },
+
+  // Admin: Get statistics
+  getAdminStats: async (): Promise<any> => {
+    try {
+      console.log('🔍 Admin fetching statistics')
+      
+      const response = await fetch(`${API_BASE}/api/events/admin/stats`, {
+        headers: getAuthHeaders()
+      })
+
+      const stats = await handleApiResponse<any>(response)
+      console.log('✅ Admin retrieved statistics:', stats)
+      return stats
+    } catch (error) {
+      console.error('❌ Admin get stats error:', error)
+      throw error
+    }
+  },
+
+  // Admin: Get recent events
+  getRecentEventsAdmin: async (limit = 5): Promise<any[]> => {
+    try {
+      console.log('🔍 Admin fetching recent events')
+      
+      const response = await fetch(`${API_BASE}/api/events/admin/recent?limit=${limit}`, {
+        headers: getAuthHeaders()
+      })
+
+      const events = await handleApiResponse<any[]>(response)
+      console.log('✅ Admin retrieved recent events:', events.length)
+      return events
+    } catch (error) {
+      console.error('❌ Admin get recent events error:', error)
+      throw error
+    }
   }
 }
 

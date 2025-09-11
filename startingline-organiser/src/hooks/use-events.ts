@@ -125,11 +125,31 @@ export const useUpdateEventStatusAdmin = () => {
     onSuccess: (_, { eventId }) => {
       // Invalidate admin events and specific event
       queryClient.invalidateQueries({ queryKey: ['admin-events'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-recent-events'] })
       queryClient.invalidateQueries({ queryKey: ['event', eventId] })
       queryClient.invalidateQueries({ queryKey: ['events'] })
     },
     onError: (error) => {
       console.error('❌ Failed to update event status:', error)
     }
+  })
+}
+
+// Admin: Get statistics
+export const useAdminStats = () => {
+  return useQuery({
+    queryKey: ['admin-stats'],
+    queryFn: eventsApi.getAdminStats,
+    staleTime: 1 * 60 * 1000, // 1 minute
+  })
+}
+
+// Admin: Get recent events
+export const useRecentEventsAdmin = (limit = 5) => {
+  return useQuery({
+    queryKey: ['admin-recent-events', limit],
+    queryFn: () => eventsApi.getRecentEventsAdmin(limit),
+    staleTime: 1 * 60 * 1000, // 1 minute
   })
 }

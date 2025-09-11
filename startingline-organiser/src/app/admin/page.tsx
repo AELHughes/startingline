@@ -1,9 +1,9 @@
 'use client'
 
 import React from 'react'
-import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
+import { useAdminStats, useRecentEventsAdmin } from '@/hooks/use-events'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,55 +18,20 @@ import {
   CheckCircle,
   Clock,
   XCircle,
-  LogOut,
   Settings
 } from 'lucide-react'
 
 export default function AdminDashboard() {
-  const { user, isLoading, logout } = useAuth()
+  const { user } = useAuth()
   const router = useRouter()
+  const { data: stats, isLoading: statsLoading } = useAdminStats()
+  const { data: recentEvents = [], isLoading: recentEventsLoading } = useRecentEventsAdmin(3)
 
-  const handleLogout = async () => {
-    try {
-      await logout()
-      router.push('/admin/login')
-    } catch (error) {
-      console.error('Logout failed:', error)
-    }
-  }
-
-  useEffect(() => {
-    if (!isLoading) {
-      if (!user) {
-        router.push('/admin/login')
-      } else if (user.role !== 'admin' && user.role !== 'super_admin') {
-        // Redirect non-admin users to their appropriate dashboard
-        if (user.role === 'organiser') {
-          router.push('/dashboard')
-        } else {
-          router.push('/login')
-        }
-      }
-    }
-  }, [user, isLoading, router])
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
-  if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
-    return null
-  }
-
-  // Mock data for dashboard stats
-  const stats = [
+  // Dashboard stats from real data
+  const statsCards = [
     {
       title: 'Total Events',
-      value: '42',
+      value: statsLoading ? '...' : (stats?.totalEvents || 0).toString(),
       description: 'All events in system',
       icon: Calendar,
       color: 'text-blue-600',
@@ -74,7 +39,7 @@ export default function AdminDashboard() {
     },
     {
       title: 'Active Events',
-      value: '28',
+      value: statsLoading ? '...' : (stats?.activeEvents || 0).toString(),
       description: 'Published events',
       icon: TrendingUp,
       color: 'text-green-600',
@@ -82,7 +47,7 @@ export default function AdminDashboard() {
     },
     {
       title: 'Pending Approval',
-      value: '8',
+      value: statsLoading ? '...' : (stats?.pendingEvents || 0).toString(),
       description: 'Events awaiting review',
       icon: Clock,
       color: 'text-yellow-600',
@@ -90,7 +55,7 @@ export default function AdminDashboard() {
     },
     {
       title: 'Total Organisers',
-      value: '156',
+      value: statsLoading ? '...' : (stats?.totalOrganisers || 0).toString(),
       description: 'Registered organisers',
       icon: Users,
       color: 'text-purple-600',
@@ -98,29 +63,6 @@ export default function AdminDashboard() {
     }
   ]
 
-  const recentEvents = [
-    {
-      id: '1',
-      name: 'Cape Town Cycle Tour 2024',
-      organiser: 'Cycle Tour Trust',
-      status: 'pending_approval',
-      submittedAt: '2 hours ago'
-    },
-    {
-      id: '2', 
-      name: 'Comrades Marathon',
-      organiser: 'Comrades Marathon Association',
-      status: 'published',
-      submittedAt: '1 day ago'
-    },
-    {
-      id: '3',
-      name: 'Two Oceans Marathon',
-      organiser: 'Two Oceans Marathon',
-      status: 'published', 
-      submittedAt: '2 days ago'
-    }
-  ]
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -153,47 +95,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">A</span>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Admin Portal</h1>
-                <p className="text-sm text-gray-500">Starting Line Administration</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">
-                  {user.first_name} {user.last_name}
-                </p>
-                <p className="text-xs text-gray-500">Administrator</p>
-              </div>
-              <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">
-                  {user.first_name?.charAt(0)?.toUpperCase() || 'A'}
-                </span>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleLogout}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
@@ -206,7 +108,7 @@ export default function AdminDashboard() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat, index) => {
+          {statsCards.map((stat, index) => {
             const Icon = stat.icon
             return (
               <Card key={index}>
@@ -238,32 +140,55 @@ export default function AdminDashboard() {
               <CardDescription>Latest event submissions and updates</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {recentEvents.map((event) => (
-                  <div key={event.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">{event.name}</h4>
-                      <p className="text-sm text-gray-600">by {event.organiser}</p>
-                      <p className="text-xs text-gray-500">{event.submittedAt}</p>
+              {recentEventsLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center justify-between p-4 border rounded-lg animate-pulse">
+                      <div className="flex-1">
+                        <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                        <div className="h-3 bg-gray-200 rounded w-1/2 mb-1"></div>
+                        <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="h-6 bg-gray-200 rounded w-20"></div>
+                        <div className="h-8 w-8 bg-gray-200 rounded"></div>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge className={getStatusColor(event.status)}>
-                        <div className="flex items-center space-x-1">
-                          {getStatusIcon(event.status)}
-                          <span>{event.status.replace('_', ' ')}</span>
-                        </div>
-                      </Badge>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => router.push(`/admin/events/${event.id}`)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                  ))}
+                </div>
+              ) : recentEvents.length > 0 ? (
+                <div className="space-y-4">
+                  {recentEvents.map((event) => (
+                    <div key={event.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex-1">
+                        <h4 className="font-medium text-gray-900">{event.name}</h4>
+                        <p className="text-sm text-gray-600">by {event.organiser_name}</p>
+                        <p className="text-xs text-gray-500">{event.time_ago}</p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Badge className={getStatusColor(event.status)}>
+                          <div className="flex items-center space-x-1">
+                            {getStatusIcon(event.status)}
+                            <span>{event.status.replace('_', ' ')}</span>
+                          </div>
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => router.push(`/admin/events/${event.id}`)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No recent events found</p>
+                </div>
+              )}
               <div className="mt-4 pt-4 border-t">
                 <Button 
                   variant="outline" 
@@ -292,7 +217,9 @@ export default function AdminDashboard() {
                   <AlertCircle className="h-5 w-5 mr-3 text-yellow-600" />
                   <div className="text-left">
                     <div className="font-medium">Review Pending Events</div>
-                    <div className="text-sm text-gray-500">8 events awaiting approval</div>
+                    <div className="text-sm text-gray-500">
+                      {statsLoading ? 'Loading...' : `${stats?.pendingEvents || 0} events awaiting approval`}
+                    </div>
                   </div>
                 </Button>
 
@@ -348,6 +275,5 @@ export default function AdminDashboard() {
           </Card>
         </div>
       </div>
-    </div>
   )
 }

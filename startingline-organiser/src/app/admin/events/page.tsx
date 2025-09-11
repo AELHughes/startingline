@@ -39,18 +39,8 @@ import { Label } from '@/components/ui/label'
 export default function AdminEventsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { user, isLoading, logout } = useAuth()
   const { data: events = [], isLoading: eventsLoading } = useAllEventsAdmin()
   const updateEventStatusMutation = useUpdateEventStatusAdmin()
-
-  const handleLogout = async () => {
-    try {
-      await logout()
-      router.push('/admin/login')
-    } catch (error) {
-      console.error('Logout failed:', error)
-    }
-  }
 
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
@@ -59,33 +49,6 @@ export default function AdminEventsPage() {
   const [adminAction, setAdminAction] = useState<'approve' | 'reject' | 'request_info'>('approve')
   const [adminNote, setAdminNote] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
-
-  // Auth protection
-  useEffect(() => {
-    if (!isLoading) {
-      if (!user) {
-        router.push('/admin/login')
-      } else if (user.role !== 'admin' && user.role !== 'super_admin') {
-        if (user.role === 'organiser') {
-          router.push('/dashboard')
-        } else {
-          router.push('/login')
-        }
-      }
-    }
-  }, [user, isLoading, router])
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-red-600"></div>
-      </div>
-    )
-  }
-
-  if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
-    return null
-  }
 
   const handleAdminAction = (event: any, action: 'approve' | 'reject' | 'request_info') => {
     setSelectedEvent(event)
@@ -204,81 +167,45 @@ export default function AdminEventsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                onClick={() => router.push('/admin')}
-                className="flex items-center space-x-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span>Back to Dashboard</span>
-              </Button>
-              <div className="h-6 border-l border-gray-300"></div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Event Management</h1>
-                <p className="text-sm text-gray-500">Manage all platform events</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Badge variant="secondary">
-                {filteredEvents.length} events
-              </Badge>
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">
-                  {user?.first_name} {user?.last_name}
-                </p>
-                <p className="text-xs text-gray-500">Administrator</p>
-              </div>
-              <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">
-                  {user?.first_name?.charAt(0)?.toUpperCase() || 'A'}
-                </span>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleLogout}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </Button>
-            </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Page Header */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Event Management</h1>
+            <p className="text-gray-600">Manage all platform events</p>
           </div>
+          <Badge variant="secondary">
+            {filteredEvents.length} events
+          </Badge>
         </div>
-      </header>
+      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Filters */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Filter className="h-5 w-5 mr-2" />
-              Filter Events
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col md:flex-row gap-4">
-              {/* Search */}
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    placeholder="Search events, organisers, or locations..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
+      {/* Filters */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Filter className="h-5 w-5 mr-2" />
+            Filter Events
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col md:flex-row gap-4">
+            {/* Search */}
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  placeholder="Search events, organisers, or locations..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
               </div>
+            </div>
 
-              {/* Status Filter */}
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+            {/* Status Filter */}
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full md:w-48">
                   <SelectValue placeholder="Filter by status" />
                 </SelectTrigger>
@@ -420,6 +347,38 @@ export default function AdminEventsPage() {
                         </>
                       )}
 
+                      {/* Admin Actions */}
+                      {event.status === 'pending_approval' && (
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleAdminAction(event, 'approve')}
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleAdminAction(event, 'request_info')}
+                            className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                          >
+                            <MessageSquare className="h-4 w-4 mr-1" />
+                            Request Info
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleAdminAction(event, 'reject')}
+                            className="border-red-300 text-red-700 hover:bg-red-50"
+                          >
+                            <XCircle className="h-4 w-4 mr-1" />
+                            Reject
+                          </Button>
+                        </div>
+                      )}
+
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button size="sm" variant="ghost">
@@ -439,10 +398,14 @@ export default function AdminEventsPage() {
                             <Eye className="h-4 w-4 mr-2" />
                             View Public Page
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit Event
-                          </DropdownMenuItem>
+                          {event.status === 'published' && (
+                            <DropdownMenuItem
+                              onClick={() => handleAdminAction(event, 'reject')}
+                            >
+                              <XCircle className="h-4 w-4 mr-2" />
+                              Unpublish Event
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -453,6 +416,86 @@ export default function AdminEventsPage() {
           </div>
         )}
       </div>
+
+      {/* Admin Action Modal */}
+      <Dialog open={showAdminModal} onOpenChange={setShowAdminModal}>
+        <DialogContent className="sm:max-w-[525px]">
+          <DialogHeader>
+            <DialogTitle>{getActionTitle()}</DialogTitle>
+            <DialogDescription>
+              {selectedEvent && (
+                <span>
+                  Event: <strong>{selectedEvent.name}</strong> by {selectedEvent.organiser_first_name} {selectedEvent.organiser_last_name}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800">
+                {getActionDescription()}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="admin-note">
+                {adminAction === 'approve' ? 'Approval Note (Optional)' : 
+                 adminAction === 'reject' ? 'Rejection Reason (Required)' : 
+                 'Information Request (Required)'}
+              </Label>
+              <Textarea
+                id="admin-note"
+                placeholder={
+                  adminAction === 'approve' ? 'Add any notes for the organiser...' :
+                  adminAction === 'reject' ? 'Please explain why this event was rejected...' :
+                  'Please describe what additional information or changes are needed...'
+                }
+                value={adminNote}
+                onChange={(e) => setAdminNote(e.target.value)}
+                rows={4}
+                className="resize-none"
+              />
+              {adminAction !== 'approve' && (
+                <p className="text-xs text-gray-500">
+                  This message will be sent to the organiser as both a notification and a direct message.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowAdminModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSubmitAdminAction}
+              disabled={updateEventStatusMutation.isPending || (adminAction !== 'approve' && !adminNote.trim())}
+              className={
+                adminAction === 'approve' ? 'bg-green-600 hover:bg-green-700' :
+                adminAction === 'reject' ? 'bg-red-600 hover:bg-red-700' :
+                'bg-orange-600 hover:bg-orange-700'
+              }
+            >
+              {updateEventStatusMutation.isPending ? (
+                'Processing...'
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  {adminAction === 'approve' ? 'Approve & Publish' :
+                   adminAction === 'reject' ? 'Reject Event' :
+                   'Send Request'}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
