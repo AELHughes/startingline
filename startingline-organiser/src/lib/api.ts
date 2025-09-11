@@ -364,6 +364,24 @@ export const eventsApi = {
       console.error('❌ Delete event error:', error)
       throw error
     }
+  },
+
+  // Get event audit trail
+  getEventAuditTrail: async (eventId: string): Promise<any[]> => {
+    try {
+      console.log('🔍 Fetching audit trail for event:', eventId)
+      
+      const response = await fetch(`${API_BASE}/api/events/${eventId}/audit-trail`, {
+        headers: getAuthHeaders()
+      })
+
+      const auditTrail = await handleApiResponse<any[]>(response)
+      console.log('✅ Retrieved audit trail with', auditTrail.length, 'entries')
+      return auditTrail
+    } catch (error) {
+      console.error('❌ Get audit trail error:', error)
+      throw error
+    }
   }
 }
 

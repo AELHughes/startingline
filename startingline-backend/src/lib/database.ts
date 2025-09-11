@@ -379,6 +379,43 @@ export async function getTableCounts(): Promise<Record<string, number>> {
   }
 }
 
+// Audit Trail Functions
+export async function createAuditTrailEntry(
+  eventId: string,
+  actionType: string,
+  performedBy: string,
+  performedByRole: 'organiser' | 'admin',
+  message?: string,
+  metadata?: any
+) {
+  const query = `
+    INSERT INTO event_audit_trail (event_id, action_type, performed_by, performed_by_role, message, metadata)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    RETURNING *
+  `
+  const values = [eventId, actionType, performedBy, performedByRole, message, metadata ? JSON.stringify(metadata) : null]
+  
+  const result = await pool.query(query, values)
+  return result.rows[0]
+}
+
+export async function getEventAuditTrail(eventId: string) {
+  const query = `
+    SELECT 
+      eat.*,
+      u.first_name,
+      u.last_name,
+      u.email
+    FROM event_audit_trail eat
+    JOIN users u ON eat.performed_by = u.id
+    WHERE eat.event_id = $1
+    ORDER BY eat.created_at ASC
+  `
+  
+  const result = await pool.query(query, [eventId])
+  return result.rows
+}
+
 // Export the pool for direct queries if needed
 export { pool }
 export default pool

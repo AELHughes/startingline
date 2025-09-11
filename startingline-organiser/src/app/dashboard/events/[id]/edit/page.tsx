@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, Save, Send, AlertCircle, CheckCircle, Edit } from 'lucide-react'
 import EventCreateForm from '@/components/events/event-create-form'
 import ChangeRequestModal from '@/components/events/change-request-modal'
+import EventAuditTrail from '@/components/events/event-audit-trail'
 
 interface Event {
   id: string
@@ -104,26 +105,26 @@ export default function EventEditPage() {
     if (!event) return
 
     try {
-      // TODO: Implement change request API
-      // For now, we'll just log it and show success
-      console.log('📝 Change request submitted:', {
-        eventId: event.id,
-        eventName: event.name,
-        request: changeRequest,
-        timestamp: new Date().toISOString()
+      // Create audit trail entry for change request
+      await fetch(`http://localhost:5001/api/events/${event.id}/audit-trail`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          action_type: 'change_requested',
+          message: `Change request: ${changeRequest}`
+        })
       })
-      
-      // TODO: Send to backend API
-      // await changeRequestApi.create({
-      //   eventId: event.id,
-      //   message: changeRequest,
-      //   status: 'pending'
-      // })
       
       console.log('✅ Change request sent to admin')
       
       // Show success message
       alert('Your change request has been sent to the administrators. They will review and respond shortly.')
+      
+      // Refresh the page to show the new audit trail entry
+      window.location.reload()
       
     } catch (error: any) {
       console.error('❌ Failed to submit change request:', error)
@@ -274,6 +275,9 @@ export default function EventEditPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Event Audit Trail */}
+        <EventAuditTrail eventId={event.id} className="mb-6" />
 
         {/* Event Edit Form or Change Request */}
         {event.status === 'draft' ? (

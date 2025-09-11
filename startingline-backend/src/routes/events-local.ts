@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express'
-import { pool } from '../lib/database'
+import { pool, createAuditTrailEntry, getEventAuditTrail } from '../lib/database'
 import { authenticateToken, requireOrganiser, requireOrganiserOrAdmin, optionalAuth } from '../middleware/auth-local'
 import type { ApiResponse, Event, CreateEventData } from '../types'
 
@@ -407,6 +407,15 @@ router.post('/', authenticateToken, requireOrganiser, async (req: Request, res: 
       }
     }
     
+    // Create audit trail entry for event creation
+    await createAuditTrailEntry(
+      newEvent.id,
+      'created',
+      organiserId,
+      'organiser',
+      'Event created as draft'
+    )
+    
     await client.query('COMMIT')
     
     console.log('✅ Created event:', newEvent.name, 'with ID:', newEvent.id)
@@ -441,26 +450,27 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
     
     console.log('🔍 Updating event:', id, 'by user:', userId)
     
+    // Get original event for ownership check and audit trail
+    const originalEventResult = await pool.query(
+      'SELECT organiser_id, status FROM events WHERE id = $1',
+      [id]
+    )
+    
+    if (originalEventResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found'
+      } as ApiResponse)
+    }
+    
+    const originalEvent = originalEventResult.rows[0]
+    
     // Check ownership (unless admin)
-    if (userRole !== 'admin') {
-      const ownerCheck = await pool.query(
-        'SELECT organiser_id FROM events WHERE id = $1',
-        [id]
-      )
-      
-      if (ownerCheck.rows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: 'Event not found'
-        } as ApiResponse)
-      }
-      
-      if (ownerCheck.rows[0].organiser_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: 'You can only update your own events'
-        } as ApiResponse)
-      }
+    if (userRole !== 'admin' && originalEvent.organiser_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: 'You can only update your own events'
+      } as ApiResponse)
     }
     
     // Build dynamic update query
@@ -508,11 +518,40 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
       } as ApiResponse)
     }
     
-    console.log('✅ Updated event:', result.rows[0].name)
+    const updatedEvent = result.rows[0]
+    
+    // Create audit trail entries for significant changes
+    if (updates.status && updates.status !== originalEvent.status) {
+      let actionType = ''
+      let message = ''
+      
+      if (updates.status === 'pending_approval') {
+        actionType = 'submitted_for_approval'
+        message = 'Event submitted for admin approval'
+      } else if (updates.status === 'published') {
+        actionType = 'published'
+        message = 'Event published and made live'
+      } else if (updates.status === 'cancelled') {
+        actionType = 'cancelled'
+        message = 'Event cancelled'
+      }
+      
+      if (actionType) {
+        await createAuditTrailEntry(
+          id,
+          actionType,
+          userId,
+          userRole === 'admin' ? 'admin' : 'organiser',
+          message
+        )
+      }
+    }
+    
+    console.log('✅ Updated event:', updatedEvent.name)
     
     res.json({
       success: true,
-      data: result.rows[0],
+      data: updatedEvent,
       message: 'Event updated successfully'
     } as ApiResponse<Event>)
     
@@ -624,6 +663,109 @@ router.get('/admin/all', authenticateToken, requireOrganiserOrAdmin, async (req:
     res.status(500).json({
       success: false,
       error: 'Failed to fetch events'
+    } as ApiResponse)
+  }
+})
+
+// ============================================
+// EVENT AUDIT TRAIL ROUTE
+// ============================================
+
+// Create audit trail entry (for change requests, etc.)
+router.post('/:id/audit-trail', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const { action_type, message, metadata } = req.body
+    const userId = req.localUser!.userId
+    const userRole = req.localUser!.role
+    
+    // Check if user can create audit trail entries for this event
+    if (userRole !== 'admin') {
+      const ownerCheck = await pool.query(
+        'SELECT organiser_id FROM events WHERE id = $1',
+        [id]
+      )
+      
+      if (ownerCheck.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Event not found'
+        } as ApiResponse)
+      }
+      
+      if (ownerCheck.rows[0].organiser_id !== userId) {
+        return res.status(403).json({
+          success: false,
+          error: 'You can only create audit entries for your own events'
+        } as ApiResponse)
+      }
+    }
+    
+    const entry = await createAuditTrailEntry(
+      id,
+      action_type,
+      userId,
+      userRole === 'admin' ? 'admin' : 'organiser',
+      message,
+      metadata
+    )
+    
+    res.status(201).json({
+      success: true,
+      data: entry,
+      message: 'Audit trail entry created successfully'
+    } as ApiResponse)
+    
+  } catch (error: any) {
+    console.error('❌ Create audit trail entry error:', error.message)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create audit trail entry'
+    } as ApiResponse)
+  }
+})
+
+router.get('/:id/audit-trail', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const userId = req.localUser!.userId
+    const userRole = req.localUser!.role
+    
+    // Check if user can access this event's audit trail
+    if (userRole !== 'admin') {
+      const ownerCheck = await pool.query(
+        'SELECT organiser_id FROM events WHERE id = $1',
+        [id]
+      )
+      
+      if (ownerCheck.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Event not found'
+        } as ApiResponse)
+      }
+      
+      if (ownerCheck.rows[0].organiser_id !== userId) {
+        return res.status(403).json({
+          success: false,
+          error: 'You can only view audit trail for your own events'
+        } as ApiResponse)
+      }
+    }
+    
+    const auditTrail = await getEventAuditTrail(id)
+    
+    res.json({
+      success: true,
+      data: auditTrail,
+      message: 'Audit trail retrieved successfully'
+    } as ApiResponse)
+    
+  } catch (error: any) {
+    console.error('❌ Get audit trail error:', error.message)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve audit trail'
     } as ApiResponse)
   }
 })
