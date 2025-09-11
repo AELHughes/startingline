@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { authApi } from '@/lib/supabase-api'
+import { authApi } from '@/lib/api'
 import { useAuth } from '@/contexts/auth-context'
 
 // Login mutation

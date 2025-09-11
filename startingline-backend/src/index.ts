@@ -4,10 +4,10 @@ import morgan from 'morgan'
 import dotenv from 'dotenv'
 
 // Import routes
-import authRoutes from './routes/auth'
-import eventsRoutes from './routes/events'
-import usersRoutes from './routes/users'
-import storageRoutes from './routes/storage'
+import authRoutes from './routes/auth-local' // Using local PostgreSQL auth
+import eventsRoutes from './routes/events-local' // Using local PostgreSQL events
+import storageRoutes from './routes/storage-local' // Using local file storage
+// import usersRoutes from './routes/users'
 import debugRoutes from './routes/debug'
 import ticketsRoutes from './routes/tickets'
 import articlesRoutes from './routes/articles'
@@ -18,6 +18,9 @@ import { notFound } from './middleware/notFound'
 
 // Load environment variables
 dotenv.config()
+
+// Test database connection on startup
+import { testConnection } from './lib/database'
 
 const app = express()
 const PORT = process.env.PORT || 5001
@@ -44,8 +47,8 @@ app.get('/health', (req, res) => {
 // Routes
 app.use('/api/auth', authRoutes)
 app.use('/api/events', eventsRoutes)
-app.use('/api/users', usersRoutes)
 app.use('/api/storage', storageRoutes)
+// app.use('/api/users', usersRoutes)
 app.use('/api/debug', debugRoutes)
 app.use('/api/tickets', ticketsRoutes)
 app.use('/api/articles', articlesRoutes)
@@ -55,18 +58,28 @@ app.use(notFound)
 app.use(errorHandler)
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`
 🚀 Starting Line API Server is running!
    
    Port: ${PORT}
    Environment: ${process.env.NODE_ENV || 'development'}
+   Database: Local PostgreSQL
    
    📊 Health Check: http://localhost:${PORT}/health
    🔧 API Endpoints: http://localhost:${PORT}/api
+   🔐 Auth: http://localhost:${PORT}/api/auth
    
    Ready to handle events! 🏁
   `)
+  
+  // Test database connection
+  const dbConnected = await testConnection()
+  if (dbConnected) {
+    console.log('✅ Database connection verified')
+  } else {
+    console.log('❌ Database connection failed - check your PostgreSQL setup')
+  }
 })
 
 export default app

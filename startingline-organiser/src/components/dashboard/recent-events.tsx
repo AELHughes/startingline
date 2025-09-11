@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Calendar, MapPin, Users, Eye } from 'lucide-react'
-import type { Event } from '@/lib/supabase-api'
+import type { Event } from '@/lib/api'
 
 interface RecentEventsProps {
   events: Event[]

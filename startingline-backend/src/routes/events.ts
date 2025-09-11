@@ -1,9 +1,571 @@
 import express, { Request, Response } from 'express'
 import { SupabaseService } from '../services/supabaseService'
-import { authenticateToken } from '../middleware/auth'
+import { authenticateToken as authTokenOld } from '../middleware/auth'
+import { authenticateToken, requireOrganiser, requireOrganiserOrAdmin, optionalAuth } from '../middleware/auth-local'
 import { supabaseAdmin } from '../lib/supabase'
+import { pool } from '../lib/database'
 
 const router = express.Router()
+
+// Debug route to check foreign key constraint and compare auth users
+router.get('/debug-constraint', async (req: Request, res: Response) => {
+  const { email } = req.query;
+
+  try {
+    // Check what Edward's events look like
+    const { data: edwardEvents, error: edwardError } = await supabaseAdmin
+      .from('events')
+      .select('organiser_id, organiser_name')
+      .limit(5)
+
+    // Check Sam's user record
+    const { data: samUser, error: samError } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .eq('email', 'sam@greatevents.com')
+      .single()
+
+    // Check Edward's user record
+    const { data: edwardUser, error: edwardError2 } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .eq('auth_user_id', '97aa0354-7991-464a-84b7-132a35e66230')
+      .single()
+
+    // Check Albert's user record if email provided
+    let albertUser = null
+    let albertAuthDetails = null
+    if (email) {
+      const { data: albertUserData, error: albertError } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .ilike('first_name', `%${email}%`)
+        .or(`email.ilike.%${email}%`)
+        .limit(1)
+        .single()
+
+      albertUser = albertUserData
+
+      if (albertUserData?.auth_user_id) {
+        try {
+          const { data: albertAuth } = await supabaseAdmin.auth.admin.getUserById(albertUserData.auth_user_id)
+          albertAuthDetails = albertAuth?.user ? {
+            id: albertAuth.user.id,
+            email: albertAuth.user.email,
+            created_at: albertAuth.user.created_at,
+            email_confirmed_at: albertAuth.user.email_confirmed_at,
+            last_sign_in_at: albertAuth.user.last_sign_in_at,
+            user_metadata: albertAuth.user.user_metadata,
+            app_metadata: albertAuth.user.app_metadata,
+            aud: albertAuth.user.aud,
+            role: albertAuth.user.role
+          } : null
+        } catch (e: any) {
+          albertAuthDetails = { error: e.message }
+        }
+      }
+    }
+
+    // Get detailed auth user info for both
+    let edwardAuthDetails = null
+    let samAuthDetails = null
+
+    try {
+      const { data: edwardAuth } = await supabaseAdmin.auth.admin.getUserById('97aa0354-7991-464a-84b7-132a35e66230')
+      edwardAuthDetails = edwardAuth?.user ? {
+        id: edwardAuth.user.id,
+        email: edwardAuth.user.email,
+        created_at: edwardAuth.user.created_at,
+        email_confirmed_at: edwardAuth.user.email_confirmed_at,
+        last_sign_in_at: edwardAuth.user.last_sign_in_at,
+        user_metadata: edwardAuth.user.user_metadata,
+        app_metadata: edwardAuth.user.app_metadata,
+        aud: edwardAuth.user.aud,
+        role: edwardAuth.user.role
+      } : null
+    } catch (e: any) {
+      edwardAuthDetails = { error: e.message }
+    }
+
+    try {
+      const { data: samAuth } = await supabaseAdmin.auth.admin.getUserById('79f0acb3-d8c3-481f-947b-3c093e17f1fc')
+      samAuthDetails = samAuth?.user ? {
+        id: samAuth.user.id,
+        email: samAuth.user.email,
+        created_at: samAuth.user.created_at,
+        email_confirmed_at: samAuth.user.email_confirmed_at,
+        last_sign_in_at: samAuth.user.last_sign_in_at,
+        user_metadata: samAuth.user.user_metadata,
+        app_metadata: samAuth.user.app_metadata,
+        aud: samAuth.user.aud,
+        role: samAuth.user.role
+      } : null
+    } catch (e: any) {
+      samAuthDetails = { error: e.message }
+    }
+
+    // Test 1: Try creating with Sam's auth_user_id
+    const testEventSam = {
+      name: 'Test Event Sam Auth',
+      category: 'trail-running',
+      organiser_id: '79f0acb3-d8c3-481f-947b-3c093e17f1fc',
+      organiser_name: 'Sam Test',
+      start_date: '2025-12-25',
+      start_time: '10:00',
+      address: 'Test Address',
+      city: 'Test City',
+      province: 'Test Province',
+      status: 'draft'
+    }
+
+    const { data: testCreateSam, error: testCreateSamError } = await supabaseAdmin
+      .from('events')
+      .insert(testEventSam)
+      .select()
+
+    // Test 2: Try creating with Sam's public.users.id
+    const testEventSamPublic = {
+      name: 'Test Event Sam Public',
+      category: 'trail-running',
+      organiser_id: 'bf62cb67-4a97-433f-b252-81c68a988d58',
+      organiser_name: 'Sam Test Public',
+      start_date: '2025-12-26',
+      start_time: '11:00',
+      address: 'Test Address 2',
+      city: 'Test City 2',
+      province: 'Test Province 2',
+      status: 'draft'
+    }
+
+    const { data: testCreateSamPublic, error: testCreateSamPublicError } = await supabaseAdmin
+      .from('events')
+      .insert(testEventSamPublic)
+      .select()
+
+    // Test 3: Try creating with Edward's organiser_id (should work)
+    const testEventEdward = {
+      name: 'Test Event Edward',
+      category: 'trail-running',
+      organiser_id: '97aa0354-7991-464a-84b7-132a35e66230',
+      organiser_name: 'Edward Test',
+      start_date: '2025-12-27',
+      start_time: '12:00',
+      address: 'Test Address 3',
+      city: 'Test City 3',
+      province: 'Test Province 3',
+      status: 'draft'
+    }
+
+    const { data: testCreateEdward, error: testCreateEdwardError } = await supabaseAdmin
+      .from('events')
+      .insert(testEventEdward)
+      .select()
+
+    return res.json({
+      sample_events: edwardEvents,
+      sam_user: samUser,
+      edward_user: edwardUser,
+      albert_user: albertUser,
+      albert_auth_details: albertAuthDetails,
+      auth_user_detailed_comparison: {
+        edward: edwardAuthDetails,
+        sam: samAuthDetails,
+        albert: albertAuthDetails,
+        differences: {
+          edward_id: edwardAuthDetails?.id,
+          sam_id: samAuthDetails?.id,
+          albert_id: albertAuthDetails?.id,
+          edward_email_confirmed: edwardAuthDetails?.email_confirmed_at ? true : false,
+          sam_email_confirmed: samAuthDetails?.email_confirmed_at ? true : false,
+          albert_email_confirmed: albertAuthDetails?.email_confirmed_at ? true : false,
+          edward_metadata: edwardAuthDetails?.user_metadata,
+          sam_metadata: samAuthDetails?.user_metadata,
+          albert_metadata: albertAuthDetails?.user_metadata,
+          edward_has_metadata: !!edwardAuthDetails?.user_metadata,
+          sam_has_metadata: !!samAuthDetails?.user_metadata,
+          albert_has_metadata: !!albertAuthDetails?.user_metadata
+        }
+      },
+      test_event_creation: {
+        sam_auth_user_id: {
+          success: !!testCreateSam,
+          data: testCreateSam,
+          error: testCreateSamError?.message
+        },
+        sam_public_user_id: {
+          success: !!testCreateSamPublic,
+          data: testCreateSamPublic,
+          error: testCreateSamPublicError?.message
+        },
+        edward_organiser_id: {
+          success: !!testCreateEdward,
+          data: testCreateEdward,
+          error: testCreateEdwardError?.message
+        }
+      },
+      comparison: {
+        edward_organiser_id: '97aa0354-7991-464a-84b7-132a35e66230',
+        sam_auth_user_id: '79f0acb3-d8c3-481f-947b-3c093e17f1fc',
+        sam_public_user_id: 'bf62cb67-4a97-433f-b252-81c68a988d58'
+      },
+      errors: {
+        events: edwardError?.message,
+        sam: samError?.message,
+        edward: edwardError2?.message
+      }
+    })
+  } catch (err) {
+    console.error('Debug constraint error:', err)
+    return res.json({ error: 'Failed to query constraint' })
+  }
+})
+
+// Simple debug endpoint to check Albert vs Edward
+router.get('/debug-albert', async (req: Request, res: Response) => {
+  try {
+    const albertAuthId = 'f1be0b02-1dd8-453b-ae91-1570d8a87059'
+    const edwardAuthId = '97aa0354-7991-464a-84b7-132a35e66230'
+
+    // Check both auth users exist
+    const { data: albertAuth } = await supabaseAdmin.auth.admin.getUserById(albertAuthId)
+    const { data: edwardAuth } = await supabaseAdmin.auth.admin.getUserById(edwardAuthId)
+
+    // Test direct event creation
+    const testEvent = {
+      name: 'Debug Test',
+      category: 'road-cycling',
+      start_date: '2025-09-20',
+      start_time: '06:00',
+      organiser_name: 'Debug User',
+      city: 'Test City',
+      province: 'Test Province',
+      license_required: false,
+      temp_license_fee: 0,
+      license_details: '',
+      primary_image_url: 'https://example.com/image.jpg'
+    }
+
+    let edwardSuccess = false
+    let albertSuccess = false
+    let edwardError = null
+    let albertError = null
+
+    // Test Edward
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('events')
+        .insert({ ...testEvent, organiser_id: edwardAuthId, name: 'Edward Debug Test' })
+        .select()
+        .single()
+      edwardSuccess = !!data
+      edwardError = error?.message
+    } catch (e: any) {
+      edwardError = e.message
+    }
+
+    // Test Albert
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('events')
+        .insert({ ...testEvent, organiser_id: albertAuthId, name: 'Albert Debug Test' })
+        .select()
+        .single()
+      albertSuccess = !!data
+      albertError = error?.message
+    } catch (e: any) {
+      albertError = e.message
+    }
+
+    return res.json({
+      albert: {
+        exists: !!albertAuth?.user,
+        metadata: albertAuth?.user?.user_metadata,
+        event_creation: { success: albertSuccess, error: albertError }
+      },
+      edward: {
+        exists: !!edwardAuth?.user,
+        metadata: edwardAuth?.user?.user_metadata,
+        event_creation: { success: edwardSuccess, error: edwardError }
+      }
+    })
+
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// Query database constraints and policies using direct SQL
+router.get('/debug-database', async (req: Request, res: Response) => {
+  try {
+    // Query for foreign key constraints
+    const { data: fkData, error: fkError } = await supabaseAdmin
+      .from('events')
+      .select('organiser_id')
+      .limit(1)
+
+    // Query for RLS policies
+    const { data: rlsData, error: rlsError } = await supabaseAdmin
+      .from('events')
+      .select('*')
+      .limit(1)
+
+    // Query for table info
+    const { data: tableData, error: tableError } = await supabaseAdmin
+      .from('events')
+      .select('*')
+      .limit(1)
+
+    // Check auth.users table for both users
+    const { data: edwardAuth, error: edwardAuthError } = await supabaseAdmin
+      .from('auth.users')
+      .select('*')
+      .eq('id', '97aa0354-7991-464a-84b7-132a35e66230')
+      .single()
+
+    const { data: albertAuth, error: albertAuthError } = await supabaseAdmin
+      .from('auth.users')
+      .select('*')
+      .eq('id', 'f1be0b02-1dd8-453b-ae91-1570d8a87059')
+      .single()
+
+    // Check public.users table for both users
+    const { data: edwardPublic, error: edwardPublicError } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .eq('auth_user_id', '97aa0354-7991-464a-84b7-132a35e66230')
+      .single()
+
+    const { data: albertPublic, error: albertPublicError } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .eq('auth_user_id', 'f1be0b02-1dd8-453b-ae91-1570d8a87059')
+      .single()
+
+    // Check existing events
+    const { data: existingEvents, error: eventsError } = await supabaseAdmin
+      .from('events')
+      .select('organiser_id, organiser_name')
+      .limit(5)
+
+    return res.json({
+      auth_users: {
+        edward: {
+          exists: !!edwardAuth,
+          error: edwardAuthError?.message,
+          data: edwardAuth
+        },
+        albert: {
+          exists: !!albertAuth,
+          error: albertAuthError?.message,
+          data: albertAuth
+        }
+      },
+      public_users: {
+        edward: {
+          exists: !!edwardPublic,
+          error: edwardPublicError?.message,
+          data: edwardPublic
+        },
+        albert: {
+          exists: !!albertPublic,
+          error: albertPublicError?.message,
+          data: albertPublic
+        }
+      },
+      existing_events: existingEvents,
+      table_access: {
+        select: { success: !!tableData, error: tableError?.message }
+      }
+    })
+
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// Verify organiser's email
+// Verify organiser endpoint - DEPRECATED
+router.post('/verify-organiser', async (req: Request, res: Response) => {
+  return res.status(410).json({ 
+    error: 'This endpoint is deprecated. Use /api/users/verify-email instead.',
+    redirect: '/api/users/verify-email'
+  })
+})
+
+// Check foreign key constraint definition
+router.get('/check-fk', async (req: Request, res: Response) => {
+  try {
+    // Get the foreign key constraint definition
+    const { data: fkData, error: fkError } = await supabaseAdmin
+      .from('events')
+      .select('organiser_id')
+      .limit(1)
+
+    // Get Edward's working events
+    const { data: edwardEvents, error: edwardError } = await supabaseAdmin
+      .from('events')
+      .select('organiser_id, organiser_name')
+      .eq('organiser_id', '97aa0354-7991-464a-84b7-132a35e66230')
+      .limit(1)
+
+    // Try to find Edward's ID in different tables
+    const { data: edwardAuth, error: authError } = await supabaseAdmin.auth.admin.getUserById(
+      '97aa0354-7991-464a-84b7-132a35e66230'
+    )
+
+    const { data: edwardPublic, error: publicError } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .eq('auth_user_id', '97aa0354-7991-464a-84b7-132a35e66230')
+      .single()
+
+    return res.json({
+      working_event: edwardEvents?.[0],
+      auth_user: edwardAuth?.user,
+      public_user: edwardPublic,
+      errors: {
+        fk: fkError?.message,
+        events: edwardError?.message,
+        auth: authError?.message,
+        public: publicError?.message
+      }
+    })
+
+  } catch (err: any) {
+    console.error('FK check error:', err)
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// Query RLS policies from Supabase
+router.get('/debug-policies', async (req: Request, res: Response) => {
+  try {
+    const { table } = req.query;
+
+    // Query for RLS policies
+    const policies = await supabaseAdmin
+      .from('pg_policies')
+      .select('*')
+      .eq('tablename', table || 'events')
+
+    return res.json({
+      policies: policies.data,
+      error: policies.error?.message
+    })
+
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// Test endpoint to simulate Albert's event creation
+router.post('/test-albert-event', async (req: Request, res: Response) => {
+  try {
+    // Simulate Albert's user data
+    const mockUserLookup = {
+      id: 'c64e3244-bcc6-45cc-a61c-7d5cf31badfc',
+      auth_user_id: 'f1be0b02-1dd8-453b-ae91-1570d8a87059',
+      email: 'albert@organiser.com',
+      role: 'organiser',
+      first_name: 'Albert',
+      last_name: 'LowneHughes'
+    }
+
+    const distancesData = [{
+      name: 'Test Distance',
+      distance_km: 10,
+      price: 100,
+      min_age: 18,
+      entry_limit: 100,
+      start_time: '06:00',
+      free_for_seniors: true,
+      free_for_disability: true,
+      senior_age_threshold: 65
+    }]
+
+    const testEventData = {
+      name: 'Albert Test Event',
+      category: 'road-cycling',
+      start_date: '2025-09-20',
+      end_date: null,
+      start_time: '06:00',
+      description: 'Test event for Albert',
+      venue_name: 'Test Venue',
+      address: '123 Test St',
+      city: 'Test City',
+      province: 'Test Province',
+      license_required: false,
+      temp_license_fee: 0,
+      license_details: '',
+      primary_image_url: 'https://example.com/image.jpg',
+      organiser_id: mockUserLookup.auth_user_id,
+      organiser_name: `${mockUserLookup.first_name} ${mockUserLookup.last_name}`
+    }
+
+    console.log('🧪 Testing Albert event creation...')
+    console.log('🧪 User data:', mockUserLookup)
+    console.log('🧪 Event data:', testEventData)
+    console.log('🧪 Distances data:', distancesData)
+
+    // 🔍 INVESTIGATE: Deep investigation of FK constraint
+    console.log('🔍 Testing FK constraint with Albert...')
+    console.log('🔍 User details:', {
+      name: `${mockUserLookup.first_name} ${mockUserLookup.last_name}`,
+      email: mockUserLookup.email,
+      auth_user_id: mockUserLookup.auth_user_id,
+      public_user_id: mockUserLookup.id
+    })
+    console.log('🔍 Edward working ID:', '97aa0354-7991-464a-84b7-132a35e66230')
+
+    // Check if the auth user actually exists
+    try {
+      const { data: checkAuthUser } = await supabaseAdmin.auth.admin.getUserById(mockUserLookup.auth_user_id)
+      console.log('🔍 Auth user exists check:', !!checkAuthUser?.user)
+      if (checkAuthUser?.user) {
+        console.log('🔍 Auth user details:', {
+          id: checkAuthUser.user.id,
+          email: checkAuthUser.user.email,
+          metadata: checkAuthUser.user.user_metadata,
+          app_metadata: checkAuthUser.user.app_metadata
+        })
+      }
+    } catch (authCheckErr: any) {
+      console.log('🔍 Auth user check failed:', authCheckErr.message)
+    }
+
+    // Try to create the event
+    const event = await supabase.createEvent(testEventData)
+    console.log('✅ Event created:', event.id)
+
+    // Create distances for the event
+    if (distancesData.length > 0) {
+      console.log('🔍 Creating distances...')
+      for (const distance of distancesData) {
+        const distanceData = {
+          ...distance,
+          event_id: event.id
+        }
+        await supabase.createEventDistance(distanceData)
+      }
+      console.log('✅ Distances created')
+    }
+
+    return res.json({
+      success: true,
+      event: event,
+      message: 'Albert event created successfully!'
+    })
+
+  } catch (err: any) {
+    console.log('🧪 Test failed:', err.message)
+    return res.status(500).json({
+      success: false,
+      error: err.message,
+      stack: err.stack
+    })
+  }
+})
+
 const supabase = new SupabaseService()
 
 /**
@@ -162,9 +724,10 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       email: userLookup.email
     })
     
-    // Use auth_user_id but ensure the user exists in auth.users table
-    eventFields.organiser_id = userLookup.auth_user_id
-    console.log('🔍 Setting organiser_id to auth_user_id:', eventFields.organiser_id)
+    // 🔧 SOLUTION: Try public.users.id first, then auth_user_id as fallback
+    console.log('🔍 Sam public.users.id:', userLookup.id)
+    console.log('🔍 Sam auth_user_id:', userLookup.auth_user_id)
+    console.log('🔍 Edward uses organiser_id:', '97aa0354-7991-464a-84b7-132a35e66230')
     
     // Add organizer name information for better display
     eventFields.organiser_name = `${userLookup.first_name} ${userLookup.last_name}`.trim()
@@ -190,10 +753,11 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     // Let's try both and see which one the foreign key accepts
     
     console.log('🔍 Available IDs for organiser_id:')
-    console.log('  - auth_user_id:', userLookup.auth_user_id)
+    console.log('  - auth_user_id (USING THIS):', userLookup.auth_user_id)
     console.log('  - public user_id:', userLookup.id)
+    console.log('  - Edward uses:', '97aa0354-7991-464a-84b7-132a35e66230')
     
-    // Let's check what existing events use by querying a working event
+    // CRITICAL DEBUG: Find out what table the foreign key actually references
     try {
       const { data: existingEvents } = await supabaseAdmin
         .from('events')
@@ -201,73 +765,145 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         .limit(3)
       
       console.log('🔍 Sample existing events organiser_id values:', existingEvents)
+      
+      // Check what Edward's organiser_id corresponds to in different tables
+      if (existingEvents && existingEvents.length > 0) {
+        const edwardId = existingEvents[0].organiser_id
+        console.log(`🔍 Checking what table contains Edward's ID: ${edwardId}`)
+        
+        // Check auth.users
+        try {
+          const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(edwardId)
+          console.log('✅ Edward ID found in auth.users:', !!authUser?.user)
+        } catch (authErr) {
+          console.log('❌ Edward ID NOT in auth.users')
+        }
+        
+        // Check public.users
+        try {
+          const { data: publicUser } = await supabaseAdmin
+            .from('users')
+            .select('id, auth_user_id, email')
+            .eq('id', edwardId)
+            .single()
+          console.log('✅ Edward ID found in public.users by id:', !!publicUser)
+        } catch (pubErr) {
+          console.log('❌ Edward ID NOT in public.users by id')
+        }
+        
+        // Check public.users by auth_user_id
+        try {
+          const { data: publicUser2 } = await supabaseAdmin
+            .from('users')
+            .select('id, auth_user_id, email')
+            .eq('auth_user_id', edwardId)
+            .single()
+          console.log('✅ Edward ID found in public.users by auth_user_id:', !!publicUser2)
+        } catch (pubErr2) {
+          console.log('❌ Edward ID NOT in public.users by auth_user_id')
+        }
+      }
     } catch (queryError) {
       console.log('⚠️ Could not query existing events:', queryError)
     }
     
-    // ✅ CORRECT SOLUTION: Use auth_user_id (as established previously)
-    console.log('🔍 Using auth_user_id as organiser_id (correct approach):', userLookup.auth_user_id)
+    // ✅ Solution: Try both approaches to determine what the foreign key constraint expects
+
+    let event = null
+
+    // ✅ FINAL SOLUTION: Always use auth_user_id (matches Edward's working pattern)
     eventFields.organiser_id = userLookup.auth_user_id
-    
-    // 🔍 DEBUGGING: Check if Sam's auth user actually exists in Supabase
-    console.log('🔍 Verifying auth user exists in Supabase auth system...')
+    console.log('🔍 Using auth_user_id for organiser_id:', eventFields.organiser_id)
+
     try {
-      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(userLookup.auth_user_id)
-      
-      if (authError) {
-        console.log('❌ Error fetching auth user:', authError.message, authError.code)
-      } else if (authUser?.user) {
-        console.log('✅ Auth user EXISTS in Supabase:', {
-          id: authUser.user.id,
-          email: authUser.user.email,
-          created_at: authUser.user.created_at,
-          email_confirmed_at: authUser.user.email_confirmed_at
+      event = await supabase.createEvent(eventFields)
+      console.log('✅ Event created successfully:', event.id)
+    } catch (createError: any) {
+      console.log('❌ Event creation failed:', createError.message)
+
+        // 🔍 INVESTIGATE: Deep investigation of FK constraint
+      if (createError.message.includes('foreign key constraint')) {
+        console.log('🔍 FK constraint error - investigating root cause')
+        console.log('🔍 User details:', {
+          name: `${userLookup.first_name} ${userLookup.last_name}`,
+          email: userLookup.email,
+          auth_user_id: userLookup.auth_user_id,
+          public_user_id: userLookup.id
         })
+        console.log('🔍 Edward working ID:', '97aa0354-7991-464a-84b7-132a35e66230')
+
+        // Check if the auth user actually exists
+        try {
+          const { data: checkAuthUser } = await supabaseAdmin.auth.admin.getUserById(userLookup.auth_user_id)
+          console.log('🔍 Auth user exists check:', !!checkAuthUser?.user)
+          if (checkAuthUser?.user) {
+            console.log('🔍 Auth user details:', {
+              id: checkAuthUser.user.id,
+              email: checkAuthUser.user.email,
+              metadata: checkAuthUser.user.user_metadata,
+              app_metadata: checkAuthUser.user.app_metadata
+            })
+          }
+        } catch (authCheckErr: any) {
+          console.log('🔍 Auth user check failed:', authCheckErr.message)
+        }
+
+        // Try to query the database directly to see if there's a schema issue
+        try {
+          console.log('🔍 Checking database schema...')
+          const { data: schemaCheck, error: schemaError } = await supabaseAdmin
+            .from('information_schema.table_constraints')
+            .select('constraint_name, table_name, constraint_type')
+            .eq('constraint_name', 'events_organiser_id_fkey')
+
+          if (schemaCheck && schemaCheck.length > 0) {
+            console.log('🔍 FK constraint found:', schemaCheck[0])
+          } else {
+            console.log('🔍 FK constraint not found in schema')
+          }
+        } catch (schemaErr: any) {
+          console.log('🔍 Schema check failed:', schemaErr.message)
+        }
+
+        // 🔧 FIX: Update Sam's auth user metadata to include role
+        console.log('🔧 Attempting to fix Sam\'s auth user metadata...')
+
+        try {
+          const { data: updateData, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+            userLookup.auth_user_id,
+            {
+              user_metadata: {
+                first_name: userLookup.first_name,
+                last_name: userLookup.last_name,
+                role: userLookup.role,
+                email_verified: true
+              }
+            }
+          )
+
+          if (updateError) {
+            console.log('❌ Failed to update Sam\'s auth metadata:', updateError.message)
+          } else {
+            console.log('✅ Updated Sam\'s auth metadata successfully')
+            // Try creating the event again with the updated metadata
+            eventFields.organiser_id = userLookup.auth_user_id
+            event = await supabase.createEvent(eventFields)
+            console.log('✅ Event created successfully after metadata fix:', event.id)
+            return // Success!
+          }
+        } catch (updateErr: any) {
+          console.log('❌ Exception updating auth metadata:', updateErr.message)
+        }
+
+        throw new Error(`Foreign key constraint failed for organiser_id. User: ${userLookup.first_name} ${userLookup.last_name} (${userLookup.auth_user_id}), Edward: 97aa0354-7991-464a-84b7-132a35e66230`)
       } else {
-        console.log('❌ Auth user NOT FOUND - this explains the foreign key error!')
+        throw createError
       }
-    } catch (authCheckError) {
-      console.log('❌ Exception checking auth user:', authCheckError)
     }
     
-    try {
-      // Create the event
-      const event = await supabase.createEvent(eventFields)
-      console.log('✅ Event created:', event.id)
-    } catch (createError) {
-      console.log('❌ Event creation failed with auth_user_id:', createError.message)
-      
-      // If foreign key constraint, try to create the auth user first
-      if (createError.message.includes('foreign key constraint')) {
-        console.log('🔧 Attempting to create missing auth user record...')
-        
-        try {
-          const { error: authError } = await supabaseAdmin.auth.admin.createUser({
-            email: userLookup.email,
-            email_confirm: true,
-            user_metadata: {
-              first_name: userLookup.first_name,
-              last_name: userLookup.last_name,
-              role: userLookup.role
-            }
-          })
-          
-          if (authError && !authError.message.includes('already registered')) {
-            console.log('⚠️ Could not create auth user:', authError.message)
-            throw createError // Re-throw original error
-          }
-          
-          console.log('✅ Auth user created/confirmed, retrying event creation...')
-          const event = await supabase.createEvent(eventFields)
-          console.log('✅ Event created after auth user fix:', event.id)
-          
-        } catch (authFixError) {
-          console.log('❌ Auth user creation failed:', authFixError)
-          throw createError // Re-throw original error
-        }
-      } else {
-        throw createError // Re-throw if not foreign key issue
-      }
+    // Ensure event was created successfully
+    if (!event) {
+      throw new Error('Event creation failed')
     }
     
     // Create event distances if provided

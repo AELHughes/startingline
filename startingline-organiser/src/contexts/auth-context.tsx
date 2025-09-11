@@ -8,6 +8,24 @@ interface User {
   first_name: string
   last_name: string
   role: string
+  email_verified: boolean
+  last_login_at?: string
+  created_at: string
+  updated_at?: string
+  
+  // Extended profile fields
+  phone?: string
+  company_name?: string
+  company_address?: string
+  vat_number?: string
+  company_registration_number?: string
+  company_phone?: string
+  company_email?: string
+  bank_name?: string
+  account_holder_name?: string
+  account_number?: string
+  branch_code?: string
+  account_type?: 'cheque' | 'savings'
 }
 
 interface AuthContextType {

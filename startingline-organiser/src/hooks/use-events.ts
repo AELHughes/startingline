@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { eventsApi, type Event, type CreateEventData } from '@/lib/supabase-api'
+import { eventsApi, type Event, type CreateEventData } from '@/lib/api'
 
 // Get all events
 export const useEvents = () => {
@@ -70,8 +70,7 @@ export const useUpdateEvent = () => {
 
   return useMutation({
     mutationFn: async ({ eventId, eventData }: { eventId: string; eventData: Partial<CreateEventData> }) => {
-      // This would need to be implemented in the API
-      throw new Error('Update event not implemented yet')
+      return await eventsApi.updateEvent(eventId, eventData)
     },
     onSuccess: (_, { eventId }) => {
       // Invalidate specific event and lists
@@ -88,8 +87,7 @@ export const useDeleteEvent = () => {
 
   return useMutation({
     mutationFn: async (eventId: string) => {
-      // This would need to be implemented in the API
-      throw new Error('Delete event not implemented yet')
+      return await eventsApi.deleteEvent(eventId)
     },
     onSuccess: () => {
       // Invalidate events lists

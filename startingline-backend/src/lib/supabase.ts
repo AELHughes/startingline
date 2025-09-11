@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 // Supabase Configuration (updated with new API keys)
 const supabaseUrl = 'https://kjeoqaoinkcrbukoqjfn.supabase.co'
 const supabaseAnonKey = 'sb_publishable_F1XuyCaFXBxc_ZM2iPXB2w_FALDVqIO'
-const supabaseServiceKey = 'sb_secret_aU_9C7NPsZyDZYnVgWElDg_w6Prb4S2'
+const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtqZW9xYW9pbmtjcmJ1a29xamZuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NzA4NzIzMywiZXhwIjoyMDcyNjYzMjMzfQ.s5J6hqsj2rASYiPyK6Ml7PGOEsqgbxOdxnhUPmadolg'
 
 // Debug logging
 console.log('🔧 Supabase Config:', {

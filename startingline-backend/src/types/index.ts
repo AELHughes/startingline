@@ -1,13 +1,28 @@
-// User Types
+// User Types (Updated for local PostgreSQL auth with full profile support)
 export interface User {
   id: string
-  auth_user_id: string
   email: string
   first_name: string
   last_name: string
   role: 'organiser' | 'admin' | 'participant'
+  email_verified: boolean
+  last_login_at?: Date
   created_at: Date
   updated_at: Date
+  
+  // Extended profile fields
+  phone?: string
+  company_name?: string
+  company_address?: string
+  vat_number?: string
+  company_registration_number?: string
+  company_phone?: string
+  company_email?: string
+  bank_name?: string
+  account_holder_name?: string
+  account_number?: string
+  branch_code?: string
+  account_type?: 'cheque' | 'savings'
 }
 
 export interface CreateUserData {
@@ -179,6 +194,7 @@ export interface JwtPayload {
   userId: string
   email: string
   role: string
+  emailVerified: boolean
   iat?: number
   exp?: number
 }
@@ -189,5 +205,6 @@ export interface AuthenticatedRequest extends Request {
     userId: string
     email: string
     role: string
+    emailVerified: boolean
   }
 }

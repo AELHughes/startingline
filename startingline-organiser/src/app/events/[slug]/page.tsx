@@ -72,7 +72,7 @@ export default function EventPage() {
 
   const getLowestPrice = () => {
     if (!event.distances || event.distances.length === 0) return null
-    const prices = event.distances.map(d => d.price).filter(p => p > 0)
+    const prices = event.distances.map(d => Number(d.price)).filter(p => p > 0)
     return prices.length > 0 ? Math.min(...prices) : null
   }
 
@@ -120,7 +120,7 @@ export default function EventPage() {
                 {lowestPrice && (
                   <div className="flex items-center">
                     <DollarSign className="h-5 w-5 mr-2" />
-                    <span>From R{lowestPrice.toFixed(2)}</span>
+                    <span>From R{Number(lowestPrice).toFixed(2)}</span>
                   </div>
                 )}
               </div>
@@ -205,9 +205,9 @@ export default function EventPage() {
                             Temporary license required
                           </span>
                         </div>
-                        {event.temp_license_fee && event.temp_license_fee > 0 && (
+                        {event.temp_license_fee && Number(event.temp_license_fee) > 0 && (
                           <div className="text-sm">
-                            License fee: R{event.temp_license_fee.toFixed(2)}
+                            License fee: R{Number(event.temp_license_fee).toFixed(2)}
                           </div>
                         )}
                         {event.license_details && (
@@ -238,7 +238,7 @@ export default function EventPage() {
                         <div className="flex justify-between items-start mb-2">
                           <h4 className="font-medium text-gray-900">{distance.name}</h4>
                           <span className="text-lg font-bold text-blue-600">
-                            R{distance.price.toFixed(2)}
+                            R{Number(distance.price).toFixed(2)}
                           </span>
                         </div>
                         <div className="text-sm text-gray-600 space-y-1">
@@ -301,7 +301,7 @@ export default function EventPage() {
                             <div className="flex justify-between items-start mb-2">
                               <h4 className="font-medium text-gray-900">{merch.name}</h4>
                               <span className="text-lg font-bold text-blue-600">
-                                R{merch.price.toFixed(2)}
+                                R{Number(merch.price).toFixed(2)}
                               </span>
                             </div>
                             {merch.description && (
@@ -365,7 +365,7 @@ export default function EventPage() {
                   {lowestPrice && (
                     <div className="text-center">
                       <div className="text-2xl font-bold text-blue-600">
-                        From R{lowestPrice.toFixed(2)}
+                        From R{Number(lowestPrice).toFixed(2)}
                       </div>
                       <div className="text-sm text-gray-500">Entry fee</div>
                     </div>

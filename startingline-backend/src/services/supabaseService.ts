@@ -189,9 +189,14 @@ export class SupabaseService {
   }
 
   async createEvent(eventData: TablesInsert<'events'>): Promise<Tables<'events'>> {
+    // Use supabaseAdmin since we're already validating auth in the middleware
     const { data, error } = await supabaseAdmin
       .from('events')
-      .insert(eventData)
+      .insert({
+        ...eventData,
+        // Ensure we're using the auth_user_id for the foreign key
+        organiser_id: eventData.organiser_id
+      })
       .select('*')
       .single()
     

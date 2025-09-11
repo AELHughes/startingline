@@ -4,7 +4,7 @@ import React from 'react'
 import { useMyEvents } from '@/hooks/use-events'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { supabase } from '@/lib/supabase-api'
+import { eventsApi } from '@/lib/api'
 import { useQuery } from '@tanstack/react-query'
 import { TrendingUp, Users, DollarSign, Calendar } from 'lucide-react'
 

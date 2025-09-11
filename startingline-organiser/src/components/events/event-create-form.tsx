@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCreateEvent } from '@/hooks/use-events'
-import { storageApi } from '@/lib/supabase-api'
+import { storageApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -244,8 +244,21 @@ export default function EventCreateForm() {
         // Map venue_name to venue for backend compatibility
         venue: formData.venue_name,
         // Map primary_image_url to image_url for backend compatibility  
-        image_url: formData.primary_image_url
+        image_url: formData.primary_image_url,
+        // Transform merchandise variations to match backend structure
+        merchandise: formData.merchandise.map(merch => ({
+          ...merch,
+          variations: merch.variations
+            .filter(v => v.name && v.options && v.options.length > 0) // Filter out empty variations
+            .map(v => ({
+              variation_name: v.name,
+              variation_options: v.options
+            }))
+        }))
       }
+
+      console.log('🚀 Transformed event data for backend:', eventData)
+      console.log('📦 Merchandise with variations:', eventData.merchandise)
 
       const createdEvent = await createEventMutation.mutateAsync(eventData)
 

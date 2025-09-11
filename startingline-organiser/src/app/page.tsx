@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import HeroSlider from '@/components/ui/hero-slider'
-import type { Event } from '@/lib/supabase-api'
+import type { Event } from '@/lib/api'
 
 // Hero images from local public/images folder
 const heroImages = [

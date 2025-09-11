@@ -18,7 +18,7 @@ declare global {
 
 /**
  * Middleware to authenticate JWT token and populate req.user
- * CRITICAL: JWT contains auth.users.id, but we populate req.user with public.users.id
+ * JWT contains auth.users.id, which is now the direct primary key in users table
  */
 export const authenticateToken = async (
   req: Request,
@@ -38,11 +38,11 @@ export const authenticateToken = async (
     const token = authHeader.substring(7)
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload
     
-    // Find user in database by auth_user_id (JWT contains auth.users.id)
+    // Find user in database by id (JWT contains auth.users.id, which is now our direct PK)
     const { data: user, error } = await supabaseAdmin
       .from('users')
-      .select('id, email, role')
-      .eq('auth_user_id', decoded.userId)
+      .select('id, email, role, verification_status')
+      .eq('id', decoded.userId)
       .single()
 
     if (error || !user) {
@@ -52,9 +52,9 @@ export const authenticateToken = async (
       })
     }
 
-    // CRITICAL: Set req.user.userId to public.users.id (not auth.users.id)
+    // Set req.user.userId to users.id (which is the same as auth.users.id)
     req.user = {
-      userId: user.id, // This is public.users.id for foreign keys
+      userId: user.id, // This is users.id for foreign keys
       email: user.email,
       role: user.role
     }
@@ -87,16 +87,16 @@ export const optionalAuth = async (
     const token = authHeader.substring(7)
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload
     
-    // Find user in database by auth_user_id
+    // Find user in database by id
     const { data: user, error } = await supabaseAdmin
       .from('users')
-      .select('id, email, role')
-      .eq('auth_user_id', decoded.userId)
+      .select('id, email, role, verification_status')
+      .eq('id', decoded.userId)
       .single()
 
     if (!error && user) {
       req.user = {
-        userId: user.id, // public.users.id
+        userId: user.id, // users.id
         email: user.email,
         role: user.role
       }
