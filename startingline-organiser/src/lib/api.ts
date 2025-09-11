@@ -382,30 +382,6 @@ export const eventsApi = {
       console.error('❌ Get audit trail error:', error)
       throw error
     }
-  }
-}
-
-// ============================================
-// USER API
-// ============================================
-
-export const userApi = {
-  getProfile: async () => {
-    const response = await fetch(`${API_BASE}/api/auth/me`, {
-      headers: getAuthHeaders()
-    })
-
-    return handleApiResponse(response)
-  },
-
-  updateProfile: async (profileData: any) => {
-    const response = await fetch(`${API_BASE}/api/auth/profile`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(profileData)
-    })
-
-    return handleApiResponse(response)
   },
 
   // Admin: Get all events
@@ -480,6 +456,30 @@ export const userApi = {
       console.error('❌ Admin get recent events error:', error)
       throw error
     }
+  }
+}
+
+// ============================================
+// USER API
+// ============================================
+
+export const userApi = {
+  getProfile: async () => {
+    const response = await fetch(`${API_BASE}/api/auth/me`, {
+      headers: getAuthHeaders()
+    })
+
+    return handleApiResponse(response)
+  },
+
+  updateProfile: async (profileData: any) => {
+    const response = await fetch(`${API_BASE}/api/auth/profile`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(profileData)
+    })
+
+    return handleApiResponse(response)
   }
 }
 
