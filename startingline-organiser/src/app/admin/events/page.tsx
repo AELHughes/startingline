@@ -355,7 +355,7 @@ export default function AdminEventsPage() {
                         className="border-blue-600 text-blue-600 hover:bg-blue-50"
                       >
                         <Eye className="w-4 h-4 mr-1" />
-                        View Details
+                        Review
                       </Button>
                       
                       {event.status === 'published' && (

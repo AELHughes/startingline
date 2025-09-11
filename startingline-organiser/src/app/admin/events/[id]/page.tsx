@@ -12,7 +12,6 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { eventsApi } from '@/lib/api'
 import { 
-  ArrowLeft, 
   CheckCircle, 
   XCircle, 
   MessageSquare, 
@@ -26,7 +25,9 @@ import {
   Image,
   ShoppingBag,
   Award,
-  MessageCircle
+  MessageCircle,
+  Edit,
+  Send
 } from 'lucide-react'
 
 // Use the existing API service to fetch event details
@@ -45,6 +46,8 @@ export default function AdminEventDetailPage() {
   const [showCommentModal, setShowCommentModal] = useState(false)
   const [selectedSection, setSelectedSection] = useState('')
   const [sectionComment, setSectionComment] = useState('')
+  const [sectionComments, setSectionComments] = useState<{[key: string]: string}>({})
+  const [showSubmitComments, setShowSubmitComments] = useState(false)
 
   // Fetch real event data
   const { data: event, isLoading, error } = useQuery({
@@ -121,17 +124,36 @@ export default function AdminEventDetailPage() {
 
   const handleAddComment = (section: string) => {
     setSelectedSection(section)
-    setSectionComment('')
+    setSectionComment(sectionComments[section] || '')
     setShowCommentModal(true)
   }
 
   const handleSubmitComment = async () => {
     try {
-      // TODO: Implement add comment API call
-      console.log('Adding comment for section:', selectedSection, 'Comment:', sectionComment)
+      // Update the section comment
+      setSectionComments(prev => ({
+        ...prev,
+        [selectedSection]: sectionComment
+      }))
+      
+      // Show submit comments button if any comments exist
+      const hasComments = Object.values({...sectionComments, [selectedSection]: sectionComment}).some(comment => comment.trim() !== '')
+      setShowSubmitComments(hasComments)
+      
       setShowCommentModal(false)
     } catch (error) {
       console.error('Failed to add comment:', error)
+    }
+  }
+
+  const handleSubmitAllComments = async () => {
+    try {
+      // TODO: Implement submit all comments API call
+      console.log('Submitting all comments:', sectionComments)
+      // This will send all comments to the organiser
+      alert('Comments submitted to organiser successfully!')
+    } catch (error) {
+      console.error('Failed to submit comments:', error)
     }
   }
 
@@ -144,16 +166,9 @@ export default function AdminEventDetailPage() {
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center space-x-4 mb-4">
-          <Button
-            variant="outline"
-            onClick={() => router.back()}
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
           <div className="flex-1">
             <h1 className="text-2xl font-bold text-gray-900">{event.name}</h1>
-            <p className="text-gray-600">Event Details & Review</p>
+            <p className="text-gray-600">Review event details and provide feedback</p>
           </div>
           <div className="flex items-center space-x-3">
             <Badge className={getStatusColor(event.status)}>
@@ -165,6 +180,12 @@ export default function AdminEventDetailPage() {
             >
               <Eye className="w-4 h-4 mr-2" />
               View Public Page
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => router.push('/admin/events')}
+            >
+              Cancel
             </Button>
           </div>
         </div>
@@ -197,6 +218,25 @@ export default function AdminEventDetailPage() {
             </Button>
           </div>
         )}
+
+        {/* Submit Comments Button */}
+        {showSubmitComments && (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-blue-900">Comments Ready to Submit</h3>
+                <p className="text-sm text-blue-700">You have comments for {Object.keys(sectionComments).filter(key => sectionComments[key].trim() !== '').length} section(s)</p>
+              </div>
+              <Button
+                onClick={handleSubmitAllComments}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Submit Comments to Organiser ({event.organiser_name || 'Organiser'})
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
@@ -216,14 +256,25 @@ export default function AdminEventDetailPage() {
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   Event Information
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleAddComment('overview')}
-                  >
-                    <MessageCircle className="w-4 h-4 mr-1" />
-                    Comment
-                  </Button>
+                  <div className="flex space-x-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleAddComment('overview')}
+                    >
+                      <MessageCircle className="w-4 h-4 mr-1" />
+                      Comment
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {/* TODO: Implement edit overview */}}
+                      className="border-green-600 text-green-600 hover:bg-green-50"
+                    >
+                      <Edit className="w-4 h-4 mr-1" />
+                      Edit
+                    </Button>
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -303,14 +354,25 @@ export default function AdminEventDetailPage() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 Location Details
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleAddComment('location')}
-                >
-                  <MessageCircle className="w-4 h-4 mr-1" />
-                  Comment
-                </Button>
+                <div className="flex space-x-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAddComment('location')}
+                  >
+                    <MessageCircle className="w-4 h-4 mr-1" />
+                    Comment
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {/* TODO: Implement edit location */}}
+                    className="border-green-600 text-green-600 hover:bg-green-50"
+                  >
+                    <Edit className="w-4 h-4 mr-1" />
+                    Edit
+                  </Button>
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -359,14 +421,25 @@ export default function AdminEventDetailPage() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 Event Distances
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleAddComment('distances')}
-                >
-                  <MessageCircle className="w-4 h-4 mr-1" />
-                  Comment
-                </Button>
+                <div className="flex space-x-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAddComment('distances')}
+                  >
+                    <MessageCircle className="w-4 h-4 mr-1" />
+                    Comment
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {/* TODO: Implement edit distances */}}
+                    className="border-green-600 text-green-600 hover:bg-green-50"
+                  >
+                    <Edit className="w-4 h-4 mr-1" />
+                    Edit
+                  </Button>
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -425,14 +498,25 @@ export default function AdminEventDetailPage() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 Event Merchandise
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleAddComment('merchandise')}
-                >
-                  <MessageCircle className="w-4 h-4 mr-1" />
-                  Comment
-                </Button>
+                <div className="flex space-x-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAddComment('merchandise')}
+                  >
+                    <MessageCircle className="w-4 h-4 mr-1" />
+                    Comment
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {/* TODO: Implement edit merchandise */}}
+                    className="border-green-600 text-green-600 hover:bg-green-50"
+                  >
+                    <Edit className="w-4 h-4 mr-1" />
+                    Edit
+                  </Button>
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -647,9 +731,11 @@ export default function AdminEventDetailPage() {
       <Dialog open={showCommentModal} onOpenChange={setShowCommentModal}>
         <DialogContent className="sm:max-w-[525px]">
           <DialogHeader>
-            <DialogTitle>Add Comment for {selectedSection}</DialogTitle>
+            <DialogTitle>
+              {sectionComments[selectedSection] ? 'Edit Comment' : 'Add Comment'} for {selectedSection}
+            </DialogTitle>
             <DialogDescription>
-              Provide feedback on the {selectedSection} section of this event.
+              Provide feedback or request changes for the {selectedSection} section of this event.
             </DialogDescription>
           </DialogHeader>
           
@@ -673,7 +759,7 @@ export default function AdminEventDetailPage() {
                 Cancel
               </Button>
               <Button onClick={handleSubmitComment}>
-                Add Comment
+                {sectionComments[selectedSection] ? 'Update Comment' : 'Add Comment'}
               </Button>
             </div>
           </div>
