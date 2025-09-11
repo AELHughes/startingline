@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
-import { useEvents } from '@/hooks/use-events'
+import { useAllEventsAdmin, useUpdateEventStatusAdmin } from '@/hooks/use-events'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,7 +22,9 @@ import {
   Clock,
   ArrowLeft,
   MoreHorizontal,
-  LogOut
+  LogOut,
+  MessageSquare,
+  Send
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -30,12 +32,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 
 export default function AdminEventsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user, isLoading, logout } = useAuth()
-  const { data: events = [], isLoading: eventsLoading } = useEvents()
+  const { data: events = [], isLoading: eventsLoading } = useAllEventsAdmin()
+  const updateEventStatusMutation = useUpdateEventStatusAdmin()
 
   const handleLogout = async () => {
     try {
@@ -48,6 +54,10 @@ export default function AdminEventsPage() {
 
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
+  const [showAdminModal, setShowAdminModal] = useState(false)
+  const [selectedEvent, setSelectedEvent] = useState<any>(null)
+  const [adminAction, setAdminAction] = useState<'approve' | 'reject' | 'request_info'>('approve')
+  const [adminNote, setAdminNote] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
 
   // Auth protection
@@ -75,6 +85,63 @@ export default function AdminEventsPage() {
 
   if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
     return null
+  }
+
+  const handleAdminAction = (event: any, action: 'approve' | 'reject' | 'request_info') => {
+    setSelectedEvent(event)
+    setAdminAction(action)
+    setAdminNote('')
+    setShowAdminModal(true)
+  }
+
+  const handleSubmitAdminAction = async () => {
+    if (!selectedEvent) return
+
+    let status = ''
+    switch (adminAction) {
+      case 'approve':
+        status = 'published'
+        break
+      case 'reject':
+        status = 'cancelled'
+        break
+      case 'request_info':
+        status = 'pending_approval' // Keep as pending but send note
+        break
+    }
+
+    try {
+      await updateEventStatusMutation.mutateAsync({
+        eventId: selectedEvent.id,
+        status,
+        adminNote: adminNote.trim() || undefined
+      })
+
+      setShowAdminModal(false)
+      setSelectedEvent(null)
+      setAdminNote('')
+    } catch (error) {
+      console.error('Failed to update event status:', error)
+      alert('Failed to update event status')
+    }
+  }
+
+  const getActionTitle = () => {
+    switch (adminAction) {
+      case 'approve': return 'Approve Event'
+      case 'reject': return 'Reject Event'
+      case 'request_info': return 'Request More Information'
+      default: return 'Admin Action'
+    }
+  }
+
+  const getActionDescription = () => {
+    switch (adminAction) {
+      case 'approve': return 'This will publish the event and make it live for participants to register.'
+      case 'reject': return 'This will reject the event and notify the organiser.'
+      case 'request_info': return 'This will ask the organiser to provide more information or make changes.'
+      default: return ''
+    }
   }
 
   const getStatusColor = (status: string) => {

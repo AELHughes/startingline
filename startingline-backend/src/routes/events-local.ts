@@ -795,4 +795,190 @@ router.get('/:id/audit-trail', authenticateToken, async (req: Request, res: Resp
   }
 })
 
+// ============================================
+// ADMIN EVENT ROUTES
+// ============================================
+
+// Get all events for admin (including drafts, pending, etc.)
+router.get('/admin/all', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userRole = req.localUser!.role
+    
+    if (userRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only administrators can access this endpoint'
+      } as ApiResponse)
+    }
+    
+    const query = `
+      SELECT 
+        e.*,
+        u.first_name as organiser_first_name,
+        u.last_name as organiser_last_name,
+        u.email as organiser_email,
+        COUNT(ed.id) as distance_count,
+        COUNT(em.id) as merchandise_count
+      FROM events e
+      JOIN users u ON e.organiser_id = u.id
+      LEFT JOIN event_distances ed ON e.id = ed.event_id
+      LEFT JOIN event_merchandise em ON e.id = em.event_id
+      GROUP BY e.id, u.id
+      ORDER BY e.created_at DESC
+    `
+    
+    const result = await pool.query(query)
+    
+    console.log('✅ Admin retrieved', result.rows.length, 'events')
+    
+    res.json({
+      success: true,
+      data: result.rows,
+      message: 'All events retrieved successfully'
+    } as ApiResponse<Event[]>)
+    
+  } catch (error: any) {
+    console.error('❌ Admin get all events error:', error.message)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch events'
+    } as ApiResponse)
+  }
+})
+
+// Admin action: Update event status with notification
+router.put('/admin/:id/status', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const { status, adminNote } = req.body
+    const adminId = req.localUser!.userId
+    const userRole = req.localUser!.role
+    
+    if (userRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only administrators can update event status'
+      } as ApiResponse)
+    }
+    
+    if (!['draft', 'pending_approval', 'published', 'cancelled'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid status value'
+      } as ApiResponse)
+    }
+    
+    // Get the event and current status
+    const eventResult = await pool.query(
+      'SELECT * FROM events WHERE id = $1',
+      [id]
+    )
+    
+    if (eventResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found'
+      } as ApiResponse)
+    }
+    
+    const event = eventResult.rows[0]
+    const previousStatus = event.status
+    
+    // Update event status
+    const updateResult = await pool.query(
+      'UPDATE events SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+      [status, id]
+    )
+    
+    const updatedEvent = updateResult.rows[0]
+    
+    // Create audit trail entry
+    let auditMessage = `Admin updated event status from ${previousStatus} to ${status}`
+    if (adminNote) {
+      auditMessage += `. Note: ${adminNote}`
+    }
+    
+    await createAuditTrailEntry(
+      id,
+      'admin_updated',
+      adminId,
+      'admin',
+      auditMessage
+    )
+    
+    // Create notification for organiser
+    let notificationTitle = ''
+    let notificationMessage = ''
+    
+    switch (status) {
+      case 'published':
+        notificationTitle = 'Event Approved & Published!'
+        notificationMessage = `Great news! Your event "${event.name}" has been approved and is now live for participants to register.`
+        break
+      case 'cancelled':
+        notificationTitle = 'Event Rejected'
+        notificationMessage = `Your event "${event.name}" has been rejected.${adminNote ? ` Admin note: ${adminNote}` : ''}`
+        break
+      case 'pending_approval':
+        notificationTitle = 'Event Returned for Review'
+        notificationMessage = `Your event "${event.name}" requires additional information.${adminNote ? ` Admin note: ${adminNote}` : ''}`
+        break
+    }
+    
+    if (notificationTitle) {
+      await createNotification(
+        event.organiser_id,
+        'status_change',
+        notificationTitle,
+        notificationMessage,
+        `/dashboard/events/${id}/history`,
+        {
+          event_id: id,
+          previous_status: previousStatus,
+          new_status: status,
+          admin_note: adminNote
+        }
+      )
+    }
+    
+    // If there's an admin note, also send as a message
+    if (adminNote) {
+      await pool.query(
+        `INSERT INTO messages (event_id, sender_id, recipient_id, subject, body)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          id,
+          adminId,
+          event.organiser_id,
+          `Event ${status === 'published' ? 'Approved' : status === 'cancelled' ? 'Rejected' : 'Update Required'}: ${event.name}`,
+          adminNote
+        ]
+      )
+      
+      // Create notification for the message
+      await createNotification(
+        event.organiser_id,
+        'message',
+        'New Message from Admin',
+        `You have received a message regarding your event "${event.name}".`,
+        '/dashboard/messages',
+        { event_id: id }
+      )
+    }
+    
+    res.json({
+      success: true,
+      data: updatedEvent,
+      message: 'Event status updated successfully'
+    } as ApiResponse)
+    
+  } catch (error: any) {
+    console.error('❌ Admin update event status error:', error.message)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update event status'
+    } as ApiResponse)
+  }
+})
+
 export default router

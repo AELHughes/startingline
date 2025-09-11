@@ -96,3 +96,40 @@ export const useDeleteEvent = () => {
     },
   })
 }
+
+// ============================================
+// ADMIN HOOKS
+// ============================================
+
+// Admin: Get all events (including drafts, pending, etc.)
+export const useAllEventsAdmin = () => {
+  return useQuery<Event[]>({
+    queryKey: ['admin-events'],
+    queryFn: eventsApi.getAllEventsAdmin,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  })
+}
+
+// Admin: Update event status
+export const useUpdateEventStatusAdmin = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ eventId, status, adminNote }: { 
+      eventId: string
+      status: string
+      adminNote?: string 
+    }) => {
+      return await eventsApi.updateEventStatusAdmin(eventId, status, adminNote)
+    },
+    onSuccess: (_, { eventId }) => {
+      // Invalidate admin events and specific event
+      queryClient.invalidateQueries({ queryKey: ['admin-events'] })
+      queryClient.invalidateQueries({ queryKey: ['event', eventId] })
+      queryClient.invalidateQueries({ queryKey: ['events'] })
+    },
+    onError: (error) => {
+      console.error('❌ Failed to update event status:', error)
+    }
+  })
+}

@@ -406,6 +406,44 @@ export const userApi = {
     })
 
     return handleApiResponse(response)
+  },
+
+  // Admin: Get all events
+  getAllEventsAdmin: async (): Promise<Event[]> => {
+    try {
+      console.log('🔍 Admin fetching all events')
+      
+      const response = await fetch(`${API_BASE}/api/events/admin/all`, {
+        headers: getAuthHeaders()
+      })
+
+      const events = await handleApiResponse<Event[]>(response)
+      console.log('✅ Admin retrieved', events.length, 'events')
+      return events
+    } catch (error) {
+      console.error('❌ Admin get all events error:', error)
+      throw error
+    }
+  },
+
+  // Admin: Update event status with note
+  updateEventStatusAdmin: async (eventId: string, status: string, adminNote?: string): Promise<Event> => {
+    try {
+      console.log('🔍 Admin updating event status:', eventId, 'to', status)
+      
+      const response = await fetch(`${API_BASE}/api/events/admin/${eventId}/status`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status, adminNote })
+      })
+
+      const event = await handleApiResponse<Event>(response)
+      console.log('✅ Admin updated event status successfully')
+      return event
+    } catch (error) {
+      console.error('❌ Admin update event status error:', error)
+      throw error
+    }
   }
 }
 
