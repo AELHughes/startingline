@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -27,6 +28,22 @@ import {
   MessageCircle
 } from 'lucide-react'
 
+// API function to fetch event details
+const fetchEventDetails = async (eventId: string) => {
+  const response = await fetch(`/api/events/${eventId}`, {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    }
+  })
+  
+  if (!response.ok) {
+    throw new Error('Failed to fetch event details')
+  }
+  
+  const result = await response.json()
+  return result.data
+}
+
 export default function AdminEventDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -39,95 +56,47 @@ export default function AdminEventDetailPage() {
   const [selectedSection, setSelectedSection] = useState('')
   const [sectionComment, setSectionComment] = useState('')
 
-  // Mock data - replace with real API call
-  const event = {
-    id: eventId,
-    name: 'Long Run',
-    slug: 'long-run',
-    description: 'A challenging long-distance running event through the beautiful landscapes of Pretoria. This event is perfect for experienced runners looking for a new challenge.',
-    organiser_first_name: 'Adam',
-    organiser_last_name: 'Apple',
-    organiser_email: 'adam@example.com',
-    organiser_phone: '+27 82 123 4567',
-    status: 'pending_approval',
-    city: 'Pretoria',
-    province: 'Gauteng',
-    venue: 'Voortrekker Monument',
-    address: 'Voortrekker Monument, Eeufees Rd, Groenkloof, Pretoria, 0027',
-    event_date: '2024-03-15',
-    start_time: '06:00',
-    end_time: '12:00',
-    registration_deadline: '2024-03-10',
-    max_participants: 500,
-    current_participants: 0,
-    entry_fee: 250,
-    temp_license_fee: 50,
-    license_details: 'Temporary license required for all participants',
-    primary_image_url: '/images/events/long-run.jpg',
-    created_at: '2024-01-15T10:30:00Z',
-    updated_at: '2024-01-15T10:30:00Z',
-    
-    // Event details
-    distances: [
-      {
-        id: 1,
-        name: '42.2km Marathon',
-        distance: 42.2,
-        unit: 'km',
-        entry_fee: 350,
-        max_participants: 200,
-        current_participants: 0
-      },
-      {
-        id: 2,
-        name: '21.1km Half Marathon',
-        distance: 21.1,
-        unit: 'km',
-        entry_fee: 250,
-        max_participants: 300,
-        current_participants: 0
-      }
-    ],
-    
-    merchandise: [
-      {
-        id: 1,
-        name: 'Event T-Shirt',
-        description: 'High-quality technical running shirt',
-        price: 150,
-        variations: [
-          {
-            id: 1,
-            name: 'Size',
-            options: ['XS', 'S', 'M', 'L', 'XL', 'XXL']
-          },
-          {
-            id: 2,
-            name: 'Color',
-            options: ['Red', 'Blue', 'Black']
-          }
-        ]
-      },
-      {
-        id: 2,
-        name: 'Finisher Medal',
-        description: 'Custom designed finisher medal',
-        price: 80,
-        variations: []
-      }
-    ],
-    
-    // Comments/Feedback
-    comments: [
-      {
-        id: 1,
-        section: 'location',
-        comment: 'Please provide more specific directions to the venue',
-        admin: 'System Administrator',
-        created_at: '2024-01-15T11:00:00Z'
-      }
-    ]
+  // Fetch real event data
+  const { data: event, isLoading, error } = useQuery({
+    queryKey: ['event', eventId],
+    queryFn: () => fetchEventDetails(eventId),
+    enabled: !!eventId
+  })
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-red-600"></div>
+        </div>
+      </div>
+    )
   }
+
+  if (error || !event) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="text-center py-12">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Event not found</h3>
+          <p className="text-gray-600">The event you're looking for doesn't exist or you don't have permission to view it.</p>
+          <Button onClick={() => router.back()} className="mt-4">
+            Go Back
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Mock data for comments - replace with real API call when available
+  const comments = [
+    {
+      id: 1,
+      section: 'location',
+      comment: 'Please provide more specific directions to the venue',
+      admin: 'System Administrator',
+      created_at: '2024-01-15T11:00:00Z'
+    }
+  ]
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -177,7 +146,7 @@ export default function AdminEventDetailPage() {
   }
 
   const getSectionComments = (section: string) => {
-    return event.comments.filter(comment => comment.section === section)
+    return comments.filter(comment => comment.section === section)
   }
 
   return (
@@ -202,7 +171,7 @@ export default function AdminEventDetailPage() {
             </Badge>
             <Button
               variant="outline"
-              onClick={() => window.open(`/events/${event.slug}`, '_blank')}
+              onClick={() => window.open(`/events/${event.slug || event.id}`, '_blank')}
             >
               <Eye className="w-4 h-4 mr-2" />
               View Public Page
@@ -274,36 +243,36 @@ export default function AdminEventDetailPage() {
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-600">Description</Label>
-                  <p className="text-gray-900">{event.description}</p>
+                  <p className="text-gray-900">{event.description || 'No description provided'}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm font-medium text-gray-600">Event Date</Label>
-                    <p className="text-gray-900">{new Date(event.event_date).toLocaleDateString()}</p>
+                    <p className="text-gray-900">{new Date(event.start_date).toLocaleDateString()}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-600">Time</Label>
-                    <p className="text-gray-900">{event.start_time} - {event.end_time}</p>
+                    <p className="text-gray-900">{event.start_time}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm font-medium text-gray-600">Registration Deadline</Label>
-                    <p className="text-gray-900">{new Date(event.registration_deadline).toLocaleDateString()}</p>
+                    <p className="text-gray-900">{event.registration_deadline ? new Date(event.registration_deadline).toLocaleDateString() : 'Not set'}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-600">Max Participants</Label>
-                    <p className="text-gray-900">{event.max_participants}</p>
+                    <p className="text-gray-900">{event.max_participants || 'Not set'}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm font-medium text-gray-600">Entry Fee</Label>
-                    <p className="text-gray-900">R{event.entry_fee}</p>
+                    <p className="text-gray-900">R{event.entry_fee || 0}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-600">License Fee</Label>
-                    <p className="text-gray-900">R{event.temp_license_fee}</p>
+                    <p className="text-gray-900">R{event.temp_license_fee || 0}</p>
                   </div>
                 </div>
                 {event.license_details && (
@@ -357,11 +326,11 @@ export default function AdminEventDetailPage() {
             <CardContent className="space-y-4">
               <div>
                 <Label className="text-sm font-medium text-gray-600">Venue</Label>
-                <p className="text-gray-900">{event.venue}</p>
+                <p className="text-gray-900">{event.venue_name || 'Not specified'}</p>
               </div>
               <div>
                 <Label className="text-sm font-medium text-gray-600">Address</Label>
-                <p className="text-gray-900">{event.address}</p>
+                <p className="text-gray-900">{event.address || 'Not specified'}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -412,28 +381,32 @@ export default function AdminEventDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {event.distances.map((distance) => (
-                  <div key={distance.id} className="p-4 border border-gray-200 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold text-gray-900">{distance.name}</h4>
-                      <Badge variant="outline">{distance.distance} {distance.unit}</Badge>
+                {event.distances && event.distances.length > 0 ? (
+                  event.distances.map((distance) => (
+                    <div key={distance.id} className="p-4 border border-gray-200 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold text-gray-900">{distance.name}</h4>
+                        <Badge variant="outline">{distance.distance_km} km</Badge>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <Label className="text-gray-600">Entry Fee</Label>
+                          <p className="font-medium">R{distance.price}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-600">Max Participants</Label>
+                          <p className="font-medium">{distance.entry_limit || 'No limit'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-600">Start Time</Label>
+                          <p className="font-medium">{distance.start_time || 'Not set'}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <Label className="text-gray-600">Entry Fee</Label>
-                        <p className="font-medium">R{distance.entry_fee}</p>
-                      </div>
-                      <div>
-                        <Label className="text-gray-600">Max Participants</Label>
-                        <p className="font-medium">{distance.max_participants}</p>
-                      </div>
-                      <div>
-                        <Label className="text-gray-600">Current</Label>
-                        <p className="font-medium">{distance.current_participants}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-gray-500 text-center py-4">No distances configured for this event.</p>
+                )}
               </div>
               
               {/* Distance Comments */}
@@ -474,30 +447,36 @@ export default function AdminEventDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {event.merchandise.map((item) => (
-                  <div key={item.id} className="p-4 border border-gray-200 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold text-gray-900">{item.name}</h4>
-                      <Badge variant="outline">R{item.price}</Badge>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-3">{item.description}</p>
-                    {item.variations.length > 0 && (
-                      <div>
-                        <Label className="text-sm font-medium text-gray-600">Variations</Label>
-                        <div className="space-y-2 mt-1">
-                          {item.variations.map((variation) => (
-                            <div key={variation.id} className="text-sm">
-                              <span className="font-medium">{variation.name}:</span>
-                              <span className="ml-2 text-gray-600">
-                                {variation.options.join(', ')}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                {event.merchandise && event.merchandise.length > 0 ? (
+                  event.merchandise.map((item) => (
+                    <div key={item.id} className="p-4 border border-gray-200 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold text-gray-900">{item.name}</h4>
+                        <Badge variant="outline">R{item.price}</Badge>
                       </div>
-                    )}
-                  </div>
-                ))}
+                      <p className="text-sm text-gray-600 mb-3">{item.description || 'No description'}</p>
+                      {item.variations && item.variations.length > 0 && (
+                        <div>
+                          <Label className="text-sm font-medium text-gray-600">Variations</Label>
+                          <div className="space-y-2 mt-1">
+                            {item.variations.map((variation) => (
+                              <div key={variation.id} className="text-sm">
+                                <span className="font-medium">{variation.variation_name}:</span>
+                                <span className="ml-2 text-gray-600">
+                                  {Array.isArray(variation.variation_options) 
+                                    ? variation.variation_options.join(', ')
+                                    : variation.variation_options}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-500 text-center py-4">No merchandise configured for this event.</p>
+                )}
               </div>
               
               {/* Merchandise Comments */}
@@ -540,16 +519,12 @@ export default function AdminEventDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium text-gray-600">Name</Label>
-                  <p className="text-gray-900">{event.organiser_first_name} {event.organiser_last_name}</p>
+                  <p className="text-gray-900">{event.organiser_name || 'Not available'}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-600">Email</Label>
-                  <p className="text-gray-900">{event.organiser_email}</p>
+                  <p className="text-gray-900">{event.organiser_email || 'Not available'}</p>
                 </div>
-              </div>
-              <div>
-                <Label className="text-sm font-medium text-gray-600">Phone</Label>
-                <p className="text-gray-900">{event.organiser_phone}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -589,9 +564,9 @@ export default function AdminEventDetailPage() {
               <CardTitle>All Comments & Feedback</CardTitle>
             </CardHeader>
             <CardContent>
-              {event.comments.length > 0 ? (
+              {comments.length > 0 ? (
                 <div className="space-y-4">
-                  {event.comments.map((comment) => (
+                  {comments.map((comment) => (
                     <div key={comment.id} className="p-4 border border-gray-200 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
                         <Badge variant="outline">{comment.section}</Badge>
