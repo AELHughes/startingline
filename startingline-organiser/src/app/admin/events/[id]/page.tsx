@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { eventsApi } from '@/lib/api'
 import { 
   ArrowLeft, 
   CheckCircle, 
@@ -28,20 +29,9 @@ import {
   MessageCircle
 } from 'lucide-react'
 
-// API function to fetch event details
+// Use the existing API service to fetch event details
 const fetchEventDetails = async (eventId: string) => {
-  const response = await fetch(`/api/events/${eventId}`, {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  })
-  
-  if (!response.ok) {
-    throw new Error('Failed to fetch event details')
-  }
-  
-  const result = await response.json()
-  return result.data
+  return await eventsApi.getEventById(eventId)
 }
 
 export default function AdminEventDetailPage() {
