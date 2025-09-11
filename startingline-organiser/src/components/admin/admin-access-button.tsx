@@ -28,7 +28,7 @@ export default function AdminAccessButton() {
       )}
 
       {/* Admin Access Button */}
-      <Link href="/admin/login">
+      <Link href="/admin-login">
         <Button
           size="sm"
           className="h-10 w-10 rounded-full bg-red-600 hover:bg-red-700 shadow-lg border border-red-500 p-0"

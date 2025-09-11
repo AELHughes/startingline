@@ -27,7 +27,7 @@ export default function CreateAdminPage() {
   useEffect(() => {
     if (!isLoading) {
       if (!user) {
-        router.push('/admin/login')
+        router.push('/admin-login')
       } else if (user.role !== 'admin' && user.role !== 'super_admin') {
         // Redirect non-admin users to their appropriate dashboard
         if (user.role === 'organiser') {
@@ -42,7 +42,7 @@ export default function CreateAdminPage() {
   const handleLogout = async () => {
     try {
       await logout()
-      router.push('/admin/login')
+      router.push('/admin-login')
     } catch (error) {
       console.error('Logout failed:', error)
     }

@@ -196,7 +196,7 @@ export default function LoginPage() {
               </p>
               <p className="text-sm text-gray-600">
                 Administrator access?{' '}
-                <Link href="/admin/login" className="font-medium text-red-600 hover:text-red-500">
+                <Link href="/admin-login" className="font-medium text-red-600 hover:text-red-500">
                   Admin Portal
                 </Link>
               </p>
