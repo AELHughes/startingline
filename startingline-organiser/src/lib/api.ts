@@ -3,6 +3,15 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'
 
+// Helper function to get auth headers
+function getAuthHeaders(): Record<string, string> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  }
+}
+
 // Event interface (matches backend types)
 export interface Event {
   id: string
@@ -87,14 +96,6 @@ export interface CreateEventData {
   merchandise?: any[]
 }
 
-// Helper function to get auth headers
-function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem('auth_token')
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-  }
-}
 
 // Helper function to handle API responses
 async function handleApiResponse<T>(response: Response): Promise<T> {
@@ -454,6 +455,46 @@ export const eventsApi = {
       return events
     } catch (error) {
       console.error('❌ Admin get recent events error:', error)
+      throw error
+    }
+  },
+
+  // Update event section (admin only)
+  updateEventSection: async (eventId: string, section: string, data: any): Promise<any> => {
+    try {
+      console.log(`🔧 Admin updating event ${eventId} section: ${section}`)
+      
+      const response = await fetch(`${API_BASE}/api/events/admin/${eventId}/section`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ section, data })
+      })
+
+      const result = await handleApiResponse<any>(response)
+      console.log(`✅ Admin successfully updated event ${eventId} ${section} section`)
+      return result
+    } catch (error) {
+      console.error(`❌ Admin update event section error:`, error)
+      throw error
+    }
+  },
+
+  // Update event status (admin only)
+  updateEventStatus: async (eventId: string, status: string, adminNote?: string): Promise<any> => {
+    try {
+      console.log(`🔧 Admin updating event ${eventId} status to: ${status}`)
+      
+      const response = await fetch(`${API_BASE}/api/events/admin/${eventId}/status`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status, adminNote })
+      })
+
+      const result = await handleApiResponse<any>(response)
+      console.log(`✅ Admin successfully updated event ${eventId} status to ${status}`)
+      return result
+    } catch (error) {
+      console.error(`❌ Admin update event status error:`, error)
       throw error
     }
   }

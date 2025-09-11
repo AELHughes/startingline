@@ -75,7 +75,7 @@ export default function AdminEventDetailPage() {
   if (error || !event) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center py-12">
+      <div className="text-center py-12">
           <h3 className="text-lg font-medium text-gray-900 mb-2">Event not found</h3>
           <p className="text-gray-600">The event you're looking for doesn't exist or you don't have permission to view it.</p>
           <Button onClick={() => router.back()} className="mt-4">
@@ -120,11 +120,37 @@ export default function AdminEventDetailPage() {
 
   const handleSubmitAdminAction = async () => {
     try {
-      // TODO: Implement admin action API call
-      console.log('Admin action:', adminAction, 'Note:', adminNote)
+      let status = ''
+      let actionMessage = ''
+      
+      switch (adminAction) {
+        case 'approve':
+          status = 'published'
+          actionMessage = 'Event approved and published successfully!'
+          break
+        case 'reject':
+          status = 'cancelled'
+          actionMessage = 'Event rejected successfully!'
+          break
+        case 'request_info':
+          status = 'pending_approval'
+          actionMessage = 'Information request sent to organiser successfully!'
+          break
+      }
+      
+      // Call the API to update event status
+      await eventsApi.updateEventStatus(eventId, status, adminNote)
+      
+      // Close modal and show success message
       setShowAdminModal(false)
+      setAdminNote('')
+      alert(actionMessage)
+      
+      // Refresh the page to show updated status
+      window.location.reload()
     } catch (error) {
       console.error('Failed to submit admin action:', error)
+      alert('Failed to submit admin action. Please try again.')
     }
   }
 
@@ -178,36 +204,69 @@ export default function AdminEventDetailPage() {
 
   const handleEditSection = (section: string) => {
     setEditingSection(section)
-    // Initialize form data with current event data
-    setEditFormData({
-      name: event.name,
-      description: event.description,
-      start_date: event.start_date,
-      start_time: event.start_time,
-      registration_deadline: event.registration_deadline,
-      max_participants: event.max_participants,
-      entry_fee: event.entry_fee,
-      temp_license_fee: event.temp_license_fee,
-      license_details: event.license_details,
-      venue_name: event.venue_name,
-      address: event.address,
-      city: event.city,
-      province: event.province
-    })
+    
+    // Initialize form data based on section
+    switch (section) {
+      case 'overview':
+        setEditFormData({
+          name: event.name,
+          description: event.description,
+          start_date: event.start_date,
+          start_time: event.start_time,
+          registration_deadline: event.registration_deadline,
+          max_participants: event.max_participants,
+          entry_fee: event.entry_fee,
+          temp_license_fee: event.temp_license_fee,
+          license_details: event.license_details
+        })
+        break
+        
+      case 'location':
+        setEditFormData({
+          venue_name: event.venue_name,
+          address: event.address,
+          city: event.city,
+          province: event.province
+        })
+        break
+        
+      case 'distances':
+        setEditFormData({
+          distances: event.distances || []
+        })
+        break
+        
+      case 'merchandise':
+        setEditFormData({
+          merchandise: event.merchandise || []
+        })
+        break
+        
+      default:
+        setEditFormData({})
+    }
   }
 
   const handleSaveSection = async (section: string) => {
     try {
-      // TODO: Implement save section API call
       console.log('Saving section:', section, editFormData)
       
-      // For now, just close the edit mode
+      // Call the real API to save the section
+      await eventsApi.updateEventSection(eventId, section, editFormData)
+      
+      // Close the edit mode and clear form data
       setEditingSection(null)
       setEditFormData({})
       
+      // Show success message
       alert(`${section} section updated successfully!`)
+      
+      // Refresh the event data to show the updated information
+      // The useQuery will automatically refetch when the component re-renders
+      window.location.reload()
     } catch (error) {
       console.error('Failed to save section:', error)
+      alert(`Failed to update ${section} section. Please try again.`)
     }
   }
 
@@ -244,10 +303,10 @@ export default function AdminEventDetailPage() {
             </Button>
           </div>
         </div>
-
+        
         {/* Admin Actions */}
         {event.status === 'pending_approval' && (
-          <div className="flex space-x-3">
+        <div className="flex space-x-3">
             <Button
               onClick={() => handleAdminAction('approve')}
               className="bg-green-600 hover:bg-green-700"
@@ -255,14 +314,14 @@ export default function AdminEventDetailPage() {
               <CheckCircle className="w-4 h-4 mr-2" />
               Approve Event
             </Button>
-            <Button
-              variant="outline"
+          <Button
+            variant="outline"
               onClick={() => handleAdminAction('request_info')}
               className="border-blue-600 text-blue-600 hover:bg-blue-50"
-            >
+          >
               <MessageSquare className="w-4 h-4 mr-2" />
               Request Information
-            </Button>
+          </Button>
             <Button
               variant="outline"
               onClick={() => handleAdminAction('reject')}
@@ -270,7 +329,7 @@ export default function AdminEventDetailPage() {
             >
               <XCircle className="w-4 h-4 mr-2" />
               Reject Event
-            </Button>
+          </Button>
           </div>
         )}
 
@@ -290,8 +349,8 @@ export default function AdminEventDetailPage() {
                 Submit Comments to Organiser ({event.organiser_name || 'Organiser'})
               </Button>
             </div>
-          </div>
-        )}
+            </div>
+          )}
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
@@ -549,9 +608,9 @@ export default function AdminEventDetailPage() {
               <CardContent>
                 {event.primary_image_url ? (
                   <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden">
-                    <img
-                      src={event.primary_image_url}
-                      alt={event.name}
+                <img
+                  src={event.primary_image_url}
+                  alt={event.name}
                       className="w-full h-full object-cover"
                     />
                   </div>
@@ -604,7 +663,7 @@ export default function AdminEventDetailPage() {
                       className="mt-1"
                     />
                   </div>
-                  <div>
+                <div>
                     <Label htmlFor="edit-address" className="text-sm font-medium text-gray-600">Address</Label>
                     <Textarea
                       id="edit-address"
@@ -623,8 +682,8 @@ export default function AdminEventDetailPage() {
                         onChange={(e) => setEditFormData(prev => ({ ...prev, city: e.target.value }))}
                         className="mt-1"
                       />
-                    </div>
-                    <div>
+                </div>
+                <div>
                       <Label htmlFor="edit-province" className="text-sm font-medium text-gray-600">Province</Label>
                       <Input
                         id="edit-province"
@@ -666,11 +725,11 @@ export default function AdminEventDetailPage() {
                       <Label className="text-sm font-medium text-gray-600">City</Label>
                       <p className="text-gray-900">{event.city}</p>
                     </div>
-                    <div>
+                <div>
                       <Label className="text-sm font-medium text-gray-600">Province</Label>
                       <p className="text-gray-900">{event.province}</p>
-                    </div>
-                  </div>
+                </div>
+              </div>
                 </>
               )}
               
@@ -722,8 +781,8 @@ export default function AdminEventDetailPage() {
 
         {/* Distances Tab */}
         <TabsContent value="distances">
-          <Card>
-            <CardHeader>
+            <Card>
+              <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 Event Distances
                 <div className="flex space-x-2">
@@ -738,95 +797,281 @@ export default function AdminEventDetailPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => {/* TODO: Implement edit distances */}}
+                    onClick={() => handleEditSection('distances')}
                     className="border-green-600 text-green-600 hover:bg-green-50"
                   >
                     <Edit className="w-4 h-4 mr-1" />
                     Edit
                   </Button>
                 </div>
-              </CardTitle>
-            </CardHeader>
+                </CardTitle>
+              </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {event.distances && event.distances.length > 0 ? (
-                  event.distances.map((distance) => (
-                    <div key={distance.id} className="p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-semibold text-gray-900">{distance.name}</h4>
-                        <Badge variant="outline">{distance.distance_km} km</Badge>
-                      </div>
-                      <div className="grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <Label className="text-gray-600">Entry Fee</Label>
-                          <p className="font-medium">R{distance.price}</p>
+              {editingSection === 'distances' ? (
+                <div className="space-y-4">
+                  <div className="space-y-4">
+                    {editFormData.distances?.map((distance, index) => (
+                      <div key={index} className="p-4 border border-gray-200 rounded-lg">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <Label htmlFor={`distance_${index}_name`} className="mb-2 font-medium">Distance Name *</Label>
+                            <Input
+                              id={`distance_${index}_name`}
+                              value={distance.name || ''}
+                              onChange={(e) => {
+                                const newDistances = [...editFormData.distances]
+                                newDistances[index] = { ...newDistances[index], name: e.target.value }
+                                setEditFormData(prev => ({ ...prev, distances: newDistances }))
+                              }}
+                              placeholder="e.g., 5km Fun Run"
+                            />
+                          </div>
+
+                          <div>
+                            <Label htmlFor={`distance_${index}_distance`} className="mb-2 font-medium">Distance (km) *</Label>
+                            <Input
+                              id={`distance_${index}_distance`}
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              value={distance.distance_km || ''}
+                              onChange={(e) => {
+                                const newDistances = [...editFormData.distances]
+                                newDistances[index] = { ...newDistances[index], distance_km: parseFloat(e.target.value) || 0 }
+                                setEditFormData(prev => ({ ...prev, distances: newDistances }))
+                              }}
+                              placeholder="0"
+                            />
+                          </div>
+
+                          <div>
+                            <Label htmlFor={`distance_${index}_price`} className="mb-2 font-medium">Price (R) *</Label>
+                            <Input
+                              id={`distance_${index}_price`}
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={distance.price || ''}
+                              onChange={(e) => {
+                                const newDistances = [...editFormData.distances]
+                                newDistances[index] = { ...newDistances[index], price: parseFloat(e.target.value) || 0 }
+                                setEditFormData(prev => ({ ...prev, distances: newDistances }))
+                              }}
+                              placeholder="0.00"
+                            />
+                          </div>
+
+                          <div>
+                            <Label htmlFor={`distance_${index}_min_age`} className="mb-2 font-medium">Minimum Age</Label>
+                            <Input
+                              id={`distance_${index}_min_age`}
+                              type="number"
+                              min="0"
+                              value={distance.min_age || ''}
+                              onChange={(e) => {
+                                const newDistances = [...editFormData.distances]
+                                newDistances[index] = { ...newDistances[index], min_age: e.target.value ? parseInt(e.target.value) : undefined }
+                                setEditFormData(prev => ({ ...prev, distances: newDistances }))
+                              }}
+                              placeholder="No limit"
+                            />
+                          </div>
+
+                          <div>
+                            <Label htmlFor={`distance_${index}_entry_limit`} className="mb-2 font-medium">Entry Limit</Label>
+                            <Input
+                              id={`distance_${index}_entry_limit`}
+                              type="number"
+                              min="0"
+                              value={distance.entry_limit || ''}
+                              onChange={(e) => {
+                                const newDistances = [...editFormData.distances]
+                                newDistances[index] = { ...newDistances[index], entry_limit: e.target.value ? parseInt(e.target.value) : undefined }
+                                setEditFormData(prev => ({ ...prev, distances: newDistances }))
+                              }}
+                              placeholder="No limit"
+                            />
+                          </div>
+
+                          <div>
+                            <Label htmlFor={`distance_${index}_start_time`} className="mb-2 font-medium">Start Time</Label>
+                            <Input
+                              id={`distance_${index}_start_time`}
+                              type="time"
+                              value={distance.start_time || ''}
+                              onChange={(e) => {
+                                const newDistances = [...editFormData.distances]
+                                newDistances[index] = { ...newDistances[index], start_time: e.target.value }
+                                setEditFormData(prev => ({ ...prev, distances: newDistances }))
+                              }}
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <Label className="text-gray-600">Max Participants</Label>
-                          <p className="font-medium">{distance.entry_limit || 'No limit'}</p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id={`distance_${index}_free_seniors`}
+                              checked={distance.free_for_seniors || false}
+                              onChange={(e) => {
+                                const newDistances = [...editFormData.distances]
+                                newDistances[index] = { ...newDistances[index], free_for_seniors: e.target.checked }
+                                setEditFormData(prev => ({ ...prev, distances: newDistances }))
+                              }}
+                              className="rounded"
+                            />
+                            <Label htmlFor={`distance_${index}_free_seniors`}>Free for seniors</Label>
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id={`distance_${index}_free_disability`}
+                              checked={distance.free_for_disability || false}
+                              onChange={(e) => {
+                                const newDistances = [...editFormData.distances]
+                                newDistances[index] = { ...newDistances[index], free_for_disability: e.target.checked }
+                                setEditFormData(prev => ({ ...prev, distances: newDistances }))
+                              }}
+                              className="rounded"
+                            />
+                            <Label htmlFor={`distance_${index}_free_disability`}>Free for disability</Label>
+                          </div>
                         </div>
-                        <div>
-                          <Label className="text-gray-600">Start Time</Label>
-                          <p className="font-medium">{distance.start_time || 'Not set'}</p>
-                        </div>
+
+                        {distance.free_for_seniors && (
+                          <div className="mt-4">
+                            <Label htmlFor={`distance_${index}_senior_age`} className="mb-2 font-medium">Senior Age Threshold</Label>
+                            <Input
+                              id={`distance_${index}_senior_age`}
+                              type="number"
+                              min="0"
+                              value={distance.senior_age_threshold || ''}
+                              onChange={(e) => {
+                                const newDistances = [...editFormData.distances]
+                                newDistances[index] = { ...newDistances[index], senior_age_threshold: e.target.value ? parseInt(e.target.value) : undefined }
+                                setEditFormData(prev => ({ ...prev, distances: newDistances }))
+                              }}
+                              placeholder="65"
+                            />
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-gray-500 text-center py-4">No distances configured for this event.</p>
-                )}
-              </div>
-              
-              {/* Distance Comments */}
-              {sectionComments['distances'] && (
-                <div className="mt-6">
-                  <Label className="text-sm font-medium text-gray-600">Comments</Label>
-                  <div className="bg-yellow-50 p-3 rounded-md text-sm">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <p className="text-gray-800">{sectionComments['distances']}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          by System Administrator • {new Date().toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="flex space-x-1 ml-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleAddComment('distances')}
-                          className="h-6 px-2 text-xs"
-                        >
-                          <Edit className="w-3 h-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSectionComments(prev => {
-                              const newComments = { ...prev }
-                              delete newComments['distances']
-                              const hasComments = Object.values(newComments).some(comment => comment.trim() !== '')
-                              setShowSubmitComments(hasComments)
-                              return newComments
-                            })
-                          }}
-                          className="h-6 px-2 text-xs text-red-600 hover:bg-red-50"
-                        >
-                          <XCircle className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-end space-x-2 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      onClick={handleCancelEdit}
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => handleSaveSection('distances')}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      Save Changes
+                    </Button>
                   </div>
                 </div>
+              ) : (
+                <div className="space-y-4">
+                  {event.distances && event.distances.length > 0 ? (
+                    event.distances.map((distance) => (
+                      <div key={distance.id} className="p-4 border border-gray-200 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-semibold text-gray-900">{distance.name}</h4>
+                          <Badge variant="outline">{distance.distance_km} km</Badge>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <Label className="text-gray-600">Entry Fee</Label>
+                            <p className="font-medium">R{distance.price}</p>
+                          </div>
+                          <div>
+                            <Label className="text-gray-600">Entry Limit</Label>
+                            <p className="font-medium">{distance.entry_limit || 'No limit'}</p>
+                          </div>
+                          <div>
+                            <Label className="text-gray-600">Start Time</Label>
+                            <p className="font-medium">{distance.start_time || 'Not set'}</p>
+                          </div>
+                          <div>
+                            <Label className="text-gray-600">Min Age</Label>
+                            <p className="font-medium">{distance.min_age || 'No limit'}</p>
+                          </div>
+                        </div>
+                        {(distance.free_for_seniors || distance.free_for_disability) && (
+                          <div className="mt-2 flex gap-2">
+                            {distance.free_for_seniors && (
+                              <Badge variant="secondary">Free for seniors ({distance.senior_age_threshold || 65}+)</Badge>
+                            )}
+                            {distance.free_for_disability && (
+                              <Badge variant="secondary">Free for disability</Badge>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-center py-4">No distances configured for this event.</p>
+                  )}
+                  
+                  {/* Distance Comments */}
+                  {sectionComments['distances'] && (
+                    <div className="mt-6">
+                      <Label className="text-sm font-medium text-gray-600">Comments</Label>
+                      <div className="bg-yellow-50 p-3 rounded-md text-sm">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <p className="text-gray-800">{sectionComments['distances']}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              by System Administrator • {new Date().toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="flex space-x-1 ml-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAddComment('distances')}
+                              className="h-6 px-2 text-xs"
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSectionComments(prev => {
+                                  const newComments = { ...prev }
+                                  delete newComments['distances']
+                                  const hasComments = Object.values(newComments).some(comment => comment.trim() !== '')
+                                  setShowSubmitComments(hasComments)
+                                  return newComments
+                                })
+                              }}
+                              className="h-6 px-2 text-xs text-red-600 hover:bg-red-50"
+                            >
+                              <XCircle className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
         </TabsContent>
 
         {/* Merchandise Tab */}
         <TabsContent value="merchandise">
-          <Card>
-            <CardHeader>
+            <Card>
+              <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 Event Merchandise
                 <div className="flex space-x-2">
@@ -841,91 +1086,253 @@ export default function AdminEventDetailPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => {/* TODO: Implement edit merchandise */}}
+                    onClick={() => handleEditSection('merchandise')}
                     className="border-green-600 text-green-600 hover:bg-green-50"
                   >
                     <Edit className="w-4 h-4 mr-1" />
                     Edit
                   </Button>
                 </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {event.merchandise && event.merchandise.length > 0 ? (
-                  event.merchandise.map((item) => (
-                    <div key={item.id} className="p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-semibold text-gray-900">{item.name}</h4>
-                        <Badge variant="outline">R{item.price}</Badge>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-3">{item.description || 'No description'}</p>
-                      {item.variations && item.variations.length > 0 && (
-                        <div>
-                          <Label className="text-sm font-medium text-gray-600">Variations</Label>
-                          <div className="space-y-2 mt-1">
-                            {item.variations.map((variation) => (
-                              <div key={variation.id} className="text-sm">
-                                <span className="font-medium">{variation.variation_name}:</span>
-                                <span className="ml-2 text-gray-600">
-                                  {Array.isArray(variation.variation_options) 
-                                    ? variation.variation_options.join(', ')
-                                    : variation.variation_options}
-                                </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {editingSection === 'merchandise' ? (
+                  <div className="space-y-4">
+                    <div className="space-y-6">
+                      {editFormData.merchandise?.map((merch, merchIndex) => (
+                        <Card key={merchIndex} className="relative">
+                          <CardContent className="pt-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <Label htmlFor={`merch_${merchIndex}_name`} className="mb-2 font-medium">Item Name *</Label>
+                                <Input
+                                  id={`merch_${merchIndex}_name`}
+                                  value={merch.name || ''}
+                                  onChange={(e) => {
+                                    const newMerchandise = [...editFormData.merchandise]
+                                    newMerchandise[merchIndex] = { ...newMerchandise[merchIndex], name: e.target.value }
+                                    setEditFormData(prev => ({ ...prev, merchandise: newMerchandise }))
+                                  }}
+                                  placeholder="e.g., Event T-Shirt"
+                                />
                               </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+
+                              <div>
+                                <Label htmlFor={`merch_${merchIndex}_price`} className="mb-2 font-medium">Price (R) *</Label>
+                                <Input
+                                  id={`merch_${merchIndex}_price`}
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={merch.price || merch.base_price || ''}
+                                  onChange={(e) => {
+                                    const newMerchandise = [...editFormData.merchandise]
+                                    newMerchandise[merchIndex] = { 
+                                      ...newMerchandise[merchIndex], 
+                                      price: parseFloat(e.target.value) || 0,
+                                      base_price: parseFloat(e.target.value) || 0 // Keep both for compatibility
+                                    }
+                                    setEditFormData(prev => ({ ...prev, merchandise: newMerchandise }))
+                                  }}
+                                  placeholder="0.00"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="mt-4">
+                              <Label htmlFor={`merch_${merchIndex}_description`} className="mb-2 font-medium">Description</Label>
+                              <Textarea
+                                id={`merch_${merchIndex}_description`}
+                                value={merch.description || ''}
+                                onChange={(e) => {
+                                  const newMerchandise = [...editFormData.merchandise]
+                                  newMerchandise[merchIndex] = { ...newMerchandise[merchIndex], description: e.target.value }
+                                  setEditFormData(prev => ({ ...prev, merchandise: newMerchandise }))
+                                }}
+                                placeholder="Describe the merchandise item..."
+                                rows={3}
+                              />
+                            </div>
+
+                            {/* Merchandise Image Preview */}
+                            {merch.image_url && (
+                              <div className="mt-4">
+                                <Label className="mb-2 font-medium">Item Image</Label>
+                                <div className="relative w-32 h-32">
+                                  <img
+                                    src={merch.image_url}
+                                    alt="Merchandise"
+                                    className="w-full h-full object-cover rounded-lg"
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Variations Display */}
+                            {merch.variations && merch.variations.length > 0 && (
+                              <div className="mt-6 space-y-4">
+                                <Label className="text-base font-medium">Variations</Label>
+                                {merch.variations.map((variation, variationIndex) => (
+                                  <Card key={variationIndex} className="bg-gray-50">
+                                    <CardContent className="pt-4">
+                                      <div className="mb-3">
+                                        <Input
+                                          value={variation.variation_name || ''}
+                                          onChange={(e) => {
+                                            const newMerchandise = [...editFormData.merchandise]
+                                            newMerchandise[merchIndex].variations[variationIndex] = {
+                                              ...newMerchandise[merchIndex].variations[variationIndex],
+                                              variation_name: e.target.value
+                                            }
+                                            setEditFormData(prev => ({ ...prev, merchandise: newMerchandise }))
+                                          }}
+                                          placeholder="Variation name (e.g., Size, Color)"
+                                          className="mb-2"
+                                        />
+                                      </div>
+
+                                      <div className="space-y-2">
+                                        <Label className="text-sm">Options</Label>
+                                        {Array.isArray(variation.variation_options) ? 
+                                          variation.variation_options.map((option, optionIndex) => (
+                                            <div key={optionIndex} className="flex items-center gap-2">
+                                              <Input
+                                                value={option}
+                                                onChange={(e) => {
+                                                  const newMerchandise = [...editFormData.merchandise]
+                                                  const newOptions = [...newMerchandise[merchIndex].variations[variationIndex].variation_options]
+                                                  newOptions[optionIndex] = e.target.value
+                                                  newMerchandise[merchIndex].variations[variationIndex] = {
+                                                    ...newMerchandise[merchIndex].variations[variationIndex],
+                                                    variation_options: newOptions
+                                                  }
+                                                  setEditFormData(prev => ({ ...prev, merchandise: newMerchandise }))
+                                                }}
+                                                placeholder="Option value"
+                                                className="flex-1"
+                                              />
+                                            </div>
+                                          ))
+                                        : (
+                                          <div className="text-sm text-gray-600">
+                                            {variation.variation_options}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </CardContent>
+                                  </Card>
+                                ))}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
                     </div>
-                  ))
-                ) : (
-                  <p className="text-gray-500 text-center py-4">No merchandise configured for this event.</p>
-                )}
-              </div>
-              
-              {/* Merchandise Comments */}
-              {sectionComments['merchandise'] && (
-                <div className="mt-6">
-                  <Label className="text-sm font-medium text-gray-600">Comments</Label>
-                  <div className="bg-yellow-50 p-3 rounded-md text-sm">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <p className="text-gray-800">{sectionComments['merchandise']}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          by System Administrator • {new Date().toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="flex space-x-1 ml-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleAddComment('merchandise')}
-                          className="h-6 px-2 text-xs"
-                        >
-                          <Edit className="w-3 h-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSectionComments(prev => {
-                              const newComments = { ...prev }
-                              delete newComments['merchandise']
-                              const hasComments = Object.values(newComments).some(comment => comment.trim() !== '')
-                              setShowSubmitComments(hasComments)
-                              return newComments
-                            })
-                          }}
-                          className="h-6 px-2 text-xs text-red-600 hover:bg-red-50"
-                        >
-                          <XCircle className="w-3 h-3" />
-                        </Button>
-                      </div>
+                    <div className="flex justify-end space-x-2 pt-4 border-t">
+                      <Button
+                        variant="outline"
+                        onClick={handleCancelEdit}
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={() => handleSaveSection('merchandise')}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <Save className="w-4 h-4 mr-2" />
+                        Save Changes
+                      </Button>
                     </div>
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="space-y-4">
+                    {event.merchandise && event.merchandise.length > 0 ? (
+                      event.merchandise.map((item) => (
+                        <div key={item.id} className="p-4 border border-gray-200 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-semibold text-gray-900">{item.name}</h4>
+                            <Badge variant="outline">R{item.base_price}</Badge>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-3">{item.description || 'No description'}</p>
+                          
+                          {item.image_url && (
+                            <div className="mb-3">
+                              <img
+                                src={item.image_url}
+                                alt={item.name}
+                                className="w-24 h-24 object-cover rounded-lg"
+                              />
+                            </div>
+                          )}
+                          
+                          {item.variations && item.variations.length > 0 && (
+                            <div>
+                              <Label className="text-sm font-medium text-gray-600 mb-2 block">Variations</Label>
+                              <div className="space-y-2">
+                                {item.variations.map((variation) => (
+                                  <div key={variation.id} className="text-sm">
+                                    <span className="font-medium">{variation.variation_name}:</span>
+                                    <span className="ml-2 text-gray-600">
+                                      {Array.isArray(variation.variation_options) 
+                                        ? variation.variation_options.join(', ')
+                                        : variation.variation_options}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-gray-500 text-center py-4">No merchandise configured for this event.</p>
+                    )}
+                    
+                    {/* Merchandise Comments */}
+                    {sectionComments['merchandise'] && (
+                      <div className="mt-6">
+                        <Label className="text-sm font-medium text-gray-600">Comments</Label>
+                        <div className="bg-yellow-50 p-3 rounded-md text-sm">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <p className="text-gray-800">{sectionComments['merchandise']}</p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                by System Administrator • {new Date().toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="flex space-x-1 ml-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleAddComment('merchandise')}
+                                className="h-6 px-2 text-xs"
+                              >
+                                <Edit className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSectionComments(prev => {
+                                    const newComments = { ...prev }
+                                    delete newComments['merchandise']
+                                    const hasComments = Object.values(newComments).some(comment => comment.trim() !== '')
+                                    setShowSubmitComments(hasComments)
+                                    return newComments
+                                  })
+                                }}
+                                className="h-6 px-2 text-xs text-red-600 hover:bg-red-50"
+                              >
+                                <XCircle className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -973,8 +1380,8 @@ export default function AdminEventDetailPage() {
                         </p>
                       </div>
                     ))}
-                  </div>
-                </div>
+              </div>
+              </div>
               )}
             </CardContent>
           </Card>
@@ -1050,7 +1457,7 @@ export default function AdminEventDetailPage() {
                         <p className="text-sm text-gray-500 mt-2">
                           by {comment.admin}
                         </p>
-                      </div>
+              </div>
                     ))}
                   </div>
                 </div>
@@ -1163,8 +1570,8 @@ export default function AdminEventDetailPage() {
               <Button onClick={handleSubmitComment}>
                 {sectionComments[selectedSection] ? 'Update Comment' : 'Add Comment'}
               </Button>
-            </div>
-          </div>
+        </div>
+      </div>
         </DialogContent>
       </Dialog>
     </div>

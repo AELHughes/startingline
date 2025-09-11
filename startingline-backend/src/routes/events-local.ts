@@ -1098,6 +1098,182 @@ router.get('/admin/recent', authenticateToken, async (req: Request, res: Respons
   }
 })
 
+/**
+ * Update event section (admin only)
+ */
+router.put('/admin/:id/section', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const { section, data } = req.body
+    const adminId = req.localUser!.userId
+    const userRole = req.localUser!.role
+    
+    if (userRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only administrators can update event sections'
+      } as ApiResponse)
+    }
+    
+    console.log(`🔧 Admin updating event ${id} section: ${section}`)
+    
+    // Validate section
+    const validSections = ['overview', 'location', 'distances', 'merchandise']
+    if (!validSections.includes(section)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid section. Must be one of: overview, location, distances, merchandise'
+      } as ApiResponse)
+    }
+    
+    // Check if event exists
+    const eventCheck = await pool.query('SELECT id, name FROM events WHERE id = $1', [id])
+    if (eventCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found'
+      } as ApiResponse)
+    }
+    
+    const event = eventCheck.rows[0]
+    
+    // Update based on section
+    let updateQuery = ''
+    let updateValues: any[] = []
+    let updateFields: string[] = []
+    
+    switch (section) {
+      case 'overview':
+        if (data.name) { updateFields.push('name = $' + (updateValues.length + 1)); updateValues.push(data.name) }
+        if (data.description !== undefined) { updateFields.push('description = $' + (updateValues.length + 1)); updateValues.push(data.description) }
+        if (data.start_date) { updateFields.push('start_date = $' + (updateValues.length + 1)); updateValues.push(data.start_date) }
+        if (data.start_time) { updateFields.push('start_time = $' + (updateValues.length + 1)); updateValues.push(data.start_time) }
+        if (data.registration_deadline) { updateFields.push('registration_deadline = $' + (updateValues.length + 1)); updateValues.push(data.registration_deadline) }
+        if (data.max_participants !== undefined) { updateFields.push('max_participants = $' + (updateValues.length + 1)); updateValues.push(data.max_participants) }
+        if (data.entry_fee !== undefined) { updateFields.push('entry_fee = $' + (updateValues.length + 1)); updateValues.push(data.entry_fee) }
+        if (data.temp_license_fee !== undefined) { updateFields.push('temp_license_fee = $' + (updateValues.length + 1)); updateValues.push(data.temp_license_fee) }
+        if (data.license_details) { updateFields.push('license_details = $' + (updateValues.length + 1)); updateValues.push(data.license_details) }
+        break
+        
+      case 'location':
+        if (data.venue_name) { updateFields.push('venue_name = $' + (updateValues.length + 1)); updateValues.push(data.venue_name) }
+        if (data.address) { updateFields.push('address = $' + (updateValues.length + 1)); updateValues.push(data.address) }
+        if (data.city) { updateFields.push('city = $' + (updateValues.length + 1)); updateValues.push(data.city) }
+        if (data.province) { updateFields.push('province = $' + (updateValues.length + 1)); updateValues.push(data.province) }
+        break
+        
+      case 'distances':
+        // Handle distances separately as they're in a different table
+        if (data.distances && Array.isArray(data.distances) && data.distances.length > 0) {
+          // Delete existing distances
+          await pool.query('DELETE FROM event_distances WHERE event_id = $1', [id])
+          
+          // Insert new distances
+          for (const distance of data.distances) {
+            await pool.query(
+              'INSERT INTO event_distances (event_id, name, distance_km, price, min_age, entry_limit, start_time, free_for_seniors, free_for_disability, senior_age_threshold) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+              [
+                id, 
+                distance.name || '', 
+                distance.distance_km || 0, 
+                distance.price || 0,
+                distance.min_age || null,
+                distance.entry_limit || null,
+                distance.start_time || null,
+                distance.free_for_seniors || false,
+                distance.free_for_disability || false,
+                distance.senior_age_threshold || null
+              ]
+            )
+          }
+        }
+        break
+        
+      case 'merchandise':
+        // Handle merchandise separately as they're in different tables
+        if (data.merchandise && Array.isArray(data.merchandise)) {
+          // Delete existing merchandise and variations
+          await pool.query('DELETE FROM merchandise_variations WHERE merchandise_id IN (SELECT id FROM event_merchandise WHERE event_id = $1)', [id])
+          await pool.query('DELETE FROM event_merchandise WHERE event_id = $1', [id])
+          
+          // Insert new merchandise
+          for (const item of data.merchandise) {
+            const merchResult = await pool.query(
+              'INSERT INTO event_merchandise (event_id, name, description, price) VALUES ($1, $2, $3, $4) RETURNING id',
+              [id, item.name, item.description, item.base_price || item.price]
+            )
+            
+            const merchandiseId = merchResult.rows[0].id
+            
+            // Insert variations
+            if (item.variations && Array.isArray(item.variations)) {
+              for (const variation of item.variations) {
+                // Ensure variation_options is properly formatted as JSON
+                let variationOptions = variation.variation_options
+                if (typeof variationOptions === 'string') {
+                  try {
+                    variationOptions = JSON.parse(variationOptions)
+                  } catch (e) {
+                    // If it's not valid JSON, treat it as an array
+                    variationOptions = [variationOptions]
+                  }
+                } else if (!Array.isArray(variationOptions)) {
+                  variationOptions = []
+                }
+                
+                await pool.query(
+                  'INSERT INTO merchandise_variations (merchandise_id, variation_name, variation_options) VALUES ($1, $2, $3)',
+                  [merchandiseId, variation.variation_name, JSON.stringify(variationOptions)]
+                )
+              }
+            }
+          }
+        }
+        break
+    }
+    
+    // Update main event table if there are fields to update
+    if (updateFields.length > 0) {
+      updateQuery = `UPDATE events SET ${updateFields.join(', ')}, updated_at = NOW() WHERE id = $${updateValues.length + 1}`
+      updateValues.push(id)
+      
+      await pool.query(updateQuery, updateValues)
+    }
+    
+    // Create audit trail entry
+    await createAuditTrailEntry(
+      id,
+      'admin_edit_section',
+      adminId,
+      'admin',
+      `Admin updated ${section} section`,
+      {
+        section,
+        changes: data
+      }
+    )
+    
+    console.log(`✅ Admin successfully updated event ${id} ${section} section`)
+    
+    res.json({
+      success: true,
+      message: `${section} section updated successfully`,
+      data: {
+        eventId: id,
+        section,
+        updatedFields: updateFields
+      }
+    } as ApiResponse)
+    
+  } catch (error: any) {
+    console.error('❌ Admin update event section error:', error.message)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update event section'
+    } as ApiResponse)
+  }
+})
+
 // Helper function to get relative time
 function getTimeAgo(date: Date): string {
   const now = new Date()
