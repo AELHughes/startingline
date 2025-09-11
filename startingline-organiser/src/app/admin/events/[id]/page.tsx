@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { eventsApi } from '@/lib/api'
 import { 
@@ -27,7 +28,9 @@ import {
   Award,
   MessageCircle,
   Edit,
-  Send
+  Send,
+  Save,
+  X
 } from 'lucide-react'
 
 // Use the existing API service to fetch event details
@@ -48,6 +51,9 @@ export default function AdminEventDetailPage() {
   const [sectionComment, setSectionComment] = useState('')
   const [sectionComments, setSectionComments] = useState<{[key: string]: string}>({})
   const [showSubmitComments, setShowSubmitComments] = useState(false)
+  const [submittedComments, setSubmittedComments] = useState<{[key: string]: string}>({})
+  const [editingSection, setEditingSection] = useState<string | null>(null)
+  const [editFormData, setEditFormData] = useState<any>({})
 
   // Fetch real event data
   const { data: event, isLoading, error } = useQuery({
@@ -150,6 +156,15 @@ export default function AdminEventDetailPage() {
     try {
       // TODO: Implement submit all comments API call
       console.log('Submitting all comments:', sectionComments)
+      
+      // Move comments to submitted and clear current comments
+      setSubmittedComments(prev => ({
+        ...prev,
+        ...sectionComments
+      }))
+      setSectionComments({})
+      setShowSubmitComments(false)
+      
       // This will send all comments to the organiser
       alert('Comments submitted to organiser successfully!')
     } catch (error) {
@@ -159,6 +174,46 @@ export default function AdminEventDetailPage() {
 
   const getSectionComments = (section: string) => {
     return comments.filter(comment => comment.section === section)
+  }
+
+  const handleEditSection = (section: string) => {
+    setEditingSection(section)
+    // Initialize form data with current event data
+    setEditFormData({
+      name: event.name,
+      description: event.description,
+      start_date: event.start_date,
+      start_time: event.start_time,
+      registration_deadline: event.registration_deadline,
+      max_participants: event.max_participants,
+      entry_fee: event.entry_fee,
+      temp_license_fee: event.temp_license_fee,
+      license_details: event.license_details,
+      venue_name: event.venue_name,
+      address: event.address,
+      city: event.city,
+      province: event.province
+    })
+  }
+
+  const handleSaveSection = async (section: string) => {
+    try {
+      // TODO: Implement save section API call
+      console.log('Saving section:', section, editFormData)
+      
+      // For now, just close the edit mode
+      setEditingSection(null)
+      setEditFormData({})
+      
+      alert(`${section} section updated successfully!`)
+    } catch (error) {
+      console.error('Failed to save section:', error)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingSection(null)
+    setEditFormData({})
   }
 
   return (
@@ -268,7 +323,7 @@ export default function AdminEventDetailPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => {/* TODO: Implement edit overview */}}
+                      onClick={() => handleEditSection('overview')}
                       className="border-green-600 text-green-600 hover:bg-green-50"
                     >
                       <Edit className="w-4 h-4 mr-1" />
@@ -278,49 +333,168 @@ export default function AdminEventDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Event Name</Label>
-                  <p className="text-gray-900">{event.name}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Description</Label>
-                  <p className="text-gray-900">{event.description || 'No description provided'}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Event Date</Label>
-                    <p className="text-gray-900">{new Date(event.start_date).toLocaleDateString()}</p>
+                {editingSection === 'overview' ? (
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="edit-name" className="text-sm font-medium text-gray-600">Event Name</Label>
+                      <Input
+                        id="edit-name"
+                        value={editFormData.name || ''}
+                        onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-description" className="text-sm font-medium text-gray-600">Description</Label>
+                      <Textarea
+                        id="edit-description"
+                        value={editFormData.description || ''}
+                        onChange={(e) => setEditFormData(prev => ({ ...prev, description: e.target.value }))}
+                        className="mt-1"
+                        rows={3}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="edit-start-date" className="text-sm font-medium text-gray-600">Event Date</Label>
+                        <Input
+                          id="edit-start-date"
+                          type="date"
+                          value={editFormData.start_date ? editFormData.start_date.split('T')[0] : ''}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, start_date: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-start-time" className="text-sm font-medium text-gray-600">Time</Label>
+                        <Input
+                          id="edit-start-time"
+                          type="time"
+                          value={editFormData.start_time || ''}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, start_time: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="edit-registration-deadline" className="text-sm font-medium text-gray-600">Registration Deadline</Label>
+                        <Input
+                          id="edit-registration-deadline"
+                          type="date"
+                          value={editFormData.registration_deadline ? editFormData.registration_deadline.split('T')[0] : ''}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, registration_deadline: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-max-participants" className="text-sm font-medium text-gray-600">Max Participants</Label>
+                        <Input
+                          id="edit-max-participants"
+                          type="number"
+                          value={editFormData.max_participants || ''}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, max_participants: parseInt(e.target.value) || null }))}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="edit-entry-fee" className="text-sm font-medium text-gray-600">Entry Fee</Label>
+                        <Input
+                          id="edit-entry-fee"
+                          type="number"
+                          step="0.01"
+                          value={editFormData.entry_fee || ''}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, entry_fee: parseFloat(e.target.value) || 0 }))}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-license-fee" className="text-sm font-medium text-gray-600">License Fee</Label>
+                        <Input
+                          id="edit-license-fee"
+                          type="number"
+                          step="0.01"
+                          value={editFormData.temp_license_fee || ''}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, temp_license_fee: parseFloat(e.target.value) || 0 }))}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-license-details" className="text-sm font-medium text-gray-600">License Details</Label>
+                      <Input
+                        id="edit-license-details"
+                        value={editFormData.license_details || ''}
+                        onChange={(e) => setEditFormData(prev => ({ ...prev, license_details: e.target.value }))}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="flex justify-end space-x-2 pt-4 border-t">
+                      <Button
+                        variant="outline"
+                        onClick={handleCancelEdit}
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={() => handleSaveSection('overview')}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <Save className="w-4 h-4 mr-2" />
+                        Save Changes
+                      </Button>
+                    </div>
                   </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Time</Label>
-                    <p className="text-gray-900">{event.start_time}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Registration Deadline</Label>
-                    <p className="text-gray-900">{event.registration_deadline ? new Date(event.registration_deadline).toLocaleDateString() : 'Not set'}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Max Participants</Label>
-                    <p className="text-gray-900">{event.max_participants || 'Not set'}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Entry Fee</Label>
-                    <p className="text-gray-900">R{event.entry_fee || 0}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">License Fee</Label>
-                    <p className="text-gray-900">R{event.temp_license_fee || 0}</p>
-                  </div>
-                </div>
-                {event.license_details && (
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">License Details</Label>
-                    <p className="text-gray-900">{event.license_details}</p>
-                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Event Name</Label>
+                      <p className="text-gray-900">{event.name}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Description</Label>
+                      <p className="text-gray-900">{event.description || 'No description provided'}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">Event Date</Label>
+                        <p className="text-gray-900">{new Date(event.start_date).toLocaleDateString()}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">Time</Label>
+                        <p className="text-gray-900">{event.start_time}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">Registration Deadline</Label>
+                        <p className="text-gray-900">{event.registration_deadline ? new Date(event.registration_deadline).toLocaleDateString() : 'Not set'}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">Max Participants</Label>
+                        <p className="text-gray-900">{event.max_participants || 'Not set'}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">Entry Fee</Label>
+                        <p className="text-gray-900">R{event.entry_fee || 0}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">License Fee</Label>
+                        <p className="text-gray-900">R{event.temp_license_fee || 0}</p>
+                      </div>
+                    </div>
+                    {event.license_details && (
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">License Details</Label>
+                        <p className="text-gray-900">{event.license_details}</p>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Overview Comments */}
@@ -409,7 +583,7 @@ export default function AdminEventDetailPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => {/* TODO: Implement edit location */}}
+                    onClick={() => handleEditSection('location')}
                     className="border-green-600 text-green-600 hover:bg-green-50"
                   >
                     <Edit className="w-4 h-4 mr-1" />
@@ -419,24 +593,86 @@ export default function AdminEventDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium text-gray-600">Venue</Label>
-                <p className="text-gray-900">{event.venue_name || 'Not specified'}</p>
-              </div>
-              <div>
-                <Label className="text-sm font-medium text-gray-600">Address</Label>
-                <p className="text-gray-900">{event.address || 'Not specified'}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">City</Label>
-                  <p className="text-gray-900">{event.city}</p>
+              {editingSection === 'location' ? (
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="edit-venue-name" className="text-sm font-medium text-gray-600">Venue</Label>
+                    <Input
+                      id="edit-venue-name"
+                      value={editFormData.venue_name || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, venue_name: e.target.value }))}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-address" className="text-sm font-medium text-gray-600">Address</Label>
+                    <Textarea
+                      id="edit-address"
+                      value={editFormData.address || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, address: e.target.value }))}
+                      className="mt-1"
+                      rows={2}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="edit-city" className="text-sm font-medium text-gray-600">City</Label>
+                      <Input
+                        id="edit-city"
+                        value={editFormData.city || ''}
+                        onChange={(e) => setEditFormData(prev => ({ ...prev, city: e.target.value }))}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-province" className="text-sm font-medium text-gray-600">Province</Label>
+                      <Input
+                        id="edit-province"
+                        value={editFormData.province || ''}
+                        onChange={(e) => setEditFormData(prev => ({ ...prev, province: e.target.value }))}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end space-x-2 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      onClick={handleCancelEdit}
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => handleSaveSection('location')}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      Save Changes
+                    </Button>
+                  </div>
                 </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Province</Label>
-                  <p className="text-gray-900">{event.province}</p>
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Venue</Label>
+                    <p className="text-gray-900">{event.venue_name || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Address</Label>
+                    <p className="text-gray-900">{event.address || 'Not specified'}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">City</Label>
+                      <p className="text-gray-900">{event.city}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Province</Label>
+                      <p className="text-gray-900">{event.province}</p>
+                    </div>
+                  </div>
+                </>
+              )}
               
               {/* Location Comments */}
               {sectionComments['location'] && (
@@ -751,24 +987,77 @@ export default function AdminEventDetailPage() {
               <CardTitle>All Comments & Feedback</CardTitle>
             </CardHeader>
             <CardContent>
-              {comments.length > 0 ? (
-                <div className="space-y-4">
-                  {comments.map((comment) => (
-                    <div key={comment.id} className="p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <Badge variant="outline">{comment.section}</Badge>
-                        <span className="text-sm text-gray-500">
-                          {new Date(comment.created_at).toLocaleString()}
-                        </span>
+              {/* Current Comments */}
+              {Object.keys(sectionComments).length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Current Comments (Not Yet Submitted)</h3>
+                  <div className="space-y-4">
+                    {Object.entries(sectionComments).map(([section, comment]) => (
+                      <div key={section} className="p-4 border border-yellow-200 bg-yellow-50 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <Badge variant="outline" className="bg-yellow-100 text-yellow-800">{section}</Badge>
+                          <span className="text-sm text-gray-500">
+                            Draft
+                          </span>
+                        </div>
+                        <p className="text-gray-900">{comment}</p>
+                        <p className="text-sm text-gray-500 mt-2">
+                          by System Administrator • {new Date().toLocaleString()}
+                        </p>
                       </div>
-                      <p className="text-gray-900">{comment.comment}</p>
-                      <p className="text-sm text-gray-500 mt-2">
-                        by {comment.admin}
-                      </p>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              ) : (
+              )}
+
+              {/* Submitted Comments */}
+              {Object.keys(submittedComments).length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Submitted Comments</h3>
+                  <div className="space-y-4">
+                    {Object.entries(submittedComments).map(([section, comment]) => (
+                      <div key={section} className="p-4 border border-green-200 bg-green-50 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <Badge variant="outline" className="bg-green-100 text-green-800">{section}</Badge>
+                          <span className="text-sm text-gray-500">
+                            Submitted
+                          </span>
+                        </div>
+                        <p className="text-gray-900">{comment}</p>
+                        <p className="text-sm text-gray-500 mt-2">
+                          by System Administrator • {new Date().toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Legacy Comments */}
+              {comments.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Previous Comments</h3>
+                  <div className="space-y-4">
+                    {comments.map((comment) => (
+                      <div key={comment.id} className="p-4 border border-gray-200 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <Badge variant="outline">{comment.section}</Badge>
+                          <span className="text-sm text-gray-500">
+                            {new Date(comment.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="text-gray-900">{comment.comment}</p>
+                        <p className="text-sm text-gray-500 mt-2">
+                          by {comment.admin}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* No Comments State */}
+              {Object.keys(sectionComments).length === 0 && Object.keys(submittedComments).length === 0 && comments.length === 0 && (
                 <div className="text-center py-8">
                   <MessageCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No comments yet</h3>

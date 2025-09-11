@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,7 +11,6 @@ import { AlertCircle, Eye, EyeOff, Shield, ArrowLeft } from 'lucide-react'
 
 export default function AdminLoginPage() {
   const router = useRouter()
-  const { user, login, isLoading } = useAuth()
   
   const [formData, setFormData] = useState({
     email: '',
@@ -21,30 +19,8 @@ export default function AdminLoginPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-
-  // Cross-auth protection: Redirect if user is already logged in
-  useEffect(() => {
-    if (!isLoading && user) {
-      if (user.role === 'admin' || user.role === 'super_admin') {
-        router.push('/admin')
-      } else if (user.role === 'organiser') {
-        // Prevent organiser from accessing admin login
-        router.push('/dashboard')
-      } else {
-        // Unknown role, redirect to main login
-        router.push('/login')
-      }
-    }
-  }, [user, isLoading, router])
-
-  // Don't render if still loading or already authenticated
-  if (isLoading || user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-red-600"></div>
-      </div>
-    )
-  }
+  // Remove loading state for now to fix the blank page issue
+  // const [isLoading, setIsLoading] = useState(true)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,25 +28,41 @@ export default function AdminLoginPage() {
     setIsSubmitting(true)
 
     try {
-      await login(formData.email, formData.password)
-      
-      // After successful login, check if user is admin
-      const savedUser = localStorage.getItem('user')
-      if (savedUser) {
-        const userData = JSON.parse(savedUser)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed')
+      }
+
+      if (data.success && data.data) {
+        const { user: userData, token: userToken } = data.data
+        
+        // Check if user is admin
         if (userData.role === 'admin' || userData.role === 'super_admin') {
+          // Save to localStorage
+          localStorage.setItem('auth_token', userToken)
+          localStorage.setItem('user', JSON.stringify(userData))
+          localStorage.setItem('user_type', userData.role)
+          
+          // Redirect to admin dashboard
           router.push('/admin')
         } else {
           // Non-admin user trying to access admin portal
           setErrors({
             general: 'Access denied. Administrator privileges required.'
           })
-          // Clear auth and redirect
-          localStorage.removeItem('auth_token')
-          localStorage.removeItem('user')
-          localStorage.removeItem('user_type')
           return
         }
+      } else {
+        throw new Error('Invalid response format')
       }
     } catch (error: any) {
       let errorMessage = error.message || 'Login failed. Please try again.'

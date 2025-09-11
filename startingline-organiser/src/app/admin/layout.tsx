@@ -31,7 +31,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const handleLogout = async () => {
     try {
       await logout()
-      router.push('/admin/login')
+      router.push('/admin-login')
     } catch (error) {
       console.error('Logout failed:', error)
     }
@@ -40,7 +40,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   useEffect(() => {
     if (!isLoading) {
       if (!user) {
-        router.push('/admin/login')
+        router.push('/admin-login')
       } else if (user.role !== 'admin' && user.role !== 'super_admin') {
         if (user.role === 'organiser') {
           router.push('/dashboard')
