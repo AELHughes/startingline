@@ -1,54 +1,132 @@
 'use client'
 
-import React from 'react'
-import { useParams } from 'next/navigation'
-import { useEvent } from '@/hooks/use-events'
+import React, { useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ExternalLink, Calendar, MapPin, Users, Package, DollarSign, Eye } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { 
+  ArrowLeft, 
+  CheckCircle, 
+  XCircle, 
+  MessageSquare, 
+  Eye, 
+  MapPin, 
+  Calendar, 
+  Users, 
+  DollarSign,
+  Clock,
+  FileText,
+  Image,
+  ShoppingBag,
+  Award,
+  MessageCircle
+} from 'lucide-react'
 
-export default function AdminEventDetailsPage() {
+export default function AdminEventDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const eventId = params.id as string
-  const { data: event, isLoading, error } = useEvent(eventId)
+  
+  const [showAdminModal, setShowAdminModal] = useState(false)
+  const [adminAction, setAdminAction] = useState<'approve' | 'reject' | 'request_info'>('approve')
+  const [adminNote, setAdminNote] = useState('')
+  const [showCommentModal, setShowCommentModal] = useState(false)
+  const [selectedSection, setSelectedSection] = useState('')
+  const [sectionComment, setSectionComment] = useState('')
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
-  if (error || !event) {
-    return (
-      <div className="text-center py-12">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Event Not Found</h2>
-        <p className="text-gray-600">The event you're looking for doesn't exist or has been removed.</p>
-      </div>
-    )
-  }
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-ZA', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
-
-  const formatTime = (timeString: string) => {
-    const [hours, minutes] = timeString.split(':')
-    const time = new Date()
-    time.setHours(parseInt(hours), parseInt(minutes))
-    return time.toLocaleTimeString('en-ZA', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    })
+  // Mock data - replace with real API call
+  const event = {
+    id: eventId,
+    name: 'Long Run',
+    slug: 'long-run',
+    description: 'A challenging long-distance running event through the beautiful landscapes of Pretoria. This event is perfect for experienced runners looking for a new challenge.',
+    organiser_first_name: 'Adam',
+    organiser_last_name: 'Apple',
+    organiser_email: 'adam@example.com',
+    organiser_phone: '+27 82 123 4567',
+    status: 'pending_approval',
+    city: 'Pretoria',
+    province: 'Gauteng',
+    venue: 'Voortrekker Monument',
+    address: 'Voortrekker Monument, Eeufees Rd, Groenkloof, Pretoria, 0027',
+    event_date: '2024-03-15',
+    start_time: '06:00',
+    end_time: '12:00',
+    registration_deadline: '2024-03-10',
+    max_participants: 500,
+    current_participants: 0,
+    entry_fee: 250,
+    temp_license_fee: 50,
+    license_details: 'Temporary license required for all participants',
+    primary_image_url: '/images/events/long-run.jpg',
+    created_at: '2024-01-15T10:30:00Z',
+    updated_at: '2024-01-15T10:30:00Z',
+    
+    // Event details
+    distances: [
+      {
+        id: 1,
+        name: '42.2km Marathon',
+        distance: 42.2,
+        unit: 'km',
+        entry_fee: 350,
+        max_participants: 200,
+        current_participants: 0
+      },
+      {
+        id: 2,
+        name: '21.1km Half Marathon',
+        distance: 21.1,
+        unit: 'km',
+        entry_fee: 250,
+        max_participants: 300,
+        current_participants: 0
+      }
+    ],
+    
+    merchandise: [
+      {
+        id: 1,
+        name: 'Event T-Shirt',
+        description: 'High-quality technical running shirt',
+        price: 150,
+        variations: [
+          {
+            id: 1,
+            name: 'Size',
+            options: ['XS', 'S', 'M', 'L', 'XL', 'XXL']
+          },
+          {
+            id: 2,
+            name: 'Color',
+            options: ['Red', 'Blue', 'Black']
+          }
+        ]
+      },
+      {
+        id: 2,
+        name: 'Finisher Medal',
+        description: 'Custom designed finisher medal',
+        price: 80,
+        variations: []
+      }
+    ],
+    
+    // Comments/Feedback
+    comments: [
+      {
+        id: 1,
+        section: 'location',
+        comment: 'Please provide more specific directions to the venue',
+        admin: 'System Administrator',
+        created_at: '2024-01-15T11:00:00Z'
+      }
+    ]
   }
 
   const getStatusColor = (status: string) => {
@@ -66,324 +144,576 @@ export default function AdminEventDetailsPage() {
     }
   }
 
+  const handleAdminAction = (action: 'approve' | 'reject' | 'request_info') => {
+    setAdminAction(action)
+    setAdminNote('')
+    setShowAdminModal(true)
+  }
+
+  const handleSubmitAdminAction = async () => {
+    try {
+      // TODO: Implement admin action API call
+      console.log('Admin action:', adminAction, 'Note:', adminNote)
+      setShowAdminModal(false)
+    } catch (error) {
+      console.error('Failed to submit admin action:', error)
+    }
+  }
+
+  const handleAddComment = (section: string) => {
+    setSelectedSection(section)
+    setSectionComment('')
+    setShowCommentModal(true)
+  }
+
+  const handleSubmitComment = async () => {
+    try {
+      // TODO: Implement add comment API call
+      console.log('Adding comment for section:', selectedSection, 'Comment:', sectionComment)
+      setShowCommentModal(false)
+    } catch (error) {
+      console.error('Failed to add comment:', error)
+    }
+  }
+
+  const getSectionComments = (section: string) => {
+    return event.comments.filter(comment => comment.section === section)
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">{event.name}</h1>
-          <div className="flex items-center space-x-4 mt-2">
+      <div className="mb-8">
+        <div className="flex items-center space-x-4 mb-4">
+          <Button
+            variant="outline"
+            onClick={() => router.back()}
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold text-gray-900">{event.name}</h1>
+            <p className="text-gray-600">Event Details & Review</p>
+          </div>
+          <div className="flex items-center space-x-3">
             <Badge className={getStatusColor(event.status)}>
               {event.status.replace('_', ' ')}
             </Badge>
-            <Badge variant="outline">
-              {event.category?.replace('-', ' ')}
-            </Badge>
+            <Button
+              variant="outline"
+              onClick={() => window.open(`/events/${event.slug}`, '_blank')}
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              View Public Page
+            </Button>
           </div>
         </div>
-        
-        <div className="flex space-x-3">
-          {/* View Public Event Button - Always visible */}
-          <Button
-            variant="outline"
-            onClick={() => window.open(`/events/${event.slug || event.id}`, '_blank')}
-            className="flex items-center gap-2"
-          >
-            <ExternalLink className="h-4 w-4" />
-            View Public Event
-          </Button>
-          
-          <Button variant="outline">
-            Edit Event
-          </Button>
-          
-          {event.status === 'pending_approval' && (
-            <div className="flex space-x-2">
-              <Button variant="default">
-                Approve
-              </Button>
-              <Button variant="destructive">
-                Reject
-              </Button>
-            </div>
-          )}
-        </div>
+
+        {/* Admin Actions */}
+        {event.status === 'pending_approval' && (
+          <div className="flex space-x-3">
+            <Button
+              onClick={() => handleAdminAction('approve')}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Approve Event
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleAdminAction('request_info')}
+              className="border-blue-600 text-blue-600 hover:bg-blue-50"
+            >
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Request Information
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleAdminAction('reject')}
+              className="border-red-600 text-red-600 hover:bg-red-50"
+            >
+              <XCircle className="w-4 h-4 mr-2" />
+              Reject Event
+            </Button>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Event Image */}
-          {event.primary_image_url && (
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="location">Location</TabsTrigger>
+          <TabsTrigger value="distances">Distances</TabsTrigger>
+          <TabsTrigger value="merchandise">Merchandise</TabsTrigger>
+          <TabsTrigger value="organiser">Organiser</TabsTrigger>
+          <TabsTrigger value="comments">Comments</TabsTrigger>
+        </TabsList>
+
+        {/* Overview Tab */}
+        <TabsContent value="overview">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
-              <CardContent className="p-0">
-                <img
-                  src={event.primary_image_url}
-                  alt={event.name}
-                  className="w-full h-64 object-cover rounded-t-lg"
-                />
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Event Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Event Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  Event Information
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAddComment('overview')}
+                  >
+                    <MessageCircle className="w-4 h-4 mr-1" />
+                    Comment
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2 flex items-center">
-                    <Calendar className="h-4 w-4 mr-2" />
-                    Date & Time
-                  </h4>
-                  <div className="text-gray-600">
-                    <div>{formatDate(event.start_date)}</div>
-                    <div>{formatTime(event.start_time)}</div>
-                  </div>
+                  <Label className="text-sm font-medium text-gray-600">Event Name</Label>
+                  <p className="text-gray-900">{event.name}</p>
                 </div>
-
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2 flex items-center">
-                    <MapPin className="h-4 w-4 mr-2" />
-                    Location
-                  </h4>
-                  <div className="text-gray-600">
-                    {event.venue_name && <div>{event.venue_name}</div>}
-                    <div>{event.address}</div>
-                    <div>{event.city}, {event.province}</div>
-                  </div>
+                  <Label className="text-sm font-medium text-gray-600">Description</Label>
+                  <p className="text-gray-900">{event.description}</p>
                 </div>
-
-                {event.organiser_name && (
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Organiser</h4>
-                    <div className="text-gray-600">{event.organiser_name}</div>
+                    <Label className="text-sm font-medium text-gray-600">Event Date</Label>
+                    <p className="text-gray-900">{new Date(event.event_date).toLocaleDateString()}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Time</Label>
+                    <p className="text-gray-900">{event.start_time} - {event.end_time}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Registration Deadline</Label>
+                    <p className="text-gray-900">{new Date(event.registration_deadline).toLocaleDateString()}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Max Participants</Label>
+                    <p className="text-gray-900">{event.max_participants}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Entry Fee</Label>
+                    <p className="text-gray-900">R{event.entry_fee}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">License Fee</Label>
+                    <p className="text-gray-900">R{event.temp_license_fee}</p>
+                  </div>
+                </div>
+                {event.license_details && (
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">License Details</Label>
+                    <p className="text-gray-900">{event.license_details}</p>
                   </div>
                 )}
+              </CardContent>
+            </Card>
 
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Category</h4>
-                  <div className="text-gray-600">{event.category?.replace('-', ' ')}</div>
-                </div>
-              </div>
-
-              {event.description && (
-                <div className="mt-6">
-                  <h4 className="font-medium text-gray-900 mb-2">Description</h4>
-                  <div className="text-gray-600 whitespace-pre-wrap">{event.description}</div>
-                </div>
-              )}
-
-              {event.license_required && (
-                <div className="mt-6">
-                  <h4 className="font-medium text-gray-900 mb-2">Licensing</h4>
-                  <div className="text-gray-600">
-                    <div className="flex items-center mb-2">
-                      <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm">
-                        Temporary license required
-                      </span>
-                    </div>
-                    {event.temp_license_fee && event.temp_license_fee > 0 && (
-                      <div>License fee: R{event.temp_license_fee.toFixed(2)}</div>
-                    )}
-                    {event.license_details && (
-                      <div className="mt-2">{event.license_details}</div>
-                    )}
+            <Card>
+              <CardHeader>
+                <CardTitle>Event Image</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {event.primary_image_url ? (
+                  <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden">
+                    <img
+                      src={event.primary_image_url}
+                      alt={event.name}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Distances */}
-          {event.distances && event.distances.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Users className="h-5 w-5 mr-2" />
-                  Event Distances ({event.distances.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {event.distances.map((distance) => (
-                    <div key={distance.id} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-medium">{distance.name}</h4>
-                        <span className="text-lg font-bold text-blue-600">
-                          R{distance.price.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                        <div>
-                          <span className="font-medium">Distance:</span> {distance.distance_km}km
-                        </div>
-                        {distance.min_age && (
-                          <div>
-                            <span className="font-medium">Min Age:</span> {distance.min_age}
-                          </div>
-                        )}
-                        {distance.entry_limit && (
-                          <div>
-                            <span className="font-medium">Limit:</span> {distance.entry_limit}
-                          </div>
-                        )}
-                        {distance.start_time && (
-                          <div>
-                            <span className="font-medium">Start:</span> {formatTime(distance.start_time)}
-                          </div>
-                        )}
-                      </div>
-                      {(distance.free_for_seniors || distance.free_for_disability) && (
-                        <div className="mt-2 flex space-x-2">
-                          {distance.free_for_seniors && (
-                            <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">
-                              Free for seniors ({distance.senior_age_threshold || 65}+)
-                            </span>
-                          )}
-                          {distance.free_for_disability && (
-                            <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">
-                              Free for disability
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                ) : (
+                  <div className="aspect-video bg-gray-200 rounded-lg flex items-center justify-center">
+                    <Image className="w-12 h-12 text-gray-400" />
+                  </div>
+                )}
               </CardContent>
             </Card>
-          )}
+          </div>
+        </TabsContent>
 
-          {/* Merchandise */}
-          {event.merchandise && event.merchandise.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Package className="h-5 w-5 mr-2" />
-                  Event Merchandise ({event.merchandise.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {event.merchandise.map((merch) => (
-                    <div key={merch.id} className="border rounded-lg p-4">
-                      <div className="flex space-x-4">
-                        {merch.image_url && (
-                          <img
-                            src={merch.image_url}
-                            alt={merch.name}
-                            className="w-16 h-16 object-cover rounded-lg"
-                          />
-                        )}
-                        <div className="flex-1">
-                          <div className="flex justify-between items-start mb-2">
-                            <h4 className="font-medium">{merch.name}</h4>
-                            <span className="text-lg font-bold text-blue-600">
-                              R{merch.price.toFixed(2)}
-                            </span>
-                          </div>
-                          {merch.description && (
-                            <p className="text-gray-600 text-sm mb-2">{merch.description}</p>
-                          )}
-                          {merch.variations && merch.variations.length > 0 && (
-                            <div className="space-y-1">
-                              {merch.variations.map((variation) => (
-                                <div key={variation.id} className="text-xs">
-                                  <span className="font-medium">{variation.variation_name}:</span>{' '}
-                                  {variation.variation_options.join(', ')}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Quick Actions */}
+        {/* Location Tab */}
+        <TabsContent value="location">
           <Card>
             <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button variant="outline" className="w-full justify-start">
-                <Eye className="h-4 w-4 mr-2" />
-                Preview Event
-              </Button>
-              <Button variant="outline" className="w-full justify-start">
-                <Users className="h-4 w-4 mr-2" />
-                View Registrations
-              </Button>
-              <Button variant="outline" className="w-full justify-start">
-                <DollarSign className="h-4 w-4 mr-2" />
-                View Payments
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Event Stats */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Event Statistics</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                Location Details
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleAddComment('location')}
+                >
+                  <MessageCircle className="w-4 h-4 mr-1" />
+                  Comment
+                </Button>
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Status</span>
-                <Badge className={getStatusColor(event.status)}>
-                  {event.status.replace('_', ' ')}
-                </Badge>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Distances</span>
-                <span className="font-medium">{event.distances?.length || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Merchandise</span>
-                <span className="font-medium">{event.merchandise?.length || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Created</span>
-                <span className="font-medium">
-                  {new Date(event.created_at).toLocaleDateString()}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Event ID Info */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Technical Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
               <div>
-                <span className="text-gray-600 text-sm">Event ID:</span>
-                <div className="font-mono text-xs bg-gray-100 p-2 rounded mt-1 break-all">
-                  {event.id}
+                <Label className="text-sm font-medium text-gray-600">Venue</Label>
+                <p className="text-gray-900">{event.venue}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-600">Address</Label>
+                <p className="text-gray-900">{event.address}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">City</Label>
+                  <p className="text-gray-900">{event.city}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Province</Label>
+                  <p className="text-gray-900">{event.province}</p>
                 </div>
               </div>
-              {event.slug && (
-                <div>
-                  <span className="text-gray-600 text-sm">Slug:</span>
-                  <div className="font-mono text-xs bg-gray-100 p-2 rounded mt-1">
-                    {event.slug}
+              
+              {/* Location Comments */}
+              {getSectionComments('location').length > 0 && (
+                <div className="mt-6">
+                  <Label className="text-sm font-medium text-gray-600">Comments</Label>
+                  <div className="space-y-2">
+                    {getSectionComments('location').map((comment) => (
+                      <div key={comment.id} className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-gray-900">{comment.comment}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          by {comment.admin} • {new Date(comment.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
             </CardContent>
           </Card>
-        </div>
-      </div>
+        </TabsContent>
+
+        {/* Distances Tab */}
+        <TabsContent value="distances">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                Event Distances
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleAddComment('distances')}
+                >
+                  <MessageCircle className="w-4 h-4 mr-1" />
+                  Comment
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {event.distances.map((distance) => (
+                  <div key={distance.id} className="p-4 border border-gray-200 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-semibold text-gray-900">{distance.name}</h4>
+                      <Badge variant="outline">{distance.distance} {distance.unit}</Badge>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <Label className="text-gray-600">Entry Fee</Label>
+                        <p className="font-medium">R{distance.entry_fee}</p>
+                      </div>
+                      <div>
+                        <Label className="text-gray-600">Max Participants</Label>
+                        <p className="font-medium">{distance.max_participants}</p>
+                      </div>
+                      <div>
+                        <Label className="text-gray-600">Current</Label>
+                        <p className="font-medium">{distance.current_participants}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Distance Comments */}
+              {getSectionComments('distances').length > 0 && (
+                <div className="mt-6">
+                  <Label className="text-sm font-medium text-gray-600">Comments</Label>
+                  <div className="space-y-2">
+                    {getSectionComments('distances').map((comment) => (
+                      <div key={comment.id} className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-gray-900">{comment.comment}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          by {comment.admin} • {new Date(comment.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Merchandise Tab */}
+        <TabsContent value="merchandise">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                Event Merchandise
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleAddComment('merchandise')}
+                >
+                  <MessageCircle className="w-4 h-4 mr-1" />
+                  Comment
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {event.merchandise.map((item) => (
+                  <div key={item.id} className="p-4 border border-gray-200 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-semibold text-gray-900">{item.name}</h4>
+                      <Badge variant="outline">R{item.price}</Badge>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-3">{item.description}</p>
+                    {item.variations.length > 0 && (
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">Variations</Label>
+                        <div className="space-y-2 mt-1">
+                          {item.variations.map((variation) => (
+                            <div key={variation.id} className="text-sm">
+                              <span className="font-medium">{variation.name}:</span>
+                              <span className="ml-2 text-gray-600">
+                                {variation.options.join(', ')}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Merchandise Comments */}
+              {getSectionComments('merchandise').length > 0 && (
+                <div className="mt-6">
+                  <Label className="text-sm font-medium text-gray-600">Comments</Label>
+                  <div className="space-y-2">
+                    {getSectionComments('merchandise').map((comment) => (
+                      <div key={comment.id} className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-gray-900">{comment.comment}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          by {comment.admin} • {new Date(comment.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Organiser Tab */}
+        <TabsContent value="organiser">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                Organiser Information
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleAddComment('organiser')}
+                >
+                  <MessageCircle className="w-4 h-4 mr-1" />
+                  Comment
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Name</Label>
+                  <p className="text-gray-900">{event.organiser_first_name} {event.organiser_last_name}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Email</Label>
+                  <p className="text-gray-900">{event.organiser_email}</p>
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-600">Phone</Label>
+                <p className="text-gray-900">{event.organiser_phone}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Created</Label>
+                  <p className="text-gray-900">{new Date(event.created_at).toLocaleString()}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Last Updated</Label>
+                  <p className="text-gray-900">{new Date(event.updated_at).toLocaleString()}</p>
+                </div>
+              </div>
+              
+              {/* Organiser Comments */}
+              {getSectionComments('organiser').length > 0 && (
+                <div className="mt-6">
+                  <Label className="text-sm font-medium text-gray-600">Comments</Label>
+                  <div className="space-y-2">
+                    {getSectionComments('organiser').map((comment) => (
+                      <div key={comment.id} className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-gray-900">{comment.comment}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          by {comment.admin} • {new Date(comment.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Comments Tab */}
+        <TabsContent value="comments">
+          <Card>
+            <CardHeader>
+              <CardTitle>All Comments & Feedback</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {event.comments.length > 0 ? (
+                <div className="space-y-4">
+                  {event.comments.map((comment) => (
+                    <div key={comment.id} className="p-4 border border-gray-200 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <Badge variant="outline">{comment.section}</Badge>
+                        <span className="text-sm text-gray-500">
+                          {new Date(comment.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-gray-900">{comment.comment}</p>
+                      <p className="text-sm text-gray-500 mt-2">
+                        by {comment.admin}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <MessageCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No comments yet</h3>
+                  <p className="text-gray-600">Add comments to specific sections to provide feedback to the organiser.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Admin Action Modal */}
+      <Dialog open={showAdminModal} onOpenChange={setShowAdminModal}>
+        <DialogContent className="sm:max-w-[525px]">
+          <DialogHeader>
+            <DialogTitle>
+              {adminAction === 'approve' ? 'Approve Event' : 
+               adminAction === 'reject' ? 'Reject Event' : 
+               'Request Information'}
+            </DialogTitle>
+            <DialogDescription>
+              {adminAction === 'approve' ? 'This event will be published and visible to the public.' :
+               adminAction === 'reject' ? 'This event will be cancelled and the organiser will be notified.' :
+               'Send a message to the organiser requesting more information or changes.'}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="adminNote">
+                {adminAction === 'request_info' ? 'Message to Organiser' : 'Admin Note (Optional)'}
+              </Label>
+              <Textarea
+                id="adminNote"
+                placeholder={
+                  adminAction === 'request_info' 
+                    ? 'Please provide more details about...'
+                    : 'Add any notes about this action...'
+                }
+                value={adminNote}
+                onChange={(e) => setAdminNote(e.target.value)}
+                rows={4}
+              />
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowAdminModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSubmitAdminAction}
+                className={
+                  adminAction === 'approve' 
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : adminAction === 'reject'
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }
+              >
+                {adminAction === 'approve' ? 'Approve Event' : 
+                 adminAction === 'reject' ? 'Reject Event' : 
+                 'Send Request'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Comment Modal */}
+      <Dialog open={showCommentModal} onOpenChange={setShowCommentModal}>
+        <DialogContent className="sm:max-w-[525px]">
+          <DialogHeader>
+            <DialogTitle>Add Comment for {selectedSection}</DialogTitle>
+            <DialogDescription>
+              Provide feedback on the {selectedSection} section of this event.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="sectionComment">Comment</Label>
+              <Textarea
+                id="sectionComment"
+                placeholder="Add your feedback or questions about this section..."
+                value={sectionComment}
+                onChange={(e) => setSectionComment(e.target.value)}
+                rows={4}
+              />
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowCommentModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSubmitComment}>
+                Add Comment
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
