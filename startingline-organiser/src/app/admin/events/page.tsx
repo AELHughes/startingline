@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useAllEventsAdmin, useUpdateEventStatusAdmin } from '@/hooks/use-events'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { CheckCircle, XCircle, MessageSquare, Eye } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { CheckCircle, XCircle, MessageSquare, Eye, Search, Filter, SortAsc, SortDesc } from 'lucide-react'
 
 export default function AdminEventsPage() {
   const { data: events = [], isLoading: eventsLoading } = useAllEventsAdmin()
@@ -19,6 +21,13 @@ export default function AdminEventsPage() {
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [adminAction, setAdminAction] = useState<'approve' | 'reject' | 'request_info'>('approve')
   const [adminNote, setAdminNote] = useState('')
+  
+  // Filter and sort state
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [organiserFilter, setOrganiserFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('recent')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -99,11 +108,167 @@ export default function AdminEventsPage() {
     }
   }
 
+  // Get unique organisers for filter
+  const organisers = useMemo(() => {
+    const uniqueOrganisers = new Set()
+    events.forEach(event => {
+      if (event.organiser_first_name && event.organiser_last_name) {
+        uniqueOrganisers.add(`${event.organiser_first_name} ${event.organiser_last_name}`)
+      }
+    })
+    return Array.from(uniqueOrganisers).sort()
+  }, [events])
+
+  // Filter and sort events
+  const filteredAndSortedEvents = useMemo(() => {
+    let filtered = events.filter(event => {
+      // Search filter
+      const matchesSearch = !searchTerm || 
+        event.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (event.organiser_first_name && event.organiser_first_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (event.organiser_last_name && event.organiser_last_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        event.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        event.province.toLowerCase().includes(searchTerm.toLowerCase())
+
+      // Status filter
+      const matchesStatus = statusFilter === 'all' || event.status === statusFilter
+
+      // Organiser filter
+      const organiserName = event.organiser_first_name && event.organiser_last_name 
+        ? `${event.organiser_first_name} ${event.organiser_last_name}`
+        : ''
+      const matchesOrganiser = organiserFilter === 'all' || organiserName === organiserFilter
+
+      return matchesSearch && matchesStatus && matchesOrganiser
+    })
+
+    // Sort events
+    filtered.sort((a, b) => {
+      let comparison = 0
+
+      switch (sortBy) {
+        case 'recent':
+          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          break
+        case 'event_date':
+          comparison = new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+          break
+        case 'name':
+          comparison = a.name.localeCompare(b.name)
+          break
+        case 'organiser':
+          const aOrganiser = a.organiser_first_name && a.organiser_last_name 
+            ? `${a.organiser_first_name} ${a.organiser_last_name}`
+            : ''
+          const bOrganiser = b.organiser_first_name && b.organiser_last_name 
+            ? `${b.organiser_first_name} ${b.organiser_last_name}`
+            : ''
+          comparison = aOrganiser.localeCompare(bOrganiser)
+          break
+        case 'status':
+          comparison = a.status.localeCompare(b.status)
+          break
+        default:
+          comparison = 0
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison
+    })
+
+    return filtered
+  }, [events, searchTerm, statusFilter, organiserFilter, sortBy, sortOrder])
+
+  const handleSortChange = (newSortBy: string) => {
+    if (sortBy === newSortBy) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(newSortBy)
+      setSortOrder('desc')
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Event Management</h1>
         <p className="text-gray-600">Manage all platform events</p>
+      </div>
+
+      {/* Filters and Search */}
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Search */}
+          <div className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Input
+                placeholder="Search events, organisers, or locations..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
+
+          {/* Status Filter */}
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full lg:w-48">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="pending_approval">Pending Approval</SelectItem>
+              <SelectItem value="published">Published</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Organiser Filter */}
+          <Select value={organiserFilter} onValueChange={setOrganiserFilter}>
+            <SelectTrigger className="w-full lg:w-48">
+              <SelectValue placeholder="Filter by organiser" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Organisers</SelectItem>
+              {organisers.map((organiser) => (
+                <SelectItem key={organiser} value={organiser}>
+                  {organiser}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Sort Options */}
+        <div className="flex flex-wrap gap-2">
+          <span className="text-sm text-gray-600 flex items-center">Sort by:</span>
+          {[
+            { key: 'recent', label: 'Recent Submission' },
+            { key: 'event_date', label: 'Event Date' },
+            { key: 'name', label: 'Event Name' },
+            { key: 'organiser', label: 'Organiser' },
+            { key: 'status', label: 'Status' }
+          ].map((option) => (
+            <Button
+              key={option.key}
+              variant={sortBy === option.key ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => handleSortChange(option.key)}
+              className="flex items-center gap-1"
+            >
+              {option.label}
+              {sortBy === option.key && (
+                sortOrder === 'asc' ? <SortAsc className="w-3 h-3" /> : <SortDesc className="w-3 h-3" />
+              )}
+            </Button>
+          ))}
+        </div>
+
+        {/* Results Count */}
+        <div className="text-sm text-gray-600">
+          Showing {filteredAndSortedEvents.length} of {events.length} events
+        </div>
       </div>
 
       {eventsLoading && (
@@ -121,9 +286,18 @@ export default function AdminEventsPage() {
         </Card>
       )}
 
-      {!eventsLoading && events.length > 0 && (
+      {!eventsLoading && events.length > 0 && filteredAndSortedEvents.length === 0 && (
+        <Card>
+          <CardContent className="text-center py-12">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No events match your filters</h3>
+            <p className="text-gray-600">Try adjusting your search criteria or filters.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!eventsLoading && filteredAndSortedEvents.length > 0 && (
         <div className="space-y-4">
-          {events.map((event) => (
+          {filteredAndSortedEvents.map((event) => (
             <Card key={event.id} className="hover:shadow-lg transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
@@ -173,17 +347,29 @@ export default function AdminEventsPage() {
                       </div>
                     )}
                     
-                    {event.status === 'published' && (
+                    <div className="flex space-x-2">
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => window.open(`/events/${event.slug}`, '_blank')}
-                        className="border-gray-600 text-gray-600 hover:bg-gray-50"
+                        onClick={() => window.open(`/admin/events/${event.id}`, '_blank')}
+                        className="border-blue-600 text-blue-600 hover:bg-blue-50"
                       >
                         <Eye className="w-4 h-4 mr-1" />
-                        View Public
+                        View Details
                       </Button>
-                    )}
+                      
+                      {event.status === 'published' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => window.open(`/events/${event.slug || event.id}`, '_blank')}
+                          className="border-gray-600 text-gray-600 hover:bg-gray-50"
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          View Public
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </CardContent>
