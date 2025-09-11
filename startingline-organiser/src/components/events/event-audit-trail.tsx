@@ -70,7 +70,7 @@ export default function EventAuditTrail({ eventId, className = '' }: EventAuditT
   const [auditTrail, setAuditTrail] = useState<AuditTrailEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(true)
 
   useEffect(() => {
     fetchAuditTrail()

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Calendar, MapPin, Users, DollarSign, Plus, Search, Filter, Eye, Edit } from 'lucide-react'
+import { Calendar, MapPin, Users, DollarSign, Plus, Search, Filter, Eye, Edit, History } from 'lucide-react'
 
 const STATUS_COLORS = {
   draft: 'bg-gray-100 text-gray-800',
@@ -212,6 +212,15 @@ export default function EventsPage() {
                     >
                       <Eye className="h-4 w-4" />
                       View
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push(`/dashboard/events/${event.id}/history`)}
+                      className="flex items-center gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
+                    >
+                      <History className="h-4 w-4" />
+                      History
                     </Button>
                     <Button
                       variant="outline"

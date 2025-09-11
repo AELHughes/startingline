@@ -7,10 +7,9 @@ import { eventsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Save, Send, AlertCircle, CheckCircle, Edit } from 'lucide-react'
+import { ArrowLeft, Save, Send, AlertCircle, CheckCircle, Edit, History } from 'lucide-react'
 import EventCreateForm from '@/components/events/event-create-form'
 import ChangeRequestModal from '@/components/events/change-request-modal'
-import EventAuditTrail from '@/components/events/event-audit-trail'
 
 interface Event {
   id: string
@@ -229,6 +228,15 @@ export default function EventEditPage() {
             </div>
             <div className="flex items-center space-x-3">
               {getStatusBadge(event.status)}
+              <Button
+                onClick={() => router.push(`/dashboard/events/${event.id}/history`)}
+                variant="outline"
+                size="sm"
+                className="text-blue-600 border-blue-200 hover:bg-blue-50"
+              >
+                <History className="h-4 w-4 mr-2" />
+                View History
+              </Button>
               {event.status === 'draft' && (
                 <Button
                   onClick={handleSubmitForApproval}
@@ -275,9 +283,6 @@ export default function EventEditPage() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Event Audit Trail */}
-        <EventAuditTrail eventId={event.id} className="mb-6" />
 
         {/* Event Edit Form or Change Request */}
         {event.status === 'draft' ? (
