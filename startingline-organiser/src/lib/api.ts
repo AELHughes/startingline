@@ -290,6 +290,24 @@ export const eventsApi = {
     }
   },
 
+  // Get event by ID
+  getEventById: async (eventId: string): Promise<Event> => {
+    try {
+      console.log('🔍 Fetching event by ID:', eventId)
+      
+      const response = await fetch(`${API_BASE}/api/events/${eventId}`, {
+        headers: getAuthHeaders()
+      })
+
+      const event = await handleApiResponse<Event>(response)
+      console.log('✅ Retrieved event:', event.name)
+      return event
+    } catch (error) {
+      console.error('❌ Get event by ID error:', error)
+      throw error
+    }
+  },
+
   // Create event
   createEvent: async (eventData: CreateEventData): Promise<Event> => {
     try {

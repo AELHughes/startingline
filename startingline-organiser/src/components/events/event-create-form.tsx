@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useCreateEvent } from '@/hooks/use-events'
+import { useCreateEvent, useUpdateEvent } from '@/hooks/use-events'
 import { storageApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -93,9 +93,22 @@ const PROVINCES = [
   'Western Cape'
 ]
 
-export default function EventCreateForm() {
+interface EventCreateFormProps {
+  initialData?: any
+  isEditing?: boolean
+  eventId?: string
+  canEdit?: boolean
+}
+
+export default function EventCreateForm({ 
+  initialData, 
+  isEditing = false, 
+  eventId,
+  canEdit = true 
+}: EventCreateFormProps = {}) {
   const router = useRouter()
   const createEventMutation = useCreateEvent()
+  const updateEventMutation = useUpdateEvent()
 
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -121,6 +134,42 @@ export default function EventCreateForm() {
   const [uploading, setUploading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [activeTab, setActiveTab] = useState('basic')
+
+  // Populate form with initial data when editing
+  useEffect(() => {
+    if (initialData && isEditing) {
+      console.log('🔄 Populating form with initial data:', initialData)
+      setFormData({
+        name: initialData.name || '',
+        category: initialData.category || '',
+        event_type: initialData.event_type || 'single',
+        start_date: initialData.start_date || '',
+        end_date: initialData.end_date || '',
+        start_time: initialData.start_time || '',
+        description: initialData.description || '',
+        venue_name: initialData.venue_name || '',
+        address: initialData.address || '',
+        city: initialData.city || '',
+        province: initialData.province || '',
+        country: initialData.country || 'South Africa',
+        latitude: initialData.latitude || null,
+        longitude: initialData.longitude || null,
+        license_required: initialData.license_required || false,
+        temp_license_fee: initialData.temp_license_fee || '',
+        license_details: initialData.license_details || '',
+        primary_image_url: initialData.primary_image_url || '',
+        gallery_images: initialData.gallery_images || [],
+        distances: initialData.distances || [],
+        merchandise: (initialData.merchandise || []).map((merch: any) => ({
+          ...merch,
+          variations: (merch.variations || []).map((variation: any) => ({
+            ...variation,
+            options: variation.options || []
+          }))
+        }))
+      })
+    }
+  }, [initialData, isEditing])
 
   // Tab completion checking functions
   const isBasicInfoComplete = (): boolean => {
@@ -234,13 +283,13 @@ export default function EventCreateForm() {
 
     try {
       console.log('🔍 Submitting event data:', formData)
-      console.log('🔍 Event ID:', undefined)
-      console.log('🔍 Is editing:', false)
+      console.log('🔍 Event ID:', eventId)
+      console.log('🔍 Is editing:', isEditing)
 
       const eventData = {
         ...formData,
-        // Events are created pending approval by admin
-        status: 'pending_approval',
+        // Events are created as drafts that organisers can edit freely
+        status: isEditing ? undefined : 'draft', // Don't override status when editing
         // Map venue_name to venue for backend compatibility
         venue: formData.venue_name,
         // Map primary_image_url to image_url for backend compatibility  
@@ -260,13 +309,21 @@ export default function EventCreateForm() {
       console.log('🚀 Transformed event data for backend:', eventData)
       console.log('📦 Merchandise with variations:', eventData.merchandise)
 
-      const createdEvent = await createEventMutation.mutateAsync(eventData)
-
-      // Success - redirect to the created event's details page
-      if (createdEvent?.slug) {
-        router.push(`/events/${createdEvent.slug}`)
+      let result
+      if (isEditing && eventId) {
+        result = await updateEventMutation.mutateAsync({ eventId, eventData })
+        console.log('✅ Event updated successfully')
       } else {
-        // Fallback to dashboard if no slug available
+        result = await createEventMutation.mutateAsync(eventData)
+        console.log('✅ Event created successfully')
+      }
+
+      // Success - redirect appropriately
+      if (isEditing) {
+        router.push('/dashboard/events')
+      } else if (result?.slug) {
+        router.push(`/events/${result.slug}`)
+      } else {
         router.push('/dashboard')
       }
     } catch (error: any) {
@@ -539,23 +596,34 @@ export default function EventCreateForm() {
     <div className="container mx-auto px-4 py-6 max-w-4xl">
       <div className="mb-6 flex justify-between items-start">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Create New Event</h1>
-          <p className="text-gray-600 mt-2">Fill in the details to create your event</p>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {isEditing ? 'Edit Event' : 'Create New Event'}
+          </h1>
+          <p className="text-gray-600 mt-2">
+            {isEditing ? 'Update your event details' : 'Fill in the details to create your event'}
+          </p>
         </div>
         
-        {/* Create Event Button - Top Right */}
+        {/* Submit Button - Top Right */}
         <Button
           type="submit"
           form="event-form"
-          disabled={createEventMutation.isPending || uploading || !isBasicInfoComplete() || !isLocationComplete() || !isDistancesComplete()}
+          disabled={
+            !canEdit ||
+            (isEditing ? updateEventMutation.isPending : createEventMutation.isPending) || 
+            uploading || 
+            !isBasicInfoComplete() || 
+            !isLocationComplete() || 
+            !isDistancesComplete()
+          }
           className="min-w-32"
         >
-          {createEventMutation.isPending ? (
-            'Creating...'
+          {(isEditing ? updateEventMutation.isPending : createEventMutation.isPending) ? (
+            isEditing ? 'Updating...' : 'Creating...'
           ) : (
             <>
               <Check className="h-4 w-4 mr-2" />
-              Create Event
+              {isEditing ? 'Update Event' : 'Create Event'}
             </>
           )}
         </Button>
@@ -1233,7 +1301,7 @@ export default function EventCreateForm() {
 
                                 <div className="space-y-2">
                                   <Label className="text-sm">Options</Label>
-                                  {variation.options.map((option, optionIndex) => (
+                                  {(variation.options || []).map((option, optionIndex) => (
                                     <div key={optionIndex} className="flex items-center gap-2">
                                       <Input
                                         value={option}
