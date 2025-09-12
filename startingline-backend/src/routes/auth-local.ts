@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
 import rateLimit from 'express-rate-limit'
+import { authenticateToken } from '../middleware/auth-local'
 import { 
   createUser, 
   authenticateUser, 
@@ -206,9 +207,14 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password }: LoginData = req.body
     console.log('🔍 Login attempt for:', email)
+    console.log('🔍 Password length:', password ? password.length : 'undefined')
+    console.log('🔍 Request body keys:', Object.keys(req.body))
 
     // Validate input
     if (!email || !password) {
+      console.log('❌ Missing email or password')
+      console.log('🔍 Email provided:', !!email)
+      console.log('🔍 Password provided:', !!password)
       return res.status(400).json({
         success: false,
         error: 'Email and password are required'
@@ -216,17 +222,23 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
     }
 
     if (!validateEmail(email)) {
+      console.log('❌ Invalid email format:', email)
       return res.status(400).json({
         success: false,
         error: 'Valid email address is required'
       } as ApiResponse)
     }
 
+    console.log('🔍 About to call authenticateUser with:', { email, passwordLength: password.length })
+    
     // Authenticate user
     const user = await authenticateUser(email, password)
+    console.log('🔍 authenticateUser returned:', user ? 'User found' : 'No user')
+    console.log('🔍 User details:', user ? { id: user.id, email: user.email, role: user.role } : 'null')
     
     // Generate JWT token
     const token = generateJWT(user)
+    console.log('🔍 JWT token generated, length:', token.length)
 
     console.log('✅ User logged in successfully:', user.email, '(Role:', user.role, ')')
 
@@ -240,6 +252,8 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error('❌ Login error:', error.message)
+    console.error('❌ Error stack:', error.stack)
+    console.error('❌ Full error object:', error)
     
     // Return generic error for security
     res.status(401).json({
@@ -363,16 +377,35 @@ router.put('/profile', async (req: Request, res: Response) => {
 /**
  * Logout user (client-side token invalidation)
  */
-router.post('/logout', (req: Request, res: Response) => {
-  // In a more sophisticated system, you might:
-  // - Add token to a blacklist
-  // - Clear server-side session
-  // - Log the logout event
-  
-  res.json({
-    success: true,
-    message: 'Logged out successfully'
-  } as ApiResponse)
+router.post('/logout', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = req.localUser!.userId
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    
+    console.log(`🚪 User ${userId} logging out`)
+    
+    // In a more sophisticated system, you might:
+    // - Add token to a blacklist
+    // - Clear server-side session
+    // - Log the logout event
+    
+    // For now, we'll just log the logout and return success
+    // The client-side will handle clearing the token
+    
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    } as ApiResponse)
+    
+  } catch (error: any) {
+    console.error('❌ Logout error:', error.message)
+    // Even if there's an error, we should still return success
+    // since the client will clear the token anyway
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    } as ApiResponse)
+  }
 })
 
 /**

@@ -77,6 +77,8 @@ export async function authenticateUser(email: string, password: string): Promise
   const client = await pool.connect()
   
   try {
+    console.log('🔍 authenticateUser called with:', { email, passwordLength: password.length })
+    
     const query = `
       SELECT id, email, password_hash, first_name, last_name, role, email_verified, last_login_at, created_at, updated_at,
              phone, company_name, company_address, vat_number, company_registration_number,
@@ -86,19 +88,33 @@ export async function authenticateUser(email: string, password: string): Promise
       WHERE email = $1
     `
     
-    const result = await client.query(query, [email.toLowerCase().trim()])
+    const normalizedEmail = email.toLowerCase().trim()
+    console.log('🔍 Searching for email:', normalizedEmail)
+    
+    const result = await client.query(query, [normalizedEmail])
+    console.log('🔍 Database query result:', { rowCount: result.rows.length })
     
     if (result.rows.length === 0) {
+      console.log('❌ No user found with email:', normalizedEmail)
       throw new Error('Invalid email or password')
     }
     
     const user = result.rows[0]
+    console.log('🔍 User found:', { id: user.id, email: user.email, role: user.role })
+    console.log('🔍 Password hash exists:', !!user.password_hash)
+    console.log('🔍 Password hash length:', user.password_hash ? user.password_hash.length : 'null')
     
     // Verify password
+    console.log('🔍 About to compare password with hash')
     const isValidPassword = await bcrypt.compare(password, user.password_hash)
+    console.log('🔍 Password comparison result:', isValidPassword)
+    
     if (!isValidPassword) {
+      console.log('❌ Password comparison failed')
       throw new Error('Invalid email or password')
     }
+    
+    console.log('🔍 Password is valid, updating last login')
     
     // Update last login
     await client.query(

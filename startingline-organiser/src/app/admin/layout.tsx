@@ -38,15 +38,21 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   }
 
   useEffect(() => {
+    console.log('🔍 Admin Layout: Auth check - isLoading:', isLoading, 'user:', user ? { id: user.id, email: user.email, role: user.role } : 'null')
+    
     if (!isLoading) {
       if (!user) {
+        console.log('❌ Admin Layout: No user found, redirecting to admin-login')
         router.push('/admin-login')
       } else if (user.role !== 'admin' && user.role !== 'super_admin') {
+        console.log('❌ Admin Layout: User is not admin, role:', user.role)
         if (user.role === 'organiser') {
           router.push('/dashboard')
         } else {
           router.push('/login')
         }
+      } else {
+        console.log('✅ Admin Layout: User is admin, allowing access')
       }
     }
   }, [user, isLoading, router])

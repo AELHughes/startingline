@@ -50,16 +50,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const savedToken = localStorage.getItem('auth_token')
       const savedUser = localStorage.getItem('user')
       
+      console.log('🔍 Auth Context: Loading from localStorage - token:', !!savedToken, 'user:', !!savedUser)
+      
       if (savedToken && savedUser) {
+        const userData = JSON.parse(savedUser)
+        console.log('🔍 Auth Context: Setting user from localStorage:', { id: userData.id, email: userData.email, role: userData.role })
         setToken(savedToken)
-        setUser(JSON.parse(savedUser))
+        setUser(userData)
+      } else {
+        console.log('🔍 Auth Context: No saved auth data found')
       }
     } catch (error) {
-      console.error('Error loading auth state:', error)
+      console.error('❌ Auth Context: Error loading auth state:', error)
       // Clear invalid data
       localStorage.removeItem('auth_token')
       localStorage.removeItem('user')
     } finally {
+      console.log('🔍 Auth Context: Setting isLoading to false')
       setIsLoading(false)
     }
   }, [])
@@ -134,25 +141,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const logout = () => {
+  const logout = async () => {
     console.log('🚪 Logging out user...')
     console.log('🔍 Current token before logout:', localStorage.getItem('auth_token'))
     console.log('🔍 Current user before logout:', localStorage.getItem('user'))
     
+    try {
+      // Call backend logout endpoint to invalidate token
+      const currentToken = localStorage.getItem('auth_token')
+      if (currentToken) {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}/api/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentToken}`
+          }
+        })
+        console.log('✅ Backend logout called successfully')
+      }
+    } catch (error) {
+      console.warn('⚠️ Backend logout failed (continuing with client-side logout):', error)
+    }
+    
+    // Clear all state and storage
     setUser(null)
     setToken(null)
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('user')
-    localStorage.removeItem('user_type')
-    localStorage.removeItem('admin_user')
     
-    localStorage.clear() // More aggressive clearing
-    sessionStorage.clear() // Clear session storage as well
+    // Clear all possible localStorage keys
+    const keysToRemove = [
+      'auth_token', 'user', 'user_type', 'admin_user', 
+      'token', 'authToken', 'userData', 'user_data',
+      'session', 'sessionToken', 'jwt', 'jwt_token'
+    ]
     
-    console.log('✅ Cleared all localStorage and sessionStorage data')
+    keysToRemove.forEach(key => {
+      localStorage.removeItem(key)
+      sessionStorage.removeItem(key)
+    })
+    
+    // More aggressive clearing
+    localStorage.clear()
+    sessionStorage.clear()
+    
+    // Clear any cookies that might contain auth data
+    document.cookie.split(";").forEach(function(c) { 
+      document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+    })
+    
+    console.log('✅ Cleared all localStorage, sessionStorage, and cookies')
     console.log('🔍 Token after logout:', localStorage.getItem('auth_token'))
     
-    window.location.replace('/login') // Force a hard reload
+    // Force a hard reload to clear any cached state
+    window.location.replace('/login')
   }
 
   const value = {

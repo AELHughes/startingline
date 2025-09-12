@@ -241,7 +241,10 @@ export default function NotificationBell() {
           className="p-3 text-center cursor-pointer"
           onClick={() => {
             setIsOpen(false)
-            router.push('/dashboard/notifications')
+            // Check if we're in admin context and redirect accordingly
+            const isAdminContext = window.location.pathname.startsWith('/admin')
+            const notificationsLink = isAdminContext ? '/admin/notifications' : '/dashboard/notifications'
+            router.push(notificationsLink)
           }}
         >
           <span className="text-sm text-blue-600 font-medium">View all notifications</span>

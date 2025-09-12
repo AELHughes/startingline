@@ -19,52 +19,93 @@ export default function AdminLoginPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [hasLoggedIn, setHasLoggedIn] = useState(false)
   // Remove loading state for now to fix the blank page issue
   // const [isLoading, setIsLoading] = useState(true)
+
+  // Clear any stale authentication data on page load (only if not logged in)
+  useEffect(() => {
+    // Only clear auth data if we haven't just logged in
+    if (!hasLoggedIn) {
+      const clearStaleAuth = () => {
+        const staleKeys = ['auth_token', 'user', 'user_type', 'admin_user']
+        staleKeys.forEach(key => {
+          if (localStorage.getItem(key)) {
+            console.log(`🧹 Clearing stale auth data: ${key}`)
+            localStorage.removeItem(key)
+          }
+        })
+      }
+      
+      clearStaleAuth()
+    }
+  }, [hasLoggedIn])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrors({})
     setIsSubmitting(true)
 
+    console.log('🔍 Frontend: Admin login attempt with:', { email: formData.email, passwordLength: formData.password.length })
+
     try {
+      const requestBody = JSON.stringify(formData)
+      console.log('🔍 Frontend: Request body:', requestBody)
+      
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: requestBody,
       })
 
+      console.log('🔍 Frontend: Response status:', response.status)
+      console.log('🔍 Frontend: Response ok:', response.ok)
+
       const data = await response.json()
+      console.log('🔍 Frontend: Response data:', data)
 
       if (!response.ok) {
+        console.log('❌ Frontend: Response not ok, throwing error:', data.error)
         throw new Error(data.error || 'Login failed')
       }
 
       if (data.success && data.data) {
         const { user: userData, token: userToken } = data.data
+        console.log('🔍 Frontend: Login successful, user data:', { email: userData.email, role: userData.role })
         
         // Check if user is admin
         if (userData.role === 'admin' || userData.role === 'super_admin') {
+          console.log('✅ Frontend: User is admin, saving to localStorage')
           // Save to localStorage
           localStorage.setItem('auth_token', userToken)
           localStorage.setItem('user', JSON.stringify(userData))
           localStorage.setItem('user_type', userData.role)
           
-          // Redirect to admin dashboard
-          router.push('/admin')
+          // Set flag to prevent clearing auth data
+          setHasLoggedIn(true)
+          
+          // Redirect to admin dashboard using window.location for reliability
+          console.log('🔍 Frontend: Redirecting to /admin')
+          window.location.href = '/admin'
         } else {
           // Non-admin user trying to access admin portal
+          console.log('❌ Frontend: User is not admin, role:', userData.role)
           setErrors({
             general: 'Access denied. Administrator privileges required.'
           })
           return
         }
       } else {
+        console.log('❌ Frontend: Invalid response format, data:', data)
         throw new Error('Invalid response format')
       }
     } catch (error: any) {
+      console.log('❌ Frontend: Login error caught:', error)
+      console.log('❌ Frontend: Error message:', error.message)
+      console.log('❌ Frontend: Error stack:', error.stack)
+      
       let errorMessage = error.message || 'Login failed. Please try again.'
       
       // Customize error message for admin login

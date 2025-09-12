@@ -22,6 +22,22 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
+  // Clear any stale authentication data on page load
+  useEffect(() => {
+    // Clear any cached auth data that might cause conflicts
+    const clearStaleAuth = () => {
+      const staleKeys = ['auth_token', 'user', 'user_type', 'admin_user']
+      staleKeys.forEach(key => {
+        if (localStorage.getItem(key)) {
+          console.log(`🧹 Clearing stale auth data: ${key}`)
+          localStorage.removeItem(key)
+        }
+      })
+    }
+    
+    clearStaleAuth()
+  }, [])
+
   // Cross-auth protection: Redirect if already authenticated
   useEffect(() => {
     if (!isLoading && user) {

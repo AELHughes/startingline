@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express'
 import { 
+  pool,
   createMessage,
   getUserMessages,
   getMessageThread,
@@ -91,35 +92,105 @@ router.get('/:id/thread', authenticateToken, async (req: Request, res: Response)
   }
 })
 
+// Get admin user ID (for organisers to send messages to admin)
+router.get('/admin-id', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { pool } = await import('../lib/database')
+    
+    // Get the admin user ID
+    const result = await pool.query(`
+      SELECT u.id, u.email, u.first_name, u.last_name 
+      FROM users u 
+      INNER JOIN admin_users au ON u.email = au.email 
+      WHERE au.is_active = true 
+      LIMIT 1
+    `)
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No active admin found'
+      } as ApiResponse)
+    }
+    
+    res.json({
+      success: true,
+      data: result.rows[0],
+      message: 'Admin user retrieved successfully'
+    } as ApiResponse)
+    
+  } catch (error: any) {
+    console.error('❌ Get admin user error:', error.message)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve admin user'
+    } as ApiResponse)
+  }
+})
+
 // Create message (send message)
 router.post('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const senderId = req.localUser!.userId
+    const senderRole = req.localUser!.role
     const { recipientId, subject, body, eventId, parentMessageId } = req.body
     
-    if (!recipientId || !subject || !body) {
+    if (!subject || !body) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: recipientId, subject, body'
+        error: 'Missing required fields: subject, body'
+      } as ApiResponse)
+    }
+    
+    let finalRecipientId = recipientId
+    
+    // If sender is organiser and no recipient specified, send to admin
+    if (senderRole === 'organiser' && !recipientId) {
+      const { pool } = await import('../lib/database')
+      const adminResult = await pool.query(`
+        SELECT u.id 
+        FROM users u 
+        INNER JOIN admin_users au ON u.email = au.email 
+        WHERE au.is_active = true 
+        LIMIT 1
+      `)
+      
+      if (adminResult.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'No active admin found to receive message'
+        } as ApiResponse)
+      }
+      
+      finalRecipientId = adminResult.rows[0].id
+    } else if (!recipientId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required field: recipientId'
       } as ApiResponse)
     }
     
     const message = await createMessage(
       eventId || null,
       senderId,
-      recipientId,
+      finalRecipientId,
       subject,
       body,
       parentMessageId
     )
     
+    // Get recipient's role to determine correct link
+    const recipientResult = await pool.query('SELECT role FROM users WHERE id = $1', [finalRecipientId])
+    const recipientRole = recipientResult.rows[0]?.role || 'organiser'
+    const messageLink = recipientRole === 'admin' ? '/admin/messages' : '/dashboard/messages'
+    
     // Create notification for recipient
     await createNotification(
-      recipientId,
+      finalRecipientId,
       'message',
       'New Message',
       `You have received a new message: "${subject}"`,
-      '/dashboard/messages',
+      messageLink,
       { messageId: message.id }
     )
     

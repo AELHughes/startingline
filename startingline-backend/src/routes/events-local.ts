@@ -569,6 +569,33 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
             }
           )
         }
+        
+        // Create notification for admins when event is submitted for approval
+        if (updates.status === 'pending_approval' && userRole === 'organiser') {
+          // Get all active admin users
+          const adminResult = await pool.query(`
+            SELECT u.id, u.email 
+            FROM users u
+            INNER JOIN admin_users au ON u.email = au.email
+            WHERE au.is_active = true
+          `)
+          
+          // Create notification for each admin
+          for (const admin of adminResult.rows) {
+            await createNotification(
+              admin.id,
+              'status_change',
+              'New Event Submitted for Approval',
+              `Event "${updatedEvent.name}" has been submitted for approval and requires review.`,
+              `/admin/events/${id}`,
+              {
+                event_id: id,
+                organiser_id: originalEvent.organiser_id,
+                event_name: updatedEvent.name
+              }
+            )
+          }
+        }
       }
     }
     

@@ -600,6 +600,24 @@ export const notificationsApi = {
 // ============================================
 
 export const messagesApi = {
+  // Get admin user ID (for organisers)
+  getAdminId: async (): Promise<any> => {
+    try {
+      console.log('🔍 Fetching admin user ID')
+      
+      const response = await fetch(`${API_BASE}/api/messages/admin-id`, {
+        headers: getAuthHeaders()
+      })
+
+      const adminData = await handleApiResponse<any>(response)
+      console.log('✅ Admin user ID retrieved successfully')
+      return adminData
+    } catch (error) {
+      console.error('❌ Get admin user ID error:', error)
+      throw error
+    }
+  },
+
   // Get user messages
   getMessages: async (limit = 50): Promise<any[]> => {
     try {

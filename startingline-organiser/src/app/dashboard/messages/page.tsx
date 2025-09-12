@@ -50,15 +50,29 @@ export default function MessagesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [showNewMessageDialog, setShowNewMessageDialog] = useState(false)
+  const [activeTab, setActiveTab] = useState<'inbox' | 'sent'>('inbox')
   const [newMessage, setNewMessage] = useState({
-    recipientId: '',
     subject: '',
     body: ''
   })
+  const [adminUser, setAdminUser] = useState<any>(null)
 
   useEffect(() => {
     fetchMessages()
-  }, [])
+    // If user is organiser, get admin user info
+    if (user?.role === 'organiser') {
+      fetchAdminUser()
+    }
+  }, [user])
+
+  const fetchAdminUser = async () => {
+    try {
+      const adminData = await messagesApi.getAdminId()
+      setAdminUser(adminData)
+    } catch (error) {
+      console.error('Failed to fetch admin user:', error)
+    }
+  }
 
   const fetchMessages = async () => {
     try {
@@ -93,19 +107,21 @@ export default function MessagesPage() {
   }
 
   const handleSendMessage = async () => {
-    if (!newMessage.recipientId || !newMessage.subject || !newMessage.body) {
+    if (!newMessage.subject || !newMessage.body) {
       alert('Please fill in all fields')
       return
     }
 
     try {
+      // For organisers, recipientId is automatically determined by backend
+      // For admins, they would need to specify recipientId (future enhancement)
       await messagesApi.sendMessage({
-        recipientId: newMessage.recipientId,
+        recipientId: user?.role === 'organiser' ? undefined : newMessage.recipientId,
         subject: newMessage.subject,
         body: newMessage.body
       })
       
-      setNewMessage({ recipientId: '', subject: '', body: '' })
+      setNewMessage({ subject: '', body: '' })
       setShowNewMessageDialog(false)
       fetchMessages()
     } catch (error) {
@@ -138,10 +154,25 @@ export default function MessagesPage() {
     return `${message.recipient_first_name} ${message.recipient_last_name}`
   }
 
-  const filteredMessages = messages.filter(message =>
+  // Separate messages into inbox and sent
+  const inboxMessages = messages.filter(message => message.recipient_id === user?.id)
+  const sentMessages = messages.filter(message => message.sender_id === user?.id)
+  
+  // Add reply indicators to inbox messages
+  const inboxWithReplyStatus = inboxMessages.map(message => {
+    const hasReplies = messages.some(m => 
+      m.parent_message_id === message.id && m.sender_id === user?.id
+    )
+    return { ...message, hasReplies }
+  })
+  
+  // Filter messages based on active tab and search term
+  const currentMessages = activeTab === 'inbox' ? inboxWithReplyStatus : sentMessages
+  const filteredMessages = currentMessages.filter(message =>
     message.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
     message.body.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    getSenderName(message).toLowerCase().includes(searchTerm.toLowerCase())
+    getSenderName(message).toLowerCase().includes(searchTerm.toLowerCase()) ||
+    getRecipientName(message).toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   if (loading) {
@@ -180,19 +211,35 @@ export default function MessagesPage() {
                 <DialogHeader>
                   <DialogTitle>Send New Message</DialogTitle>
                   <DialogDescription>
-                    Send a message to an administrator or another organiser.
+                    {user?.role === 'organiser' 
+                      ? 'Send a message to the administrator.' 
+                      : 'Send a message to an administrator or another organiser.'
+                    }
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="recipient">Recipient Email</Label>
-                    <Input
-                      id="recipient"
-                      placeholder="admin@startingline.com"
-                      value={newMessage.recipientId}
-                      onChange={(e) => setNewMessage(prev => ({ ...prev, recipientId: e.target.value }))}
-                    />
-                  </div>
+                  {user?.role === 'organiser' && adminUser && (
+                    <div className="space-y-2">
+                      <Label>To</Label>
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                        <p className="text-sm font-medium text-blue-900">
+                          {adminUser.first_name} {adminUser.last_name} (Administrator)
+                        </p>
+                        <p className="text-xs text-blue-700">{adminUser.email}</p>
+                      </div>
+                    </div>
+                  )}
+                  {user?.role !== 'organiser' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="recipient">Recipient Email</Label>
+                      <Input
+                        id="recipient"
+                        placeholder="admin@startingline.com"
+                        value={newMessage.recipientId || ''}
+                        onChange={(e) => setNewMessage(prev => ({ ...prev, recipientId: e.target.value }))}
+                      />
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="subject">Subject</Label>
                     <Input
@@ -227,12 +274,46 @@ export default function MessagesPage() {
           </div>
         </div>
 
+        {/* Tabs */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => {
+                  setActiveTab('inbox')
+                  setSelectedMessage(null)
+                }}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'inbox'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Inbox ({inboxMessages.length})
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab('sent')
+                  setSelectedMessage(null)
+                }}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'sent'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Sent ({sentMessages.length})
+              </button>
+            </nav>
+          </div>
+        </div>
+
         {/* Search */}
         <div className="mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
-              placeholder="Search messages..."
+              placeholder={`Search ${activeTab} messages...`}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -245,13 +326,17 @@ export default function MessagesPage() {
           <div className="lg:col-span-1">
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Conversations</CardTitle>
+                <CardTitle className="text-lg">
+                  {activeTab === 'inbox' ? 'Inbox' : 'Sent Items'}
+                </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 {filteredMessages.length === 0 ? (
                   <div className="p-6 text-center">
                     <MessageSquare className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500">No messages found</p>
+                    <p className="text-gray-500">
+                      {activeTab === 'inbox' ? 'No messages in inbox' : 'No sent messages'}
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-0">
@@ -267,20 +352,26 @@ export default function MessagesPage() {
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center space-x-2 mb-1">
                               <p className={`text-sm font-medium truncate ${
                                 !message.read_at && message.recipient_id === user?.id ? 'text-gray-900' : 'text-gray-700'
                               }`}>
-                                {getSenderName(message)}
+                                {activeTab === 'inbox' ? getSenderName(message) : `To: ${getRecipientName(message)}`}
                               </p>
                               <Badge variant="outline" className="text-xs">
-                                {message.sender_role}
+                                {activeTab === 'inbox' ? message.sender_role : message.recipient_role}
                               </Badge>
                               {!message.read_at && message.recipient_id === user?.id && (
                                 <div className="h-2 w-2 bg-blue-600 rounded-full"></div>
                               )}
+                              {/* Reply indicator for inbox messages */}
+                              {activeTab === 'inbox' && (message as any).hasReplies && (
+                                <Badge className="bg-green-100 text-green-800">
+                                  Replied
+                                </Badge>
+                              )}
                             </div>
-                            <p className="text-sm text-gray-900 font-medium truncate mt-1">
+                            <p className="text-sm text-gray-900 font-medium truncate">
                               {message.subject}
                             </p>
                             <p className="text-xs text-gray-600 truncate mt-1">
@@ -316,7 +407,10 @@ export default function MessagesPage() {
                       <div className="flex items-center space-x-4 text-sm text-gray-600 mt-2">
                         <span className="flex items-center">
                           <User className="h-4 w-4 mr-1" />
-                          From: {getSenderName(selectedMessage)} ({selectedMessage.sender_role})
+                          {activeTab === 'inbox' 
+                            ? `From: ${getSenderName(selectedMessage)} (${selectedMessage.sender_role})`
+                            : `To: ${getRecipientName(selectedMessage)} (${selectedMessage.recipient_role})`
+                          }
                         </span>
                         <span className="flex items-center">
                           <Clock className="h-4 w-4 mr-1" />
@@ -337,12 +431,24 @@ export default function MessagesPage() {
                     <p className="whitespace-pre-wrap">{selectedMessage.body}</p>
                   </div>
                   
-                  <div className="mt-6 pt-6 border-t">
-                    <Button variant="outline" size="sm">
-                      <Reply className="h-4 w-4 mr-2" />
-                      Reply
-                    </Button>
-                  </div>
+                  {activeTab === 'inbox' && (
+                    <div className="mt-6 pt-6 border-t">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setNewMessage({
+                            subject: `Re: ${selectedMessage.subject}`,
+                            body: ''
+                          })
+                          setShowNewMessageDialog(true)
+                        }}
+                      >
+                        <Reply className="h-4 w-4 mr-2" />
+                        Reply
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ) : (
