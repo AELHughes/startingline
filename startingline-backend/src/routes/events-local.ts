@@ -503,6 +503,40 @@ router.post('/', authenticateToken, requireOrganiser, async (req: Request, res: 
           const statusChangeAuditResult = await client.query(auditQuery, statusChangeAuditValues)
           console.log('✅ Status change audit trail entry created successfully:', statusChangeAuditResult.rows[0])
           
+          // Create notification for admins when event is submitted for approval
+          console.log('🔔 Creating admin notifications for new event submission...')
+          try {
+            // Get all active admin users
+            const adminResult = await client.query(`
+              SELECT u.id, u.email 
+              FROM users u
+              INNER JOIN admin_users au ON u.email = au.email
+              WHERE au.is_active = true
+            `)
+            
+            console.log(`📧 Found ${adminResult.rows.length} active admin users`)
+            
+            // Create notification for each admin
+            for (const admin of adminResult.rows) {
+              await createNotification(
+                admin.id,
+                'status_change',
+                'New Event Submitted for Approval',
+                `Event "${newEvent.name}" has been submitted for approval and requires review.`,
+                `/admin/events/${newEvent.id}`,
+                {
+                  event_id: newEvent.id,
+                  organiser_id: organiserId,
+                  event_name: newEvent.name
+                }
+              )
+              console.log(`✅ Notification created for admin: ${admin.email}`)
+            }
+          } catch (notificationError: any) {
+            console.error('❌ Failed to create admin notifications:', notificationError.message)
+            // Don't fail the entire operation if notifications fail
+          }
+          
           // Update the returned event with the new status
           newEvent.status = 'pending_approval'
         }
