@@ -40,6 +40,7 @@ interface DistanceSelection {
   distance_name: string
   price: number
   quantity: number
+  min_age?: number
 }
 
 interface ParticipantFormData extends ParticipantData {
