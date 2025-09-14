@@ -28,7 +28,9 @@ export const authenticateToken = async (
   next: NextFunction
 ) => {
   try {
+    console.log('🔍 authenticateToken middleware called')
     const authHeader = req.headers.authorization
+    console.log('🔍 authHeader:', authHeader ? 'present' : 'missing')
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
@@ -40,10 +42,13 @@ export const authenticateToken = async (
     const token = authHeader.substring(7)
     
     // Verify JWT token
+    console.log('🔍 Auth middleware - verifying token:', token.substring(0, 50) + '...')
     let decoded: any
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-for-development') as JwtPayload
+      console.log('🔍 Auth middleware - token decoded successfully:', decoded)
     } catch (jwtError: any) {
+      console.log('❌ Auth middleware - token verification failed:', jwtError.message)
       return res.status(401).json({
         success: false,
         error: 'Invalid or expired token'
@@ -51,9 +56,12 @@ export const authenticateToken = async (
     }
     
     // Get user from database
+    console.log('🔍 Auth middleware - looking up user with ID:', decoded.userId)
     const user = await getUserById(decoded.userId)
+    console.log('🔍 Auth middleware - user lookup result:', user ? { id: user.id, email: user.email, role: user.role } : 'null')
 
     if (!user) {
+      console.log('❌ Auth middleware - user not found for ID:', decoded.userId)
       return res.status(401).json({
         success: false,
         error: 'User not found'
@@ -131,7 +139,11 @@ export const optionalAuth = async (
  */
 export const requireRole = (roles: string | string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
+    console.log('🔍 requireRole middleware called with roles:', roles)
+    console.log('🔍 req.localUser:', req.localUser)
+    
     if (!req.localUser) {
+      console.log('❌ requireRole: No localUser found')
       return res.status(401).json({
         success: false,
         error: 'Authentication required'
@@ -139,6 +151,8 @@ export const requireRole = (roles: string | string[]) => {
     }
 
     const allowedRoles = Array.isArray(roles) ? roles : [roles]
+    console.log('🔍 requireRole: allowedRoles:', allowedRoles)
+    console.log('🔍 requireRole: user role:', req.localUser.role)
     
     if (!allowedRoles.includes(req.localUser.role)) {
       console.log(`❌ Access denied: User ${req.localUser.email} (${req.localUser.role}) attempted to access ${allowedRoles.join('/')} endpoint`)

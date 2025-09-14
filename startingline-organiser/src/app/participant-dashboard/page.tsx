@@ -1,78 +1,79 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/contexts/auth-context'
+import { participantRegistrationApi, type Order } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Calendar, MapPin, Clock, Trophy, Users, Download, Eye } from 'lucide-react'
+import { Calendar, MapPin, Clock, Trophy, Users, Download, Eye, AlertCircle } from 'lucide-react'
 import { format } from 'date-fns'
+import Link from 'next/link'
 
-interface ParticipantEvent {
-  id: string
-  eventName: string
-  eventDate: string
-  eventTime: string
-  venue: string
-  city: string
-  distance: string
-  distanceKm: number
-  status: 'confirmed' | 'pending' | 'cancelled'
-  ticketNumber: string
-  qrCode?: string
-  amount: number
-  registeredAt: string
-}
 
 export default function ParticipantDashboard() {
-  const [events, setEvents] = useState<ParticipantEvent[]>([])
+  const router = useRouter()
+  const { user } = useAuth()
+  const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>('')
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming')
 
   useEffect(() => {
-    // Mock data for now - replace with actual API call
-    const mockEvents: ParticipantEvent[] = [
-      {
-        id: '1',
-        eventName: 'Cape Town Cycle Tour',
-        eventDate: '2024-03-10',
-        eventTime: '08:00',
-        venue: 'Green Point Stadium',
-        city: 'Cape Town',
-        distance: 'Medium Route',
-        distanceKm: 50,
-        status: 'confirmed',
-        ticketNumber: 'CT2024-001',
-        amount: 200,
-        registeredAt: '2024-01-15T10:30:00Z'
-      },
-      {
-        id: '2',
-        eventName: 'Johannesburg Marathon',
-        eventDate: '2024-02-15',
-        eventTime: '06:00',
-        venue: 'FNB Stadium',
-        city: 'Johannesburg',
-        distance: 'Half Marathon',
-        distanceKm: 21,
-        status: 'confirmed',
-        ticketNumber: 'JHB2024-002',
-        amount: 150,
-        registeredAt: '2024-01-10T14:20:00Z'
+    if (user) {
+      // Role-based access control
+      if (user.role === 'organiser') {
+        router.push('/dashboard')
+      } else if (user.role === 'admin' || user.role === 'super_admin') {
+        router.push('/admin')
+      } else if (user.role === 'participant') {
+        fetchOrders()
+      } else {
+        // Unknown role, redirect to login
+        router.push('/login')
       }
-    ]
-    
-    setTimeout(() => {
-      setEvents(mockEvents)
+    } else {
       setLoading(false)
-    }, 1000)
-  }, [])
+    }
+  }, [user, router])
 
-  const upcomingEvents = events.filter(event => new Date(event.eventDate) >= new Date())
-  const pastEvents = events.filter(event => new Date(event.eventDate) < new Date())
+  const fetchOrders = async () => {
+    try {
+      setLoading(true)
+      const response = await participantRegistrationApi.getMyOrders()
+      
+      if (response.success && response.data) {
+        setOrders(response.data)
+      } else {
+        setError(response.error || 'Failed to load orders')
+      }
+    } catch (error) {
+      console.error('Error fetching orders:', error)
+      setError('Failed to load orders')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const downloadTicket = async (ticketId: string) => {
+    try {
+      // This would generate and download the PDF ticket
+      // For now, we'll just show a message
+      alert('Ticket download functionality will be implemented with PDF generation')
+    } catch (error) {
+      console.error('Error downloading ticket:', error)
+      alert('Failed to download ticket')
+    }
+  }
+
+  const upcomingOrders = orders.filter(order => new Date(order.start_date) >= new Date())
+  const pastOrders = orders.filter(order => new Date(order.start_date) < new Date())
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'confirmed':
+      case 'paid':
+      case 'active':
         return 'bg-green-100 text-green-800'
       case 'pending':
         return 'bg-yellow-100 text-yellow-800'
@@ -81,6 +82,21 @@ export default function ParticipantDashboard() {
       default:
         return 'bg-gray-100 text-gray-800'
     }
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Please Sign In</h1>
+          <p className="text-gray-600 mb-6">You need to be signed in to view your event registrations.</p>
+          <Link href="/login">
+            <Button>Sign In</Button>
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   if (loading) {
@@ -95,6 +111,19 @@ export default function ParticipantDashboard() {
               ))}
             </div>
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Error Loading Dashboard</h1>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <Button onClick={fetchOrders}>Try Again</Button>
         </div>
       </div>
     )
@@ -121,7 +150,7 @@ export default function ParticipantDashboard() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Upcoming Events ({upcomingEvents.length})
+                Upcoming Events ({upcomingOrders.length})
               </button>
               <button
                 onClick={() => setActiveTab('past')}
@@ -131,7 +160,7 @@ export default function ParticipantDashboard() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Past Events ({pastEvents.length})
+                Past Events ({pastOrders.length})
               </button>
             </nav>
           </div>
@@ -139,15 +168,20 @@ export default function ParticipantDashboard() {
 
         {/* Events Grid */}
         {activeTab === 'upcoming' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {upcomingEvents.length > 0 ? (
-              upcomingEvents.map((event) => (
-                <Card key={event.id} className="hover:shadow-lg transition-shadow">
+          <div className="space-y-6">
+            {upcomingOrders.length > 0 ? (
+              upcomingOrders.map((order) => (
+                <Card key={order.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex justify-between items-start">
-                      <CardTitle className="text-lg">{event.eventName}</CardTitle>
-                      <Badge className={getStatusColor(event.status)}>
-                        {event.status}
+                      <div>
+                        <CardTitle className="text-lg">{order.event_name}</CardTitle>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Order #{order.id.slice(-8).toUpperCase()} • {order.tickets.length} participant{order.tickets.length !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <Badge className={getStatusColor(order.status)}>
+                        {order.status}
                       </Badge>
                     </div>
                   </CardHeader>
@@ -155,71 +189,79 @@ export default function ParticipantDashboard() {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Calendar className="w-4 h-4" />
-                        <span>{format(new Date(event.eventDate), 'EEEE, MMMM do, yyyy')}</span>
+                        <span>{format(new Date(order.start_date), 'EEEE, MMMM do, yyyy')}</span>
                       </div>
                       
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Clock className="w-4 h-4" />
-                        <span>{event.eventTime}</span>
+                        <span>{order.start_time}</span>
                       </div>
                       
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <MapPin className="w-4 h-4" />
-                        <span>{event.venue}, {event.city}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Trophy className="w-4 h-4" />
-                        <span>{event.distance} ({event.distanceKm}km)</span>
+                        <span>{order.city}</span>
                       </div>
                     </div>
 
                     <div className="pt-4 border-t">
-                      <div className="flex justify-between items-center mb-3">
-                        <span className="text-sm text-gray-600">Ticket Number</span>
-                        <span className="font-mono text-sm font-medium">{event.ticketNumber}</span>
-                      </div>
-                      
                       <div className="flex justify-between items-center mb-4">
-                        <span className="text-sm text-gray-600">Amount Paid</span>
-                        <span className="font-semibold">R{event.amount}</span>
+                        <span className="text-sm text-gray-600">Total Amount</span>
+                        <span className="font-semibold">R{order.total_amount}</span>
                       </div>
 
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" className="flex-1">
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Details
-                        </Button>
-                        <Button variant="outline" size="sm" className="flex-1">
-                          <Download className="w-4 h-4 mr-2" />
-                          Download
-                        </Button>
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm text-gray-900">Tickets:</h4>
+                        {order.tickets.map((ticket) => (
+                          <div key={ticket.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                            <div>
+                              <span className="text-sm font-medium">{ticket.participant_name}</span>
+                              <p className="text-xs text-gray-600">#{ticket.ticket_number}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">R{ticket.amount}</span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => downloadTicket(ticket.id)}
+                              >
+                                <Download className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               ))
             ) : (
-              <div className="col-span-full text-center py-12">
+              <div className="text-center py-12">
                 <Trophy className="w-16 h-16 mx-auto text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No Upcoming Events</h3>
                 <p className="text-gray-600 mb-4">You don't have any upcoming event registrations.</p>
-                <Button>Browse Events</Button>
+                <Link href="/events">
+                  <Button>Browse Events</Button>
+                </Link>
               </div>
             )}
           </div>
         )}
 
         {activeTab === 'past' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {pastEvents.length > 0 ? (
-              pastEvents.map((event) => (
-                <Card key={event.id} className="hover:shadow-lg transition-shadow">
+          <div className="space-y-6">
+            {pastOrders.length > 0 ? (
+              pastOrders.map((order) => (
+                <Card key={order.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex justify-between items-start">
-                      <CardTitle className="text-lg">{event.eventName}</CardTitle>
-                      <Badge className={getStatusColor(event.status)}>
-                        {event.status}
+                      <div>
+                        <CardTitle className="text-lg">{order.event_name}</CardTitle>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Order #{order.id.slice(-8).toUpperCase()} • {order.tickets.length} participant{order.tickets.length !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <Badge className={getStatusColor(order.status)}>
+                        {order.status}
                       </Badge>
                     </div>
                   </CardHeader>
@@ -227,56 +269,59 @@ export default function ParticipantDashboard() {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Calendar className="w-4 h-4" />
-                        <span>{format(new Date(event.eventDate), 'EEEE, MMMM do, yyyy')}</span>
+                        <span>{format(new Date(order.start_date), 'EEEE, MMMM do, yyyy')}</span>
                       </div>
                       
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Clock className="w-4 h-4" />
-                        <span>{event.eventTime}</span>
+                        <span>{order.start_time}</span>
                       </div>
                       
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <MapPin className="w-4 h-4" />
-                        <span>{event.venue}, {event.city}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Trophy className="w-4 h-4" />
-                        <span>{event.distance} ({event.distanceKm}km)</span>
+                        <span>{order.city}</span>
                       </div>
                     </div>
 
                     <div className="pt-4 border-t">
-                      <div className="flex justify-between items-center mb-3">
-                        <span className="text-sm text-gray-600">Ticket Number</span>
-                        <span className="font-mono text-sm font-medium">{event.ticketNumber}</span>
-                      </div>
-                      
                       <div className="flex justify-between items-center mb-4">
-                        <span className="text-sm text-gray-600">Amount Paid</span>
-                        <span className="font-semibold">R{event.amount}</span>
+                        <span className="text-sm text-gray-600">Total Amount</span>
+                        <span className="font-semibold">R{order.total_amount}</span>
                       </div>
 
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" className="flex-1">
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Details
-                        </Button>
-                        <Button variant="outline" size="sm" className="flex-1">
-                          <Download className="w-4 h-4 mr-2" />
-                          Certificate
-                        </Button>
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm text-gray-900">Tickets:</h4>
+                        {order.tickets.map((ticket) => (
+                          <div key={ticket.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                            <div>
+                              <span className="text-sm font-medium">{ticket.participant_name}</span>
+                              <p className="text-xs text-gray-600">#{ticket.ticket_number}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">R{ticket.amount}</span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => downloadTicket(ticket.id)}
+                              >
+                                <Download className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               ))
             ) : (
-              <div className="col-span-full text-center py-12">
+              <div className="text-center py-12">
                 <Trophy className="w-16 h-16 mx-auto text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No Past Events</h3>
                 <p className="text-gray-600 mb-4">You haven't participated in any events yet.</p>
-                <Button>Browse Events</Button>
+                <Link href="/events">
+                  <Button>Browse Events</Button>
+                </Link>
               </div>
             )}
           </div>

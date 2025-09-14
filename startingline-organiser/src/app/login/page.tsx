@@ -46,6 +46,9 @@ export default function LoginPage() {
       } else if (user.role === 'admin' || user.role === 'super_admin') {
         // Prevent admin from accessing organiser login
         router.push('/admin')
+      } else if (user.role === 'participant') {
+        // Redirect participants to their dashboard
+        router.push('/participant-dashboard')
       } else {
         // Unknown role, redirect to appropriate login
         router.push('/login')
@@ -70,7 +73,7 @@ export default function LoginPage() {
     try {
       await login(formData.email, formData.password)
       
-      // After successful login, check if user is organiser
+      // After successful login, check user role and redirect appropriately
       const savedUser = localStorage.getItem('user')
       if (savedUser) {
         const userData = JSON.parse(savedUser)
@@ -86,6 +89,9 @@ export default function LoginPage() {
           localStorage.removeItem('user')
           localStorage.removeItem('user_type')
           return
+        } else if (userData.role === 'participant') {
+          // Participant user - redirect to participant dashboard
+          router.push('/participant-dashboard')
         } else {
           // Unknown role
           setErrors({

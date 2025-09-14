@@ -17,6 +17,16 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!isLoading && !user) {
       router.push('/login')
+    } else if (!isLoading && user) {
+      // Role-based access control
+      if (user.role === 'participant') {
+        router.push('/participant-dashboard')
+      } else if (user.role === 'admin' || user.role === 'super_admin') {
+        router.push('/admin')
+      } else if (user.role !== 'organiser') {
+        // Unknown role, redirect to login
+        router.push('/login')
+      }
     }
   }, [user, isLoading, router])
 

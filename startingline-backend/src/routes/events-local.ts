@@ -270,6 +270,8 @@ router.get('/:id', optionalAuth, async (req: Request, res: Response) => {
  * Create new event (organizer only)
  */
 router.post('/', authenticateToken, requireOrganiser, async (req: Request, res: Response) => {
+  console.log('🚀 EVENT CREATION ENDPOINT REACHED - POST /')
+  console.log('🔍 req.localUser after middleware:', req.localUser)
   const client = await pool.connect()
   
   try {
@@ -279,21 +281,32 @@ router.post('/', authenticateToken, requireOrganiser, async (req: Request, res: 
     const organiserId = req.localUser!.userId
     
     console.log('🔍 Creating event:', eventData.name, 'for organizer:', organiserId)
+    console.log('🔍 req.localUser:', req.localUser)
+    console.log('🔍 organiserId type:', typeof organiserId)
+    console.log('🔍 organiserId value:', organiserId)
     
     // Validate required fields
     if (!eventData.name || !eventData.category || !eventData.start_date) {
+      console.log('❌ Validation failed - missing required fields')
+      console.log('🔍 eventData.name:', eventData.name)
+      console.log('🔍 eventData.category:', eventData.category)
+      console.log('🔍 eventData.start_date:', eventData.start_date)
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: name, category, and start_date are required'
       } as ApiResponse)
     }
     
+    console.log('✅ Validation passed - all required fields present')
+    
     // Validate merchandise variations if provided
     if (eventData.merchandise && eventData.merchandise.length > 0) {
+      console.log('🔍 Validating merchandise variations...')
       for (const merch of eventData.merchandise) {
         if (merch.variations && merch.variations.length > 0) {
           for (const variation of merch.variations) {
             if (!variation.variation_name || !variation.variation_options) {
+              console.log('❌ Invalid merchandise variation:', variation)
               return res.status(400).json({
                 success: false,
                 error: `Invalid merchandise variation for ${merch.name}: variation_name and variation_options are required`
@@ -302,6 +315,7 @@ router.post('/', authenticateToken, requireOrganiser, async (req: Request, res: 
           }
         }
       }
+      console.log('✅ Merchandise variations validation passed')
     }
     
     // Generate slug
@@ -309,6 +323,8 @@ router.post('/', authenticateToken, requireOrganiser, async (req: Request, res: 
       .toLowerCase()
       .replace(/[^a-zA-Z0-9\s]/g, '')
       .replace(/\s+/g, '-')
+    
+    console.log('🔍 Generated slug:', baseSlug + '-' + Date.now())
     
     // Create event
     const eventQuery = `
@@ -321,6 +337,9 @@ router.post('/', authenticateToken, requireOrganiser, async (req: Request, res: 
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
       ) RETURNING *
     `
+    
+    console.log('🔍 Event query prepared')
+    console.log('🔍 About to prepare event values...')
     
     const eventValues = [
       eventData.name,
@@ -345,8 +364,35 @@ router.post('/', authenticateToken, requireOrganiser, async (req: Request, res: 
       eventData.status || 'draft'
     ]
     
-    const eventResult = await client.query(eventQuery, eventValues)
-    const newEvent = eventResult.rows[0]
+    console.log('🔍 Event values prepared:', eventValues.length, 'values')
+    
+    console.log('🔍 Executing event creation query:')
+    console.log('  - Query:', eventQuery)
+    console.log('  - Values:', eventValues)
+    console.log('  - organiserId:', organiserId)
+    console.log('  - organiserId type:', typeof organiserId)
+    
+    let newEvent: any
+    try {
+      console.log('🔍 About to execute event creation query...')
+      const eventResult = await client.query(eventQuery, eventValues)
+      newEvent = eventResult.rows[0]
+      
+      console.log('✅ Event created successfully:', newEvent.id)
+      console.log('✅ Event details:', newEvent)
+      
+      // Verify the event was actually created
+      if (!newEvent || !newEvent.id) {
+        throw new Error('Event creation failed - no event ID returned')
+      }
+      
+    } catch (eventError: any) {
+      console.error('❌ Event creation failed:', eventError.message)
+      console.error('❌ Event creation error details:', eventError)
+      console.error('❌ Event creation error code:', eventError.code)
+      console.error('❌ Event creation error detail:', eventError.detail)
+      throw eventError
+    }
     
     // Create distances if provided
     if (eventData.distances && eventData.distances.length > 0) {
@@ -407,14 +453,69 @@ router.post('/', authenticateToken, requireOrganiser, async (req: Request, res: 
       }
     }
     
-    // Create audit trail entry for event creation
-    await createAuditTrailEntry(
-      newEvent.id,
-      'created',
-      organiserId,
-      'organiser',
-      'Event created as draft'
-    )
+    // Create audit trail entry for event creation - ONLY if event was successfully created
+    if (newEvent && newEvent.id) {
+      console.log('🔍 Creating audit trail entry:')
+      console.log('  - event_id:', newEvent.id)
+      console.log('  - organiserId:', organiserId)
+      console.log('  - organiserId type:', typeof organiserId)
+      
+      try {
+        // Create audit trail entry within the same transaction
+        const auditQuery = `
+          INSERT INTO event_audit_trail (event_id, action_type, performed_by, performed_by_role, message, metadata)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING *
+        `
+        const auditValues = [
+          newEvent.id,
+          'created',
+          organiserId,
+          'organiser',
+          'Event created as draft',
+          null
+        ]
+        
+        console.log('🔍 Executing audit trail query within transaction...')
+        const auditResult = await client.query(auditQuery, auditValues)
+        console.log('✅ Audit trail entry created successfully:', auditResult.rows[0])
+        
+        // If status is pending_approval, update the event status and create another audit trail entry
+        if (eventData.status === 'pending_approval') {
+          console.log('🔍 Event submitted for approval - updating status and creating audit trail...')
+          
+          // Update event status to pending_approval
+          await client.query(
+            'UPDATE events SET status = $1, updated_at = NOW() WHERE id = $2',
+            ['pending_approval', newEvent.id]
+          )
+          
+          // Create audit trail entry for status change
+          const statusChangeAuditValues = [
+            newEvent.id,
+            'status_changed',
+            organiserId,
+            'organiser',
+            'Event submitted for approval',
+            JSON.stringify({ from_status: 'draft', to_status: 'pending_approval' })
+          ]
+          
+          const statusChangeAuditResult = await client.query(auditQuery, statusChangeAuditValues)
+          console.log('✅ Status change audit trail entry created successfully:', statusChangeAuditResult.rows[0])
+          
+          // Update the returned event with the new status
+          newEvent.status = 'pending_approval'
+        }
+        
+      } catch (auditError: any) {
+        console.error('❌ Audit trail creation failed:', auditError.message)
+        console.error('❌ Audit trail error details:', auditError)
+        throw auditError
+      }
+    } else {
+      console.error('❌ Cannot create audit trail - event was not created successfully')
+      throw new Error('Event creation failed - cannot create audit trail')
+    }
     
     await client.query('COMMIT')
     
@@ -429,6 +530,8 @@ router.post('/', authenticateToken, requireOrganiser, async (req: Request, res: 
   } catch (error: any) {
     await client.query('ROLLBACK')
     console.error('❌ Create event error:', error.message)
+    console.error('❌ Full error object:', error)
+    console.error('❌ Error stack:', error.stack)
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to create event'

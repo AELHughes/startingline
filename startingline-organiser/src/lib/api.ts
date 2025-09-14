@@ -870,6 +870,323 @@ export class ArticlesApi {
 
 export const articlesApi = new ArticlesApi()
 
+// Participant Registration API
+export interface ParticipantData {
+  first_name: string
+  last_name: string
+  email: string
+  mobile: string
+  date_of_birth: string
+  disabled?: boolean
+  medical_aid_name?: string
+  medical_aid_number?: string
+  emergency_contact_name: string
+  emergency_contact_number: string
+  merchandise?: Array<{
+    merchandise_id: string
+    variation_id?: string
+    quantity: number
+    unit_price: number
+  }>
+}
+
+export interface RegistrationDetails {
+  event: Event & {
+    distances: EventDistance[]
+    merchandise: Merchandise[]
+  }
+}
+
+export interface OrderData {
+  event_id: string
+  account_holder_first_name: string
+  account_holder_last_name: string
+  account_holder_email: string
+  account_holder_mobile: string
+  account_holder_company?: string
+  account_holder_address: string
+  emergency_contact_name: string
+  emergency_contact_number: string
+  account_holder_password?: string
+  participants: Array<{
+    distance_id: string
+    participant: ParticipantData
+  }>
+}
+
+export interface SavedParticipant {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  mobile: string
+  date_of_birth: string
+  medical_aid_name?: string
+  medical_aid_number?: string
+  emergency_contact_name: string
+  emergency_contact_number: string
+  created_at: string
+}
+
+export interface Order {
+  id: string
+  event_id: string
+  total_amount: number
+  status: string
+  created_at: string
+  event_name: string
+  start_date: string
+  start_time: string
+  city: string
+  tickets: Array<{
+    id: string
+    ticket_number: string
+    participant_name: string
+    participant_email: string
+    amount: number
+    status: string
+  }>
+}
+
+export interface Ticket {
+  id: string
+  ticket_number: string
+  event_name: string
+  start_date: string
+  start_time: string
+  venue_name?: string
+  address: string
+  city: string
+  distance_name: string
+  distance_price: number
+  participant_first_name: string
+  participant_last_name: string
+  participant_email: string
+  participant_mobile: string
+  participant_date_of_birth: string
+  participant_disabled: boolean
+  participant_medical_aid_name?: string
+  participant_medical_aid_number?: string
+  emergency_contact_name: string
+  emergency_contact_number: string
+  amount: number
+  status: string
+  merchandise: Array<{
+    merchandise_name: string
+    description: string
+    image_url?: string
+    variation_name?: string
+    variation_options?: any
+    quantity: number
+    unit_price: number
+    total_price: number
+  }>
+}
+
+class ParticipantRegistrationApi {
+  async getRegistrationDetails(eventId: string): Promise<{
+    success: boolean
+    data?: RegistrationDetails
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/participant-registration/event/${eventId}/registration-details`, {
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to get registration details')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Get registration details error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get registration details'
+      }
+    }
+  }
+
+  async validateParticipant(distanceId: string, dateOfBirth: string, disabled?: boolean): Promise<{
+    success: boolean
+    data?: {
+      age: number
+      min_age_met: boolean
+      is_free: boolean
+      reason: string
+    }
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/participant-registration/validate-participant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          distance_id: distanceId,
+          date_of_birth: dateOfBirth,
+          disabled
+        })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to validate participant')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Validate participant error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to validate participant'
+      }
+    }
+  }
+
+  async getSavedParticipants(): Promise<{
+    success: boolean
+    data?: SavedParticipant[]
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/participant-registration/saved-participants`, {
+        headers: getAuthHeaders()
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to get saved participants')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Get saved participants error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get saved participants'
+      }
+    }
+  }
+
+  async saveParticipant(participantData: Omit<SavedParticipant, 'id' | 'created_at'>): Promise<{
+    success: boolean
+    data?: SavedParticipant
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/participant-registration/save-participant`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(participantData)
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to save participant')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Save participant error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save participant'
+      }
+    }
+  }
+
+  async register(orderData: OrderData): Promise<{
+    success: boolean
+    data?: {
+      order: any
+      tickets: any[]
+    }
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/participant-registration/register`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(orderData)
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to register')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Registration error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to register'
+      }
+    }
+  }
+
+  async getMyOrders(): Promise<{
+    success: boolean
+    data?: Order[]
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/participant-registration/my-orders`, {
+        headers: getAuthHeaders()
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to get orders')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Get my orders error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get orders'
+      }
+    }
+  }
+
+  async getTicket(ticketId: string): Promise<{
+    success: boolean
+    data?: Ticket
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/participant-registration/ticket/${ticketId}`, {
+        headers: getAuthHeaders()
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to get ticket')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Get ticket error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get ticket'
+      }
+    }
+  }
+}
+
+export const participantRegistrationApi = new ParticipantRegistrationApi()
+
 // ============================================
 // API RESPONSE TYPES
 // ============================================

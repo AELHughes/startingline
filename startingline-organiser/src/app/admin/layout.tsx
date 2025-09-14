@@ -48,6 +48,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         console.log('❌ Admin Layout: User is not admin, role:', user.role)
         if (user.role === 'organiser') {
           router.push('/dashboard')
+        } else if (user.role === 'participant') {
+          router.push('/participant-dashboard')
         } else {
           router.push('/login')
         }

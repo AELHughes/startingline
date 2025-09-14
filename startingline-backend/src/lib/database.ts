@@ -404,6 +404,13 @@ export async function createAuditTrailEntry(
   message?: string,
   metadata?: any
 ) {
+  console.log('🔍 createAuditTrailEntry called with:')
+  console.log('  - eventId:', eventId, '(type:', typeof eventId, ')')
+  console.log('  - actionType:', actionType)
+  console.log('  - performedBy:', performedBy, '(type:', typeof performedBy, ')')
+  console.log('  - performedByRole:', performedByRole)
+  console.log('  - message:', message)
+  
   const query = `
     INSERT INTO event_audit_trail (event_id, action_type, performed_by, performed_by_role, message, metadata)
     VALUES ($1, $2, $3, $4, $5, $6)
@@ -411,7 +418,10 @@ export async function createAuditTrailEntry(
   `
   const values = [eventId, actionType, performedBy, performedByRole, message, metadata ? JSON.stringify(metadata) : null]
   
+  console.log('🔍 Executing query with values:', values)
+  
   const result = await pool.query(query, values)
+  console.log('✅ Audit trail entry created successfully:', result.rows[0])
   return result.rows[0]
 }
 

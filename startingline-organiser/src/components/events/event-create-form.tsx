@@ -273,10 +273,20 @@ export default function EventCreateForm({
     return Object.keys(newErrors).length === 0
   }
 
-  // Handle form submission
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Handle form submission for Save Draft
+  const handleSubmitDraft = async (e: React.FormEvent) => {
     e.preventDefault()
+    await handleSubmit('draft')
+  }
 
+  // Handle form submission for Submit for Approval
+  const handleSubmitForApproval = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await handleSubmit('pending_approval')
+  }
+
+  // Main submit handler
+  const handleSubmit = async (status: 'draft' | 'pending_approval') => {
     if (!validateForm()) {
       return
     }
@@ -285,11 +295,12 @@ export default function EventCreateForm({
       console.log('🔍 Submitting event data:', formData)
       console.log('🔍 Event ID:', eventId)
       console.log('🔍 Is editing:', isEditing)
+      console.log('🔍 Status:', status)
 
       const eventData = {
         ...formData,
-        // Events are created as drafts that organisers can edit freely
-        status: isEditing ? undefined : 'draft', // Don't override status when editing
+        // Set status based on action
+        status: isEditing ? undefined : status, // Don't override status when editing
         // Map venue_name to venue for backend compatibility
         venue: formData.venue_name,
         // Map primary_image_url to image_url for backend compatibility  
@@ -604,32 +615,83 @@ export default function EventCreateForm({
           </p>
         </div>
         
-        {/* Submit Button - Top Right */}
-        <Button
-          type="submit"
-          form="event-form"
-          disabled={
-            !canEdit ||
-            (isEditing ? updateEventMutation.isPending : createEventMutation.isPending) || 
-            uploading || 
-            !isBasicInfoComplete() || 
-            !isLocationComplete() || 
-            !isDistancesComplete()
-          }
-          className="min-w-32"
-        >
-          {(isEditing ? updateEventMutation.isPending : createEventMutation.isPending) ? (
-            isEditing ? 'Updating...' : 'Creating...'
-          ) : (
-            <>
-              <Check className="h-4 w-4 mr-2" />
-              {isEditing ? 'Update Event' : 'Create Event'}
-            </>
-          )}
-        </Button>
+        {/* Submit Buttons - Top Right */}
+        {!isEditing && (
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSubmitDraft}
+              disabled={
+                !canEdit ||
+                createEventMutation.isPending || 
+                uploading || 
+                !isBasicInfoComplete() || 
+                !isLocationComplete() || 
+                !isDistancesComplete()
+              }
+              className="min-w-32"
+            >
+              {createEventMutation.isPending ? (
+                'Saving...'
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  Save Draft
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSubmitForApproval}
+              disabled={
+                !canEdit ||
+                createEventMutation.isPending || 
+                uploading || 
+                !isBasicInfoComplete() || 
+                !isLocationComplete() || 
+                !isDistancesComplete()
+              }
+              className="min-w-40"
+            >
+              {createEventMutation.isPending ? (
+                'Submitting...'
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  Submit for Approval
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+        {isEditing && (
+          <Button
+            type="submit"
+            form="event-form"
+            disabled={
+              !canEdit ||
+              updateEventMutation.isPending || 
+              uploading || 
+              !isBasicInfoComplete() || 
+              !isLocationComplete() || 
+              !isDistancesComplete()
+            }
+            className="min-w-32"
+          >
+            {updateEventMutation.isPending ? (
+              'Updating...'
+            ) : (
+              <>
+                <Check className="h-4 w-4 mr-2" />
+                Update Event
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
-      <form id="event-form" onSubmit={handleSubmit} className="space-y-6">
+      <form id="event-form" className="space-y-6">
         {/* Progress Bar */}
         <div className="mb-6">
           <div className="flex justify-between items-center mb-2">

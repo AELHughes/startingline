@@ -34,6 +34,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>
   register: (userData: any) => Promise<void>
   logout: () => void
+  updateAuthState: (user: User, token: string) => void
   isLoading: boolean
 }
 
@@ -195,12 +196,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.replace('/login')
   }
 
+  const updateAuthState = (newUser: User, newToken: string) => {
+    setUser(newUser)
+    setToken(newToken)
+    localStorage.setItem('auth_token', newToken)
+    localStorage.setItem('user', JSON.stringify(newUser))
+  }
+
   const value = {
     user,
     token,
     login,
     register,
     logout,
+    updateAuthState,
     isLoading
   }
 

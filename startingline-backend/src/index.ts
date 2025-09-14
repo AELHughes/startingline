@@ -13,6 +13,7 @@ import messagesRoutes from './routes/messages'
 import debugRoutes from './routes/debug'
 import ticketsRoutes from './routes/tickets'
 import articlesRoutes from './routes/articles'
+import participantRegistrationRoutes from './routes/participant-registration'
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler'
@@ -56,6 +57,7 @@ app.use('/api/messages', messagesRoutes)
 app.use('/api/debug', debugRoutes)
 app.use('/api/tickets', ticketsRoutes)
 app.use('/api/articles', articlesRoutes)
+app.use('/api/participant-registration', participantRegistrationRoutes)
 
 // Error handling middleware
 app.use(notFound)
