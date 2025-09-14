@@ -899,6 +899,53 @@ router.post('/:id/audit-trail', authenticateToken, async (req: Request, res: Res
       metadata
     )
     
+    // Create notification for admins when organiser makes a change request
+    if (action_type === 'change_requested' && userRole === 'organiser') {
+      console.log('🔔 Creating admin notifications for change request...')
+      try {
+        // Get event details for the notification
+        const eventResult = await pool.query(
+          'SELECT name, organiser_id FROM events WHERE id = $1',
+          [id]
+        )
+        
+        if (eventResult.rows.length > 0) {
+          const event = eventResult.rows[0]
+          
+          // Get all active admin users
+          const adminResult = await pool.query(`
+            SELECT u.id, u.email 
+            FROM users u
+            INNER JOIN admin_users au ON u.email = au.email
+            WHERE au.is_active = true
+          `)
+          
+          console.log(`📧 Found ${adminResult.rows.length} active admin users for change request notification`)
+          
+          // Create notification for each admin
+          for (const admin of adminResult.rows) {
+            await createNotification(
+              admin.id,
+              'change_request',
+              'Event Change Request',
+              `Organiser has requested changes to event "${event.name}". Request: ${message}`,
+              `/admin/events/${id}`,
+              {
+                event_id: id,
+                organiser_id: event.organiser_id,
+                event_name: event.name,
+                change_request: message
+              }
+            )
+            console.log(`✅ Change request notification created for admin: ${admin.email}`)
+          }
+        }
+      } catch (notificationError: any) {
+        console.error('❌ Failed to create change request notifications:', notificationError.message)
+        // Don't fail the entire operation if notifications fail
+      }
+    }
+    
     res.status(201).json({
       success: true,
       data: entry,

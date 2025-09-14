@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { eventsApi } from '@/lib/api'
+import EventAuditTrail from '@/components/events/event-audit-trail'
 import { 
   CheckCircle, 
   XCircle, 
@@ -354,13 +355,14 @@ export default function AdminEventDetailPage() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="location">Location</TabsTrigger>
           <TabsTrigger value="distances">Distances</TabsTrigger>
           <TabsTrigger value="merchandise">Merchandise</TabsTrigger>
           <TabsTrigger value="organiser">Organiser</TabsTrigger>
           <TabsTrigger value="comments">Comments</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -1471,6 +1473,21 @@ export default function AdminEventDetailPage() {
                   <p className="text-gray-600">Add comments to specific sections to provide feedback to the organiser.</p>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* History Tab */}
+        <TabsContent value="history">
+          <Card>
+            <CardHeader>
+              <CardTitle>Event History & Change Requests</CardTitle>
+              <CardDescription>
+                View all changes, requests, and activity for this event
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <EventAuditTrail eventId={event.id} />
             </CardContent>
           </Card>
         </TabsContent>

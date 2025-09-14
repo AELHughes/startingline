@@ -49,7 +49,7 @@ const ACTION_ICONS = {
 const ACTION_COLORS = {
   created: 'bg-blue-50 text-blue-700 border-blue-200',
   submitted_for_approval: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-  change_requested: 'bg-orange-50 text-orange-700 border-orange-200',
+  change_requested: 'bg-orange-100 text-orange-800 border-orange-300 border-2',
   admin_updated: 'bg-purple-50 text-purple-700 border-purple-200',
   published: 'bg-green-50 text-green-700 border-green-200',
   cancelled: 'bg-red-50 text-red-700 border-red-200',
@@ -162,7 +162,16 @@ export default function EventAuditTrail({ eventId, className = '' }: EventAuditT
     )
   }
 
-  const visibleEntries = isExpanded ? auditTrail : auditTrail.slice(0, 3)
+  // Sort entries to prioritize change requests
+  const sortedAuditTrail = [...auditTrail].sort((a, b) => {
+    // Change requests first
+    if (a.action_type === 'change_requested' && b.action_type !== 'change_requested') return -1
+    if (b.action_type === 'change_requested' && a.action_type !== 'change_requested') return 1
+    // Then by date (newest first)
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
+  
+  const visibleEntries = isExpanded ? sortedAuditTrail : sortedAuditTrail.slice(0, 3)
 
   return (
     <Card className={className}>
