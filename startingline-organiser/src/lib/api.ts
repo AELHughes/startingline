@@ -1196,11 +1196,20 @@ class ParticipantRegistrationApi {
     error?: string
   }> {
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      console.log('🔍 getMyOrders - token from localStorage:', token ? 'present' : 'missing')
+      console.log('🔍 getMyOrders - token preview:', token ? token.substring(0, 50) + '...' : 'none')
+      
+      const headers = getAuthHeaders()
+      console.log('🔍 getMyOrders - headers:', headers)
+      
       const response = await fetch(`${API_BASE}/api/participant-registration/my-orders`, {
-        headers: getAuthHeaders()
+        headers
       })
 
       const result = await response.json()
+      console.log('🔍 getMyOrders - response status:', response.status)
+      console.log('🔍 getMyOrders - response result:', result)
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to get orders')

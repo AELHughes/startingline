@@ -457,7 +457,7 @@ export default function EventRegistrationPage() {
       account_holder_address: accountHolderForm.address,
       emergency_contact_name: `${accountHolderForm.first_name} ${accountHolderForm.last_name}`,
       emergency_contact_number: accountHolderForm.mobile,
-      password: accountHolderForm.password
+      account_holder_password: accountHolderForm.password
     }))
 
     proceedToParticipants()
@@ -617,7 +617,7 @@ export default function EventRegistrationPage() {
         account_holder_address: orderData.account_holder_address!,
         emergency_contact_name: orderData.emergency_contact_name!,
         emergency_contact_number: orderData.emergency_contact_number!,
-        account_holder_password: orderData.password,
+        account_holder_password: orderData.account_holder_password,
         participants: participantForms.map(form => ({
           distance_id: form.distance_id,
           participant: {
@@ -641,9 +641,13 @@ export default function EventRegistrationPage() {
       
       if (response.success) {
         // If authentication data is provided, log the user in
-        if (response.data?.auth) {
+        if ((response.data as any)?.auth) {
+          console.log('🔐 Registration response includes auth data:', (response.data as any).auth)
           // Update auth context immediately
-          updateAuthState(response.data.auth.user, response.data.auth.token)
+          updateAuthState((response.data as any).auth.user, (response.data as any).auth.token)
+          console.log('🔐 Auth state updated, token stored in localStorage')
+        } else {
+          console.log('🔐 No auth data in registration response')
         }
         
         // Redirect to success page with order data

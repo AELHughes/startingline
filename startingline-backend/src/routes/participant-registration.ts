@@ -269,22 +269,20 @@ router.post('/save-participant', authenticateToken, async (req: Request, res: Re
  * Create order and tickets for event registration
  */
 router.post('/register', optionalAuth, async (req: Request, res: Response) => {
+  const orderData: OrderData = req.body
+  console.log('🚀 Registration request received')
+  console.log('🔍 Request body keys:', Object.keys(req.body))
+  console.log('🔍 req.localUser:', req.localUser)
+  console.log('🔍 Request headers:', req.headers)
+  console.log('Registration data received:', JSON.stringify(orderData, null, 2))
+  let userId = req.localUser?.userId || null
+
+  // STEP 1: Create user account FIRST (outside transaction to ensure it's committed)
   const client = await pool.connect()
   
   try {
-    await client.query('BEGIN')
-    
-    const orderData: OrderData = req.body
-    console.log('🚀 Registration request received')
-    console.log('🔍 Request body keys:', Object.keys(req.body))
-    console.log('🔍 req.localUser:', req.localUser)
-    console.log('🔍 Request headers:', req.headers)
-    console.log('Registration data received:', JSON.stringify(orderData, null, 2))
-    let userId = req.localUser?.userId || null
-
-    // If no user is logged in, create a new user account
     if (!userId && orderData.account_holder_email) {
-      console.log('🔍 User creation check:')
+      console.log('🔍 STEP 1: User creation check:')
       console.log('  - userId:', userId)
       console.log('  - account_holder_email:', orderData.account_holder_email)
       console.log('  - account_holder_first_name:', orderData.account_holder_first_name)
@@ -301,6 +299,37 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
       if (existingUser.rows.length > 0) {
         userId = existingUser.rows[0].id
         console.log('✅ User already exists, using existing ID:', userId)
+        
+        // Check if user profile exists
+        const existingProfile = await client.query(
+          'SELECT id FROM user_profiles WHERE user_id = $1',
+          [userId]
+        )
+        
+        if (existingProfile.rows.length === 0) {
+          console.log('🔍 STEP 1B: Creating missing user profile for existing user...')
+          const userProfileResult = await client.query(`
+            INSERT INTO user_profiles (
+              user_id, email, first_name, last_name, phone, address, 
+              emergency_contact_name, emergency_contact_number, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+            RETURNING id
+          `, [
+            userId,
+            orderData.account_holder_email,
+            orderData.account_holder_first_name,
+            orderData.account_holder_last_name,
+            orderData.account_holder_mobile,
+            orderData.account_holder_address,
+            orderData.emergency_contact_name,
+            orderData.emergency_contact_number
+          ])
+          
+          const userProfileId = userProfileResult.rows[0].id
+          console.log('✅ STEP 1B COMPLETE: Created missing user profile with ID:', userProfileId)
+        } else {
+          console.log('✅ User profile already exists')
+        }
       } else {
         console.log('🆕 Creating new user account...')
         try {
@@ -314,7 +343,7 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
           
           console.log('🔐 Generated password hash for participant')
           
-          // Create new user
+          // Create new user (outside transaction to ensure immediate availability)
           const userResult = await client.query(`
             INSERT INTO users (
               email, password_hash, first_name, last_name, phone, role, email_verified, created_at, updated_at
@@ -329,21 +358,49 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
           ])
           
           userId = userResult.rows[0].id
-          console.log('✅ Created new user with ID:', userId)
+          console.log('✅ STEP 1A COMPLETE: Created new user with ID:', userId)
           console.log('✅ User details:', userResult.rows[0])
+          
+          // Create user profile for the new user
+          console.log('🔍 STEP 1B: Creating user profile for new user...')
+          const userProfileResult = await client.query(`
+            INSERT INTO user_profiles (
+              user_id, email, first_name, last_name, phone, address, 
+              emergency_contact_name, emergency_contact_number, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+            RETURNING id
+          `, [
+            userId,
+            orderData.account_holder_email,
+            orderData.account_holder_first_name,
+            orderData.account_holder_last_name,
+            orderData.account_holder_mobile,
+            orderData.account_holder_address,
+            orderData.emergency_contact_name,
+            orderData.emergency_contact_number
+          ])
+          
+          const userProfileId = userProfileResult.rows[0].id
+          console.log('✅ STEP 1B COMPLETE: Created user profile with ID:', userProfileId)
         } catch (userError) {
           console.error('❌ Error creating user:', userError)
           throw userError
         }
       }
     } else {
-      console.log('🔍 User creation skipped:')
+      console.log('🔍 STEP 1 SKIPPED: User creation not needed:')
       console.log('  - userId:', userId)
       console.log('  - account_holder_email:', orderData.account_holder_email)
     }
 
+    // STEP 2: Create event registration and save participants (within transaction)
+    await client.query('BEGIN')
+    console.log('🔍 STEP 2: Starting event registration transaction...')
+
     // Validate required fields
     if (!orderData.event_id || !orderData.participants || orderData.participants.length === 0) {
+      await client.query('ROLLBACK')
+      client.release()
       return res.status(400).json({
         success: false,
         error: 'Event ID and participants are required'
@@ -405,7 +462,20 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
     const finalTotalAmount = Number(totalAmount)
     console.log('Final total amount:', finalTotalAmount, 'Type:', typeof finalTotalAmount)
     
-    // Create order
+    // STEP 2A: Create order
+    console.log('🔍 STEP 2A: Creating order for user ID:', userId)
+    console.log('🔍 Order data fields:')
+    console.log('  - event_id:', orderData.event_id)
+    console.log('  - account_holder_first_name:', orderData.account_holder_first_name)
+    console.log('  - account_holder_last_name:', orderData.account_holder_last_name)
+    console.log('  - account_holder_email:', orderData.account_holder_email)
+    console.log('  - account_holder_mobile:', orderData.account_holder_mobile)
+    console.log('  - account_holder_company:', orderData.account_holder_company)
+    console.log('  - account_holder_address:', orderData.account_holder_address)
+    console.log('  - emergency_contact_name:', orderData.emergency_contact_name)
+    console.log('  - emergency_contact_number:', orderData.emergency_contact_number)
+    console.log('  - finalTotalAmount:', finalTotalAmount)
+    
     const orderResult = await client.query(`
       INSERT INTO orders (
         event_id, account_holder_id, account_holder_first_name, account_holder_last_name,
@@ -426,10 +496,12 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
       orderData.emergency_contact_number,
       finalTotalAmount
     ])
+    console.log('✅ STEP 2A COMPLETE: Order created with ID:', orderResult.rows[0].id)
 
     const order = orderResult.rows[0]
 
-    // Create tickets
+    // STEP 2B: Create tickets
+    console.log('🔍 STEP 2B: Creating tickets for order:', order.id)
     const tickets = []
     for (const ticketDetail of ticketDetails) {
       const ticketResult = await client.query(`
@@ -478,9 +550,29 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
       tickets.push(ticket)
     }
 
-    // Save participants to saved_participants table for future use
+    // STEP 2C: Save participants to saved_participants table for future use
+    console.log('🔍 STEP 2C: Saving participants for future use')
+    console.log(`🔍 Saving participants for user ID: ${userId}`)
+    console.log(`🔍 Number of ticket details: ${ticketDetails.length}`)
+    
+    // Get user profile ID for saved participants
+    const userProfileResult = await client.query(
+      'SELECT id FROM user_profiles WHERE user_id = $1',
+      [userId]
+    )
+    
+    if (userProfileResult.rows.length === 0) {
+      console.error('❌ No user profile found for user ID:', userId)
+      throw new Error('User profile not found')
+    }
+    
+    const userProfileId = userProfileResult.rows[0].id
+    console.log('✅ Found user profile ID:', userProfileId)
+    
     for (const ticketDetail of ticketDetails) {
       try {
+        console.log(`🔍 Processing participant: ${ticketDetail.participant.first_name} ${ticketDetail.participant.last_name}`)
+        
         // Check if participant already exists for this user
         const existingParticipant = await client.query(`
           SELECT id FROM saved_participants 
@@ -489,21 +581,36 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
           AND participant_last_name = $3 
           AND participant_email = $4
         `, [
-          userId,
+          userProfileId,
           ticketDetail.participant.first_name,
           ticketDetail.participant.last_name,
           ticketDetail.participant.email
         ])
 
+        console.log(`🔍 Existing participant check: ${existingParticipant.rows.length} found`)
+
         // Only insert if participant doesn't already exist
         if (existingParticipant.rows.length === 0) {
-          await client.query(`
+          console.log(`🔍 Inserting new participant with data:`)
+          console.log(`  - user_profile_id: ${userProfileId}`)
+          console.log(`  - first_name: ${ticketDetail.participant.first_name}`)
+          console.log(`  - last_name: ${ticketDetail.participant.last_name}`)
+          console.log(`  - email: ${ticketDetail.participant.email}`)
+          console.log(`  - mobile: ${ticketDetail.participant.mobile}`)
+          console.log(`  - date_of_birth: ${ticketDetail.participant.date_of_birth}`)
+          console.log(`  - medical_aid_name: ${ticketDetail.participant.medical_aid_name}`)
+          console.log(`  - medical_aid_number: ${ticketDetail.participant.medical_aid_number}`)
+          console.log(`  - emergency_contact_name: ${ticketDetail.participant.emergency_contact_name}`)
+          console.log(`  - emergency_contact_number: ${ticketDetail.participant.emergency_contact_number}`)
+          
+          const insertResult = await client.query(`
             INSERT INTO saved_participants (
               user_profile_id, participant_first_name, participant_last_name, participant_email, participant_mobile, participant_date_of_birth,
               participant_medical_aid, participant_medical_aid_number, emergency_contact_name, emergency_contact_number
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id
           `, [
-            userId,
+            userProfileId,
             ticketDetail.participant.first_name,
             ticketDetail.participant.last_name,
             ticketDetail.participant.email,
@@ -514,17 +621,20 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
             ticketDetail.participant.emergency_contact_name,
             ticketDetail.participant.emergency_contact_number
           ])
-          console.log(`✅ Saved participant: ${ticketDetail.participant.first_name} ${ticketDetail.participant.last_name}`)
+          console.log(`✅ Saved participant: ${ticketDetail.participant.first_name} ${ticketDetail.participant.last_name} with ID: ${insertResult.rows[0].id}`)
         } else {
           console.log(`ℹ️ Participant already saved: ${ticketDetail.participant.first_name} ${ticketDetail.participant.last_name}`)
         }
       } catch (error) {
-        console.error('Error saving participant:', error)
+        console.error('❌ Error saving participant:', error)
         // Don't fail the entire registration if saving participant fails
       }
     }
 
     await client.query('COMMIT')
+    console.log('✅ STEP 2 COMPLETE: Event registration transaction committed successfully')
+    console.log('✅ Order ID after commit:', order.id)
+    console.log('✅ Number of tickets created:', tickets.length)
 
     // Get event details for the response
     const eventResult = await client.query(`
@@ -533,9 +643,20 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
       WHERE id = $1
     `, [orderData.event_id])
     
+    if (eventResult.rows.length === 0) {
+      console.error('❌ Event not found for ID:', orderData.event_id)
+      throw new Error('Event not found')
+    }
+    
     const event = eventResult.rows[0]
+    console.log('✅ Event found for response:', event.name)
 
     // Prepare response data
+    console.log('🔍 Preparing response data...')
+    console.log('🔍 Order data:', order)
+    console.log('🔍 Event data:', event)
+    console.log('🔍 Tickets data:', tickets.length, 'tickets')
+    
     const responseData: any = {
       order: {
         ...order,
@@ -550,10 +671,11 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
         participant_name: `${ticket.participant_first_name} ${ticket.participant_last_name}`
       }))
     }
+    console.log('✅ Response data prepared successfully')
 
-    // If a new user was created, include authentication data
+    // STEP 3: Generate JWT token for new users
     if (!req.localUser?.userId && userId) {
-      console.log('🔐 Creating authentication data for new user:')
+      console.log('🔍 STEP 3: Creating authentication data for new user:')
       console.log('  - userId:', userId)
       console.log('  - email:', orderData.account_holder_email)
       
@@ -585,7 +707,7 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
         }
       }
       
-      console.log('✅ Authentication data created:', responseData.auth)
+      console.log('✅ STEP 3 COMPLETE: Authentication data created:', responseData.auth)
     } else {
       console.log('🔐 No authentication data needed:')
       console.log('  - req.localUser?.userId:', req.localUser?.userId)
@@ -599,8 +721,16 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
     } as ApiResponse)
 
   } catch (error: any) {
-    await client.query('ROLLBACK')
-    console.error('Registration error:', error)
+    console.error('❌ Registration error:', error)
+    
+    // Only rollback if we're in a transaction
+    try {
+      await client.query('ROLLBACK')
+      console.log('🔄 Transaction rolled back')
+    } catch (rollbackError) {
+      console.log('ℹ️ No transaction to rollback or rollback failed:', rollbackError)
+    }
+    
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to process registration'
@@ -618,6 +748,18 @@ router.get('/my-orders', authenticateToken, async (req: Request, res: Response) 
     console.log('🔍 getMyOrders - req.localUser:', req.localUser)
     const userId = req.localUser!.userId
     console.log('🔍 getMyOrders - userId:', userId)
+    
+    // First, let's check if the user exists in the database
+    const userCheck = await pool.query('SELECT id, email, first_name, last_name FROM users WHERE id = $1', [userId])
+    console.log('🔍 User check result:', userCheck.rows.length, 'rows found')
+    if (userCheck.rows.length === 0) {
+      console.log('❌ User not found in database with ID:', userId)
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      } as ApiResponse)
+    }
+    console.log('✅ User found:', userCheck.rows[0])
 
     const result = await pool.query(`
       SELECT 
