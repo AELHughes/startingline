@@ -12,6 +12,7 @@ interface ChangeRequestModalProps {
   onClose: () => void
   eventName: string
   eventId: string
+  eventStatus: string
   onSubmit: (request: string) => Promise<void>
 }
 
@@ -20,6 +21,7 @@ export default function ChangeRequestModal({
   onClose,
   eventName,
   eventId,
+  eventStatus,
   onSubmit
 }: ChangeRequestModalProps) {
   const [request, setRequest] = useState('')
@@ -62,29 +64,48 @@ export default function ChangeRequestModal({
             Event Change Request
           </DialogTitle>
           <DialogDescription>
-            <span className="font-medium">{eventName}</span> has already been submitted for approval.
+            <span className="font-medium">{eventName}</span> {eventStatus === 'published' ? 'is live and visible to the public.' : 'has already been submitted for approval.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex items-start space-x-3">
-              <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h4 className="text-sm font-medium text-yellow-800">
-                  Event Under Review
-                </h4>
-                <p className="text-sm text-yellow-700 mt-1">
-                  Your event is currently being reviewed by administrators. If you need to make changes, 
-                  please describe what you'd like updated below.
-                </p>
+          {eventStatus === 'published' ? (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-start space-x-3">
+                <AlertTriangle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="text-sm font-medium text-green-800">
+                    Event Published
+                  </h4>
+                  <p className="text-sm text-green-700 mt-1">
+                    Your event is live and visible to the public. To make changes, please describe what you'd like updated below.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start space-x-3">
+                <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="text-sm font-medium text-yellow-800">
+                    Event Under Review
+                  </h4>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    Your event is currently being reviewed by administrators. If you need to make changes, 
+                    please describe what you'd like updated below.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="change-request">
-              What would you like the admin to consider updating before publishing?
+              {eventStatus === 'published' 
+                ? 'What changes would you like the admin to consider for your live event?'
+                : 'What would you like the admin to consider updating before publishing?'
+              }
             </Label>
             <Textarea
               id="change-request"
@@ -96,7 +117,10 @@ export default function ChangeRequestModal({
               disabled={submitting}
             />
             <p className="text-xs text-gray-500">
-              This message will be sent to the administrators reviewing your event.
+              {eventStatus === 'published' 
+                ? 'This message will be sent to the administrators managing your live event.'
+                : 'This message will be sent to the administrators reviewing your event.'
+              }
             </p>
           </div>
 

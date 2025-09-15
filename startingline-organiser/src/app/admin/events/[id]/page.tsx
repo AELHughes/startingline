@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { eventsApi } from '@/lib/api'
 import EventAuditTrail from '@/components/events/event-audit-trail'
@@ -31,7 +32,9 @@ import {
   Edit,
   Send,
   Save,
-  X
+  X,
+  Plus,
+  Trash2
 } from 'lucide-react'
 
 // Use the existing API service to fetch event details
@@ -63,6 +66,13 @@ export default function AdminEventDetailPage() {
     enabled: !!eventId
   })
 
+  // Fetch admin comments
+  const { data: comments = [], isLoading: commentsLoading } = useQuery({
+    queryKey: ['admin-comments', eventId],
+    queryFn: () => eventsApi.getAdminComments(eventId),
+    enabled: !!eventId
+  })
+
   if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -87,16 +97,6 @@ export default function AdminEventDetailPage() {
     )
   }
 
-  // Mock data for comments - replace with real API call when available
-  const comments = [
-    {
-      id: 1,
-      section: 'location',
-      comment: 'Please provide more specific directions to the venue',
-      admin: 'System Administrator',
-      created_at: '2024-01-15T11:00:00Z'
-    }
-  ]
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -163,7 +163,12 @@ export default function AdminEventDetailPage() {
 
   const handleSubmitComment = async () => {
     try {
-      // Update the section comment
+      if (!event || !sectionComment.trim()) return
+      
+      // Create admin comment via API
+      await eventsApi.createAdminComment(event.id, selectedSection, sectionComment)
+      
+      // Update the section comment locally
       setSectionComments(prev => ({
         ...prev,
         [selectedSection]: sectionComment
@@ -174,15 +179,26 @@ export default function AdminEventDetailPage() {
       setShowSubmitComments(hasComments)
       
       setShowCommentModal(false)
+      setSectionComment('')
+      
+      // Refresh the comments query
+      window.location.reload() // Simple refresh for now
     } catch (error) {
       console.error('Failed to add comment:', error)
+      alert('Failed to add comment. Please try again.')
     }
   }
 
   const handleSubmitAllComments = async () => {
     try {
-      // TODO: Implement submit all comments API call
-      console.log('Submitting all comments:', sectionComments)
+      if (!event) return
+      
+      // Submit all pending comments via API
+      for (const [section, comment] of Object.entries(sectionComments)) {
+        if (comment.trim()) {
+          await eventsApi.createAdminComment(event.id, section, comment)
+        }
+      }
       
       // Move comments to submitted and clear current comments
       setSubmittedComments(prev => ({
@@ -192,10 +208,13 @@ export default function AdminEventDetailPage() {
       setSectionComments({})
       setShowSubmitComments(false)
       
-      // This will send all comments to the organiser
+      // Refresh the page to show updated comments
+      window.location.reload()
+      
       alert('Comments submitted to organiser successfully!')
     } catch (error) {
       console.error('Failed to submit comments:', error)
+      alert('Failed to submit comments. Please try again.')
     }
   }
 
@@ -211,12 +230,16 @@ export default function AdminEventDetailPage() {
       case 'overview':
         setEditFormData({
           name: event.name,
+          category: event.category,
+          event_type: event.event_type,
           description: event.description,
           start_date: event.start_date,
+          end_date: event.end_date,
           start_time: event.start_time,
           registration_deadline: event.registration_deadline,
           max_participants: event.max_participants,
           entry_fee: event.entry_fee,
+          license_required: event.license_required,
           temp_license_fee: event.temp_license_fee,
           license_details: event.license_details
         })
@@ -356,7 +379,7 @@ export default function AdminEventDetailPage() {
 
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList className="grid w-full grid-cols-7">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="overview">Basic Info</TabsTrigger>
           <TabsTrigger value="location">Location</TabsTrigger>
           <TabsTrigger value="distances">Distances</TabsTrigger>
           <TabsTrigger value="merchandise">Merchandise</TabsTrigger>
@@ -405,6 +428,32 @@ export default function AdminEventDetailPage() {
                         className="mt-1"
                       />
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="edit-category" className="text-sm font-medium text-gray-600">Category</Label>
+                        <Input
+                          id="edit-category"
+                          value={editFormData.category || ''}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, category: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-event-type" className="text-sm font-medium text-gray-600">Event Type</Label>
+                        <Select
+                          value={editFormData.event_type || 'single'}
+                          onValueChange={(value) => setEditFormData(prev => ({ ...prev, event_type: value }))}
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="single">Single Day</SelectItem>
+                            <SelectItem value="multi">Multi-Day</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                     <div>
                       <Label htmlFor="edit-description" className="text-sm font-medium text-gray-600">Description</Label>
                       <Textarea
@@ -417,7 +466,7 @@ export default function AdminEventDetailPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="edit-start-date" className="text-sm font-medium text-gray-600">Event Date</Label>
+                        <Label htmlFor="edit-start-date" className="text-sm font-medium text-gray-600">Start Date</Label>
                         <Input
                           id="edit-start-date"
                           type="date"
@@ -427,7 +476,19 @@ export default function AdminEventDetailPage() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="edit-start-time" className="text-sm font-medium text-gray-600">Time</Label>
+                        <Label htmlFor="edit-end-date" className="text-sm font-medium text-gray-600">End Date</Label>
+                        <Input
+                          id="edit-end-date"
+                          type="date"
+                          value={editFormData.end_date ? editFormData.end_date.split('T')[0] : ''}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, end_date: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="edit-start-time" className="text-sm font-medium text-gray-600">Start Time</Label>
                         <Input
                           id="edit-start-time"
                           type="time"
@@ -436,8 +497,6 @@ export default function AdminEventDetailPage() {
                           className="mt-1"
                         />
                       </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="edit-registration-deadline" className="text-sm font-medium text-gray-600">Registration Deadline</Label>
                         <Input
@@ -448,29 +507,8 @@ export default function AdminEventDetailPage() {
                           className="mt-1"
                         />
                       </div>
-                      <div>
-                        <Label htmlFor="edit-max-participants" className="text-sm font-medium text-gray-600">Max Participants</Label>
-                        <Input
-                          id="edit-max-participants"
-                          type="number"
-                          value={editFormData.max_participants || ''}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, max_participants: parseInt(e.target.value) || null }))}
-                          className="mt-1"
-                        />
-                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="edit-entry-fee" className="text-sm font-medium text-gray-600">Entry Fee</Label>
-                        <Input
-                          id="edit-entry-fee"
-                          type="number"
-                          step="0.01"
-                          value={editFormData.entry_fee || ''}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, entry_fee: parseFloat(e.target.value) || 0 }))}
-                          className="mt-1"
-                        />
-                      </div>
                       <div>
                         <Label htmlFor="edit-license-fee" className="text-sm font-medium text-gray-600">License Fee</Label>
                         <Input
@@ -481,6 +519,21 @@ export default function AdminEventDetailPage() {
                           onChange={(e) => setEditFormData(prev => ({ ...prev, temp_license_fee: parseFloat(e.target.value) || 0 }))}
                           className="mt-1"
                         />
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-license-required" className="text-sm font-medium text-gray-600">License Required</Label>
+                        <Select
+                          value={editFormData.license_required ? 'true' : 'false'}
+                          onValueChange={(value) => setEditFormData(prev => ({ ...prev, license_required: value === 'true' }))}
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="false">No</SelectItem>
+                            <SelectItem value="true">Yes</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                     <div>
@@ -515,38 +568,48 @@ export default function AdminEventDetailPage() {
                       <Label className="text-sm font-medium text-gray-600">Event Name</Label>
                       <p className="text-gray-900">{event.name}</p>
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">Category</Label>
+                        <p className="text-gray-900">{event.category}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">Event Type</Label>
+                        <p className="text-gray-900">{event.event_type === 'multi' ? 'Multi-Day' : 'Single Day'}</p>
+                      </div>
+                    </div>
                     <div>
                       <Label className="text-sm font-medium text-gray-600">Description</Label>
                       <p className="text-gray-900">{event.description || 'No description provided'}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label className="text-sm font-medium text-gray-600">Event Date</Label>
+                        <Label className="text-sm font-medium text-gray-600">Start Date</Label>
                         <p className="text-gray-900">{new Date(event.start_date).toLocaleDateString()}</p>
                       </div>
                       <div>
-                        <Label className="text-sm font-medium text-gray-600">Time</Label>
-                        <p className="text-gray-900">{event.start_time}</p>
+                        <Label className="text-sm font-medium text-gray-600">End Date</Label>
+                        <p className="text-gray-900">{event.end_date ? new Date(event.end_date).toLocaleDateString() : 'Not set'}</p>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">Start Time</Label>
+                        <p className="text-gray-900">{event.start_time}</p>
+                      </div>
                       <div>
                         <Label className="text-sm font-medium text-gray-600">Registration Deadline</Label>
                         <p className="text-gray-900">{event.registration_deadline ? new Date(event.registration_deadline).toLocaleDateString() : 'Not set'}</p>
                       </div>
-                      <div>
-                        <Label className="text-sm font-medium text-gray-600">Max Participants</Label>
-                        <p className="text-gray-900">{event.max_participants || 'Not set'}</p>
-                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label className="text-sm font-medium text-gray-600">Entry Fee</Label>
-                        <p className="text-gray-900">R{event.entry_fee || 0}</p>
-                      </div>
-                      <div>
                         <Label className="text-sm font-medium text-gray-600">License Fee</Label>
                         <p className="text-gray-900">R{event.temp_license_fee || 0}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">License Required</Label>
+                        <p className="text-gray-900">{event.license_required ? 'Yes' : 'No'}</p>
                       </div>
                     </div>
                     {event.license_details && (
@@ -814,6 +877,26 @@ export default function AdminEventDetailPage() {
                   <div className="space-y-4">
                     {editFormData.distances?.map((distance, index) => (
                       <div key={index} className="p-4 border border-gray-200 rounded-lg">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="font-semibold text-gray-900">
+                            Distance {index + 1}
+                          </h4>
+                          {editFormData.distances.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const newDistances = editFormData.distances.filter((_, i) => i !== index)
+                                setEditFormData(prev => ({ ...prev, distances: newDistances }))
+                              }}
+                              className="text-red-600 border-red-200 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4 mr-1" />
+                              Remove
+                            </Button>
+                          )}
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div>
                             <Label htmlFor={`distance_${index}_name`} className="mb-2 font-medium">Distance Name *</Label>
@@ -962,21 +1045,51 @@ export default function AdminEventDetailPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="flex justify-end space-x-2 pt-4 border-t">
-                    <Button
-                      variant="outline"
-                      onClick={handleCancelEdit}
-                    >
-                      <X className="w-4 h-4 mr-2" />
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={() => handleSaveSection('distances')}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <Save className="w-4 h-4 mr-2" />
-                      Save Changes
-                    </Button>
+                  
+                  {/* Add/Remove Distance Buttons */}
+                  <div className="flex justify-between items-center pt-4 border-t">
+                    <div className="flex space-x-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          const newDistances = [...(editFormData.distances || [])]
+                          newDistances.push({
+                            name: '',
+                            distance_km: '',
+                            price: '',
+                            min_age: '',
+                            entry_limit: '',
+                            start_time: '',
+                            free_for_seniors: false,
+                            free_for_disability: false,
+                            senior_age_threshold: ''
+                          })
+                          setEditFormData(prev => ({ ...prev, distances: newDistances }))
+                        }}
+                        className="flex items-center"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Distance
+                      </Button>
+                    </div>
+                    
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        onClick={handleCancelEdit}
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={() => handleSaveSection('distances')}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <Save className="w-4 h-4 mr-2" />
+                        Save Changes
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ) : (

@@ -152,29 +152,37 @@ export default function EventHistoryPage() {
       <div className="container mx-auto px-4 py-6">
         {/* Header */}
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-4">
+          {/* Page Title and Description - Top */}
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-gray-900 flex items-center mb-2">
+              <History className="h-7 w-7 mr-3" />
+              Event History
+            </h1>
+            <p className="text-gray-600 text-lg">Complete timeline of all changes and updates</p>
+          </div>
+
+          {/* Action Buttons Row */}
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            {/* Left Side - Navigation */}
+            <div className="flex flex-wrap items-center gap-3">
               <Button
                 onClick={() => router.push('/dashboard/events')}
                 variant="outline"
                 size="sm"
+                className="flex items-center"
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Events
               </Button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-                  <History className="h-6 w-6 mr-2" />
-                  Event History
-                </h1>
-                <p className="text-gray-600">Complete timeline of all changes and updates</p>
-              </div>
             </div>
-            <div className="flex items-center space-x-3">
+
+            {/* Right Side - Status and Actions */}
+            <div className="flex flex-wrap items-center gap-3">
               {getStatusBadge(event.status)}
               <Button
                 onClick={() => router.push(`/dashboard/events/${event.id}/edit`)}
                 variant="outline"
+                size="sm"
               >
                 Edit Event
               </Button>
@@ -182,7 +190,7 @@ export default function EventHistoryPage() {
           </div>
 
           {/* Event Summary Card */}
-          <Card className="mb-6">
+          <Card className="mt-8 mb-6">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span className="text-lg">{event.name}</span>

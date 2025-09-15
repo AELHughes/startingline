@@ -49,6 +49,7 @@ interface FormData {
   start_date: string
   end_date?: string
   start_time: string
+  registration_deadline?: string
   description?: string
 
   // Location
@@ -117,6 +118,7 @@ export default function EventCreateForm({
     start_date: '',
     end_date: '',
     start_time: '',
+    registration_deadline: '',
     description: '',
     venue_name: '',
     address: '',
@@ -139,19 +141,39 @@ export default function EventCreateForm({
   useEffect(() => {
     if (initialData && isEditing) {
       console.log('🔄 Populating form with initial data:', initialData)
+      console.log('📅 Start date from API:', initialData.start_date, 'Type:', typeof initialData.start_date)
+      console.log('📅 End date from API:', initialData.end_date, 'Type:', typeof initialData.end_date)
+      console.log('📅 Event type from API:', initialData.event_type, 'Type:', typeof initialData.event_type)
+      
+      // Format dates for HTML date input (YYYY-MM-DD)
+      const formatDateForInput = (dateString: string) => {
+        if (!dateString) return ''
+        try {
+          const date = new Date(dateString)
+          // Use local date to avoid timezone issues
+          const year = date.getFullYear()
+          const month = String(date.getMonth() + 1).padStart(2, '0')
+          const day = String(date.getDate()).padStart(2, '0')
+          return `${year}-${month}-${day}`
+        } catch (error) {
+          console.error('Error formatting date:', error)
+          return ''
+        }
+      }
+      
       setFormData({
         name: initialData.name || '',
         category: initialData.category || '',
         event_type: initialData.event_type || 'single',
-        start_date: initialData.start_date || '',
-        end_date: initialData.end_date || '',
+        start_date: formatDateForInput(initialData.start_date) || '',
+        end_date: formatDateForInput(initialData.end_date) || '',
         start_time: initialData.start_time || '',
+        registration_deadline: formatDateForInput(initialData.registration_deadline) || '',
         description: initialData.description || '',
         venue_name: initialData.venue_name || '',
         address: initialData.address || '',
         city: initialData.city || '',
         province: initialData.province || '',
-        country: initialData.country || 'South Africa',
         latitude: initialData.latitude || null,
         longitude: initialData.longitude || null,
         license_required: initialData.license_required || false,
@@ -167,6 +189,11 @@ export default function EventCreateForm({
             options: variation.options || []
           }))
         }))
+      })
+      console.log('✅ Form data set with:', {
+        start_date: formatDateForInput(initialData.start_date) || '',
+        end_date: formatDateForInput(initialData.end_date) || '',
+        event_type: initialData.event_type || 'single'
       })
     }
   }, [initialData, isEditing])
@@ -199,7 +226,7 @@ export default function EventCreateForm({
   const isMerchandiseComplete = (): boolean => {
     // Only show as complete if merchandise items are actually added and properly filled out
     return formData.merchandise.length > 0 && 
-           formData.merchandise.every(m => m.name.trim() && m.price > 0 && m.description.trim())
+           formData.merchandise.every(m => m.name.trim() && m.price > 0 && (m.description || '').trim())
   }
 
   // Completion indicator component
@@ -287,9 +314,15 @@ export default function EventCreateForm({
 
   // Main submit handler
   const handleSubmit = async (status: 'draft' | 'pending_approval') => {
+    console.log('🚀 Form submission started')
+    console.log('🔍 Form data before validation:', formData)
+    
     if (!validateForm()) {
+      console.log('❌ Form validation failed')
       return
     }
+    
+    console.log('✅ Form validation passed')
 
     try {
       console.log('🔍 Submitting event data:', formData)
@@ -322,15 +355,18 @@ export default function EventCreateForm({
 
       let result
       if (isEditing && eventId) {
+        console.log('🔄 Calling updateEventMutation with:', { eventId, eventData })
         result = await updateEventMutation.mutateAsync({ eventId, eventData })
-        console.log('✅ Event updated successfully')
+        console.log('✅ Event updated successfully:', result)
       } else {
+        console.log('🔄 Calling createEventMutation with:', eventData)
         result = await createEventMutation.mutateAsync(eventData)
-        console.log('✅ Event created successfully')
+        console.log('✅ Event created successfully:', result)
       }
 
-      // Success - redirect appropriately
+      // Success - show message and redirect appropriately
       if (isEditing) {
+        alert('Event updated successfully!')
         router.push('/dashboard/events')
       } else if (result?.slug) {
         router.push(`/events/${result.slug}`)
@@ -338,8 +374,15 @@ export default function EventCreateForm({
         router.push('/dashboard')
       }
     } catch (error: any) {
-      console.error('Create event error:', error)
-      setErrors({ submit: error.message || 'Failed to create event' })
+      console.error('❌ Event submission error:', error)
+      console.error('❌ Error details:', {
+        message: error.message,
+        stack: error.stack,
+        response: error.response
+      })
+      const errorMessage = error.message || 'Failed to update event. Please try again.'
+      alert(`Error: ${errorMessage}`)
+      setErrors({ submit: errorMessage })
     }
   }
 
@@ -691,7 +734,10 @@ export default function EventCreateForm({
         )}
       </div>
 
-      <form id="event-form" className="space-y-6">
+      <form id="event-form" className="space-y-6" onSubmit={isEditing ? (e) => {
+        e.preventDefault()
+        handleSubmit('draft') // For editing, we don't change status
+      } : undefined}>
         {/* Progress Bar */}
         <div className="mb-6">
           <div className="flex justify-between items-center mb-2">
@@ -754,20 +800,22 @@ export default function EventCreateForm({
                   Basic information about your event
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <Label htmlFor="name" className="mb-2 font-medium">Event Name *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                      placeholder="Enter event name"
-                      className={errors.name ? 'border-red-500' : ''}
-                    />
-                    {errors.name && <p className="text-sm text-red-500 mt-1">{errors.name}</p>}
-                  </div>
+              <CardContent className="space-y-6">
+                {/* Event Name - Full Width */}
+                <div>
+                  <Label htmlFor="name" className="mb-2 font-medium">Event Name *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Enter event name"
+                    className={errors.name ? 'border-red-500' : ''}
+                  />
+                  {errors.name && <p className="text-sm text-red-500 mt-1">{errors.name}</p>}
+                </div>
 
+                {/* Category and Event Type - Side by Side */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="category" className="mb-2 font-medium">Category *</Label>
                     <Select
@@ -811,51 +859,124 @@ export default function EventCreateForm({
                     </Select>
                     {errors.event_type && <p className="text-sm text-red-500 mt-1">{errors.event_type}</p>}
                   </div>
+                </div>
 
-                  <div>
-                    <Label htmlFor="start_date" className="mb-2 font-medium">Start Date *</Label>
-                    <Input
-                      id="start_date"
-                      type="date"
-                      value={formData.start_date}
-                      onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
-                      className={errors.start_date ? 'border-red-500' : ''}
-                      min={new Date().toISOString().split('T')[0]}
-                    />
-                    {errors.start_date && <p className="text-sm text-red-500 mt-1">{errors.start_date}</p>}
+                {/* Date and Time Information */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-gray-700 border-b border-gray-200 pb-2">Date & Time</h4>
+                  
+                  {/* Start Date and End Date */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="start_date" className="mb-2 font-medium">Start Date *</Label>
+                      <Input
+                        id="start_date"
+                        type="date"
+                        value={formData.start_date}
+                        onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
+                        className={errors.start_date ? 'border-red-500' : ''}
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                      {errors.start_date && <p className="text-sm text-red-500 mt-1">{errors.start_date}</p>}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="end_date" className="mb-2 font-medium">
+                        End Date {formData.event_type === 'multi' ? '*' : ''}
+                      </Label>
+                      <Input
+                        id="end_date"
+                        type="date"
+                        value={formData.end_date}
+                        onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
+                        className={errors.end_date ? 'border-red-500' : ''}
+                        disabled={formData.event_type === 'single'}
+                        placeholder={formData.event_type === 'single' ? 'Single day event' : ''}
+                        min={formData.start_date || new Date().toISOString().split('T')[0]}
+                      />
+                      {errors.end_date && <p className="text-sm text-red-500 mt-1">{errors.end_date}</p>}
+                      {formData.event_type === 'single' && (
+                        <p className="text-sm text-gray-500 mt-1">End date is only required for multi-day events</p>
+                      )}
+                    </div>
                   </div>
 
-                  <div>
-                    <Label htmlFor="end_date" className="mb-2 font-medium">
-                      End Date {formData.event_type === 'multi' ? '*' : ''}
+                  {/* Start Time and Registration Deadline */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="start_time" className="mb-2 font-medium">Start Time *</Label>
+                      <Input
+                        id="start_time"
+                        type="time"
+                        value={formData.start_time}
+                        onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
+                        className={errors.start_time ? 'border-red-500' : ''}
+                      />
+                      {errors.start_time && <p className="text-sm text-red-500 mt-1">{errors.start_time}</p>}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="registration_deadline" className="mb-2 font-medium">Registration Deadline</Label>
+                      <Input
+                        id="registration_deadline"
+                        type="date"
+                        value={formData.registration_deadline || ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, registration_deadline: e.target.value }))}
+                        className={errors.registration_deadline ? 'border-red-500' : ''}
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                      {errors.registration_deadline && <p className="text-sm text-red-500 mt-1">{errors.registration_deadline}</p>}
+                      <p className="text-sm text-gray-500 mt-1">Last date participants can register for this event</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Licensing Information */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-gray-700 border-b border-gray-200 pb-2">Licensing</h4>
+                  
+                  <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg border">
+                    <input
+                      type="checkbox"
+                      id="license_required"
+                      checked={formData.license_required}
+                      onChange={(e) => setFormData(prev => ({ ...prev, license_required: e.target.checked }))}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                    />
+                    <Label htmlFor="license_required" className="text-sm font-medium text-gray-700 cursor-pointer">
+                      Temporary license required for this event
                     </Label>
-                    <Input
-                      id="end_date"
-                      type="date"
-                      value={formData.end_date}
-                      onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
-                      className={errors.end_date ? 'border-red-500' : ''}
-                      disabled={formData.event_type === 'single'}
-                      placeholder={formData.event_type === 'single' ? 'Single day event' : ''}
-                      min={formData.start_date || new Date().toISOString().split('T')[0]}
-                    />
-                    {errors.end_date && <p className="text-sm text-red-500 mt-1">{errors.end_date}</p>}
-                    {formData.event_type === 'single' && (
-                      <p className="text-sm text-gray-500 mt-1">End date is only required for multi-day events</p>
-                    )}
                   </div>
 
-                  <div>
-                    <Label htmlFor="start_time" className="mb-2 font-medium">Start Time *</Label>
-                    <Input
-                      id="start_time"
-                      type="time"
-                      value={formData.start_time}
-                      onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
-                      className={errors.start_time ? 'border-red-500' : ''}
-                    />
-                    {errors.start_time && <p className="text-sm text-red-500 mt-1">{errors.start_time}</p>}
-                  </div>
+                  {formData.license_required && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <div>
+                        <Label htmlFor="temp_license_fee" className="mb-2 font-medium text-gray-700">License Fee (R)</Label>
+                        <Input
+                          id="temp_license_fee"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.temp_license_fee || ''}
+                          onChange={(e) => setFormData(prev => ({ ...prev, temp_license_fee: parseFloat(e.target.value) || 0 }))}
+                          placeholder="0.00"
+                          className="bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="license_details" className="mb-2 font-medium text-gray-700">License Details</Label>
+                        <Textarea
+                          id="license_details"
+                          value={formData.license_details}
+                          onChange={(e) => setFormData(prev => ({ ...prev, license_details: e.target.value }))}
+                          placeholder="License requirements and details..."
+                          rows={3}
+                          className="bg-white"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -989,47 +1110,6 @@ export default function EventCreateForm({
                   </div>
                 </div>
 
-                {/* Licensing */}
-                <div className="space-y-4 pt-4 border-t">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="license_required"
-                      checked={formData.license_required}
-                      onChange={(e) => setFormData(prev => ({ ...prev, license_required: e.target.checked }))}
-                      className="rounded"
-                    />
-                    <Label htmlFor="license_required">Temporary license required</Label>
-                  </div>
-
-                  {formData.license_required && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="temp_license_fee" className="mb-2 font-medium">License Fee (R)</Label>
-                        <Input
-                          id="temp_license_fee"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={formData.temp_license_fee || ''}
-                          onChange={(e) => setFormData(prev => ({ ...prev, temp_license_fee: parseFloat(e.target.value) || 0 }))}
-                          placeholder="0.00"
-                        />
-                      </div>
-
-                      <div>
-                        <Label htmlFor="license_details" className="mb-2 font-medium">License Details</Label>
-                        <Textarea
-                          id="license_details"
-                          value={formData.license_details}
-                          onChange={(e) => setFormData(prev => ({ ...prev, license_details: e.target.value }))}
-                          placeholder="License requirements and details..."
-                          rows={3}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
               </CardContent>
             </Card>
           </TabsContent>

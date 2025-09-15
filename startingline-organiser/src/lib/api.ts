@@ -497,6 +497,64 @@ export const eventsApi = {
       console.error(`❌ Admin update event status error:`, error)
       throw error
     }
+  },
+
+  // Get admin comments for an event
+  getAdminComments: async (eventId: string): Promise<any[]> => {
+    try {
+      console.log('🔍 Fetching admin comments for event:', eventId)
+      
+      const response = await fetch(`${API_BASE}/api/events/${eventId}/admin-comments`, {
+        headers: getAuthHeaders()
+      })
+
+      const comments = await handleApiResponse<any[]>(response)
+      console.log('✅ Retrieved', comments.length, 'admin comments')
+      return comments
+    } catch (error) {
+      console.error('❌ Get admin comments error:', error)
+      throw error
+    }
+  },
+
+  // Create admin comment (admin only)
+  createAdminComment: async (eventId: string, section: string, comment: string): Promise<any> => {
+    try {
+      console.log('🔍 Creating admin comment for event:', eventId, 'section:', section)
+      
+      const response = await fetch(`${API_BASE}/api/events/${eventId}/admin-comments`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ section, comment })
+      })
+
+      const result = await handleApiResponse<any>(response)
+      console.log('✅ Admin comment created successfully')
+      return result
+    } catch (error) {
+      console.error('❌ Create admin comment error:', error)
+      throw error
+    }
+  },
+
+  // Update admin comment (admin only)
+  updateAdminComment: async (commentId: string, comment?: string, status?: string): Promise<any> => {
+    try {
+      console.log('🔍 Updating admin comment:', commentId)
+      
+      const response = await fetch(`${API_BASE}/api/events/admin-comments/${commentId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ comment, status })
+      })
+
+      const result = await handleApiResponse<any>(response)
+      console.log('✅ Admin comment updated successfully')
+      return result
+    } catch (error) {
+      console.error('❌ Update admin comment error:', error)
+      throw error
+    }
   }
 }
 

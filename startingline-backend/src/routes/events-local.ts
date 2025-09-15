@@ -616,7 +616,7 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
     let paramCounter = 1
     
     const allowedFields = [
-      'name', 'category', 'start_date', 'start_time', 'venue_name', 
+      'name', 'category', 'event_type', 'start_date', 'end_date', 'start_time', 'registration_deadline', 'venue_name', 
       'address', 'city', 'province', 'country', 'latitude', 'longitude',
       'license_required', 'temp_license_fee', 'license_details',
       'primary_image_url', 'gallery_images', 'description', 'status'
@@ -733,6 +733,58 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
             )
           }
         }
+      }
+    }
+    
+    // Create audit trail entries and admin notifications for content edits to pending_approval events
+    if (originalEvent.status === 'pending_approval' && userRole === 'organiser' && !updates.status) {
+      console.log('🔍 Event in pending_approval was edited by organiser - creating audit trail and admin notifications...')
+      
+      // Create audit trail entry for the edit
+      const editedFields = Object.keys(updates).filter(field => field !== 'status')
+      const editMessage = `Event content updated by organiser. Fields changed: ${editedFields.join(', ')}`
+      
+      await createAuditTrailEntry(
+        id,
+        'content_edited',
+        userId,
+        'organiser',
+        editMessage,
+        { edited_fields: editedFields }
+      )
+      
+      // Create notification for admins about the edit
+      try {
+        // Get all active admin users
+        const adminResult = await pool.query(`
+          SELECT u.id, u.email 
+          FROM users u
+          INNER JOIN admin_users au ON u.email = au.email
+          WHERE au.is_active = true
+        `)
+        
+        console.log(`📧 Found ${adminResult.rows.length} active admin users for edit notification`)
+        
+        // Create notification for each admin
+        for (const admin of adminResult.rows) {
+          await createNotification(
+            admin.id,
+            'content_edit',
+            'Event Under Review Was Edited',
+            `Event "${updatedEvent.name}" has been edited by the organiser while under review. Fields changed: ${editedFields.join(', ')}`,
+            `/admin/events/${id}`,
+            {
+              event_id: id,
+              organiser_id: originalEvent.organiser_id,
+              event_name: updatedEvent.name,
+              edited_fields: editedFields
+            }
+          )
+          console.log(`✅ Edit notification created for admin: ${admin.email}`)
+        }
+      } catch (notificationError: any) {
+        console.error('❌ Failed to create edit notifications:', notificationError.message)
+        // Don't fail the entire operation if notifications fail
       }
     }
     
@@ -1338,7 +1390,7 @@ router.put('/admin/:id/section', authenticateToken, async (req: Request, res: Re
     }
     
     // Check if event exists
-    const eventCheck = await pool.query('SELECT id, name FROM events WHERE id = $1', [id])
+    const eventCheck = await pool.query('SELECT id, name, status, organiser_id FROM events WHERE id = $1', [id])
     if (eventCheck.rows.length === 0) {
       return res.status(404).json({
         success: false,
@@ -1356,12 +1408,16 @@ router.put('/admin/:id/section', authenticateToken, async (req: Request, res: Re
     switch (section) {
       case 'overview':
         if (data.name) { updateFields.push('name = $' + (updateValues.length + 1)); updateValues.push(data.name) }
+        if (data.category) { updateFields.push('category = $' + (updateValues.length + 1)); updateValues.push(data.category) }
+        if (data.event_type) { updateFields.push('event_type = $' + (updateValues.length + 1)); updateValues.push(data.event_type) }
         if (data.description !== undefined) { updateFields.push('description = $' + (updateValues.length + 1)); updateValues.push(data.description) }
         if (data.start_date) { updateFields.push('start_date = $' + (updateValues.length + 1)); updateValues.push(data.start_date) }
+        if (data.end_date) { updateFields.push('end_date = $' + (updateValues.length + 1)); updateValues.push(data.end_date) }
         if (data.start_time) { updateFields.push('start_time = $' + (updateValues.length + 1)); updateValues.push(data.start_time) }
         if (data.registration_deadline) { updateFields.push('registration_deadline = $' + (updateValues.length + 1)); updateValues.push(data.registration_deadline) }
         if (data.max_participants !== undefined) { updateFields.push('max_participants = $' + (updateValues.length + 1)); updateValues.push(data.max_participants) }
         if (data.entry_fee !== undefined) { updateFields.push('entry_fee = $' + (updateValues.length + 1)); updateValues.push(data.entry_fee) }
+        if (data.license_required !== undefined) { updateFields.push('license_required = $' + (updateValues.length + 1)); updateValues.push(data.license_required) }
         if (data.temp_license_fee !== undefined) { updateFields.push('temp_license_fee = $' + (updateValues.length + 1)); updateValues.push(data.temp_license_fee) }
         if (data.license_details) { updateFields.push('license_details = $' + (updateValues.length + 1)); updateValues.push(data.license_details) }
         break
@@ -1464,6 +1520,29 @@ router.put('/admin/:id/section', authenticateToken, async (req: Request, res: Re
       }
     )
     
+    // Create notification for organiser if event is published
+    if (event.status === 'published') {
+      try {
+        await createNotification(
+          event.organiser_id,
+          'admin_edit',
+          'Event Updated by Administrator',
+          `An administrator has updated the ${section} section of your published event "${event.name}".`,
+          `/dashboard/events/${id}/history`,
+          {
+            event_id: id,
+            admin_id: adminId,
+            section: section,
+            event_name: event.name
+          }
+        )
+        console.log(`✅ Notification created for organiser about admin edit to published event`)
+      } catch (notificationError: any) {
+        console.error('❌ Failed to create organiser notification for admin edit:', notificationError.message)
+        // Don't fail the entire operation if notifications fail
+      }
+    }
+    
     console.log(`✅ Admin successfully updated event ${id} ${section} section`)
     
     res.json({
@@ -1496,5 +1575,214 @@ function getTimeAgo(date: Date): string {
   if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} days ago`
   return `${Math.floor(diffInSeconds / 2592000)} months ago`
 }
+
+// ============================================
+// ADMIN COMMENTS ROUTES
+// ============================================
+
+// Get admin comments for an event
+router.get('/:id/admin-comments', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const userId = req.localUser!.userId
+    const userRole = req.localUser!.role
+    
+    // Check if user can access this event's admin comments
+    if (userRole !== 'admin') {
+      const ownerCheck = await pool.query(
+        'SELECT organiser_id FROM events WHERE id = $1',
+        [id]
+      )
+      
+      if (ownerCheck.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Event not found'
+        } as ApiResponse)
+      }
+      
+      if (ownerCheck.rows[0].organiser_id !== userId) {
+        return res.status(403).json({
+          success: false,
+          error: 'You can only view admin comments for your own events'
+        } as ApiResponse)
+      }
+    }
+    
+    const query = `
+      SELECT 
+        ac.*,
+        u.first_name,
+        u.last_name,
+        u.email
+      FROM admin_comments ac
+      JOIN users u ON ac.admin_id = u.id
+      WHERE ac.event_id = $1 AND ac.status = 'active'
+      ORDER BY ac.created_at DESC
+    `
+    
+    const result = await pool.query(query, [id])
+    
+    res.json({
+      success: true,
+      data: result.rows,
+      message: 'Admin comments retrieved successfully'
+    } as ApiResponse)
+    
+  } catch (error: any) {
+    console.error('❌ Get admin comments error:', error.message)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve admin comments'
+    } as ApiResponse)
+  }
+})
+
+// Create admin comment (admin only)
+router.post('/:id/admin-comments', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const { section, comment } = req.body
+    const adminId = req.localUser!.userId
+    const userRole = req.localUser!.role
+    
+    if (userRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only administrators can create admin comments'
+      } as ApiResponse)
+    }
+    
+    if (!section || !comment) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: section, comment'
+      } as ApiResponse)
+    }
+    
+    // Verify event exists
+    const eventCheck = await pool.query('SELECT id, name, organiser_id FROM events WHERE id = $1', [id])
+    if (eventCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found'
+      } as ApiResponse)
+    }
+    
+    const event = eventCheck.rows[0]
+    
+    // Create admin comment
+    const query = `
+      INSERT INTO admin_comments (event_id, admin_id, section, comment)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `
+    
+    const result = await pool.query(query, [id, adminId, section, comment])
+    const newComment = result.rows[0]
+    
+    // Create notification for organiser
+    await createNotification(
+      event.organiser_id,
+      'admin_comment',
+      'New Admin Comment',
+      `You have received a new comment from an administrator on your event "${event.name}" (${section} section).`,
+      `/dashboard/events/${id}/comments`,
+      {
+        event_id: id,
+        comment_id: newComment.id,
+        section: section
+      }
+    )
+    
+    res.status(201).json({
+      success: true,
+      data: newComment,
+      message: 'Admin comment created successfully'
+    } as ApiResponse)
+    
+  } catch (error: any) {
+    console.error('❌ Create admin comment error:', error.message)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create admin comment'
+    } as ApiResponse)
+  }
+})
+
+// Update admin comment (admin only)
+router.put('/admin-comments/:commentId', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { commentId } = req.params
+    const { comment, status } = req.body
+    const adminId = req.localUser!.userId
+    const userRole = req.localUser!.role
+    
+    if (userRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only administrators can update admin comments'
+      } as ApiResponse)
+    }
+    
+    // Build update query
+    const updateFields = []
+    const updateValues = []
+    let paramCounter = 1
+    
+    if (comment !== undefined) {
+      updateFields.push(`comment = $${paramCounter}`)
+      updateValues.push(comment)
+      paramCounter++
+    }
+    
+    if (status !== undefined) {
+      updateFields.push(`status = $${paramCounter}`)
+      updateValues.push(status)
+      paramCounter++
+    }
+    
+    if (updateFields.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid fields to update'
+      } as ApiResponse)
+    }
+    
+    updateFields.push(`updated_at = CURRENT_TIMESTAMP`)
+    updateValues.push(commentId)
+    
+    const query = `
+      UPDATE admin_comments 
+      SET ${updateFields.join(', ')}
+      WHERE id = $${paramCounter} AND admin_id = $${paramCounter + 1}
+      RETURNING *
+    `
+    
+    updateValues.push(adminId)
+    
+    const result = await pool.query(query, updateValues)
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Admin comment not found or you do not have permission to update it'
+      } as ApiResponse)
+    }
+    
+    res.json({
+      success: true,
+      data: result.rows[0],
+      message: 'Admin comment updated successfully'
+    } as ApiResponse)
+    
+  } catch (error: any) {
+    console.error('❌ Update admin comment error:', error.message)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update admin comment'
+    } as ApiResponse)
+  }
+})
 
 export default router

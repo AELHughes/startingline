@@ -7,7 +7,7 @@ import { eventsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Save, Send, AlertCircle, CheckCircle, Edit, History } from 'lucide-react'
+import { ArrowLeft, Save, Send, AlertCircle, CheckCircle, Edit, History, MessageSquare } from 'lucide-react'
 import EventCreateForm from '@/components/events/event-create-form'
 import ChangeRequestModal from '@/components/events/change-request-modal'
 
@@ -55,11 +55,7 @@ export default function EventEditPage() {
           return
         }
         
-        // Check if event can be edited
-        if (response.status === 'published') {
-          setError('Published events cannot be edited')
-          return
-        }
+        // Published events can be viewed for change requests, no error needed
         
       } else {
         setError('Event not found')
@@ -109,7 +105,7 @@ export default function EventEditPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         },
         body: JSON.stringify({
           action_type: 'change_requested',
@@ -208,35 +204,51 @@ export default function EventEditPage() {
       <div className="container mx-auto px-4 py-6">
         {/* Header */}
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-4">
+          {/* Page Title and Description - Top Left */}
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-gray-900 flex items-center mb-2">
+              <Edit className="h-7 w-7 mr-3" />
+              Edit Event
+            </h1>
+            <p className="text-gray-600 text-lg">Make changes to your event details</p>
+          </div>
+
+          {/* Action Buttons Row */}
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            {/* Left Side - Navigation and Secondary Actions */}
+            <div className="flex flex-wrap items-center gap-3">
               <Button
                 onClick={() => router.push('/dashboard/events')}
                 variant="outline"
                 size="sm"
+                className="flex items-center"
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Events
               </Button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-                  <Edit className="h-6 w-6 mr-2" />
-                  Edit Event
-                </h1>
-                <p className="text-gray-600">Make changes to your event details</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              {getStatusBadge(event.status)}
+              <Button
+                onClick={() => router.push(`/dashboard/events/${eventId}/comments`)}
+                variant="outline"
+                size="sm"
+                className="flex items-center"
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                View Admin Comments
+              </Button>
               <Button
                 onClick={() => router.push(`/dashboard/events/${event.id}/history`)}
                 variant="outline"
                 size="sm"
-                className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                className="flex items-center text-blue-600 border-blue-200 hover:bg-blue-50"
               >
                 <History className="h-4 w-4 mr-2" />
                 View History
               </Button>
+            </div>
+
+            {/* Right Side - Status and Primary Actions */}
+            <div className="flex flex-wrap items-center gap-3">
+              {getStatusBadge(event.status)}
               {event.status === 'draft' && (
                 <Button
                   onClick={handleSubmitForApproval}
@@ -257,7 +269,7 @@ export default function EventEditPage() {
           </div>
 
           {/* Status Information */}
-          <Card className="mb-6">
+          <Card className="mt-8 mb-6">
             <CardContent className="pt-4">
               <div className="flex items-start space-x-3">
                 {event.status === 'draft' ? (
@@ -276,7 +288,7 @@ export default function EventEditPage() {
                   <p className="text-sm text-gray-600 mt-1">
                     {event.status === 'draft' && 'When you\'re ready, click "Request to Publish" to submit for admin approval.'}
                     {event.status === 'pending_approval' && 'Your event is being reviewed by administrators. You can still make essential edits.'}
-                    {event.status === 'published' && 'Your event is now visible to the public.'}
+                    {event.status === 'published' && 'Your event is now live and visible to the public. You can request changes from administrators.'}
                   </p>
                 </div>
               </div>
@@ -293,38 +305,80 @@ export default function EventEditPage() {
             canEdit={true}
           />
         ) : event.status === 'pending_approval' ? (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center py-8">
-                <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Event Under Review
-                </h3>
-                <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                  Your event is currently being reviewed by administrators. 
-                  If you need to make changes, you can submit a change request.
-                </p>
-                <Button
-                  onClick={() => setShowChangeRequestModal(true)}
-                  variant="outline"
-                  className="border-yellow-300 text-yellow-700 hover:bg-yellow-50"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Request Changes
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="space-y-4">
+            {/* Warning about admin notifications */}
+            <Card className="border-yellow-200 bg-yellow-50">
+              <CardContent className="pt-4">
+                <div className="flex items-start space-x-3">
+                  <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-sm font-medium text-yellow-800">Event Under Review</h4>
+                    <p className="text-sm text-yellow-700 mt-1">
+                      Your event is currently being reviewed by administrators. Any changes you make will be logged and administrators will be notified.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Edit Form for Pending Approval Events */}
+            <EventCreateForm 
+              initialData={event}
+              isEditing={true}
+              eventId={event.id}
+              canEdit={true}
+            />
+          </div>
+        ) : event.status === 'published' ? (
+          <div className="space-y-4">
+            {/* Published Event Info */}
+            <Card className="border-green-200 bg-green-50">
+              <CardContent className="pt-4">
+                <div className="flex items-start space-x-3">
+                  <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-sm font-medium text-green-800">Event Published</h4>
+                    <p className="text-sm text-green-700 mt-1">
+                      Your event is now live and visible to the public. To make changes, please submit a change request.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Change Request for Published Events */}
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center py-8">
+                  <Edit className="h-12 w-12 text-blue-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Request Changes
+                  </h3>
+                  <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                    Your event is live and visible to the public. To make changes, you can request modifications that will be reviewed by administrators.
+                  </p>
+                  <Button
+                    onClick={() => setShowChangeRequestModal(true)}
+                    variant="outline"
+                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Request Changes
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         ) : (
           <Card>
             <CardContent className="pt-6">
               <div className="text-center py-8">
-                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                <AlertCircle className="h-12 w-12 text-gray-500 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Event Published
+                  Event Status: {event.status}
                 </h3>
                 <p className="text-gray-600">
-                  Your event is now live and visible to the public. No further edits are allowed.
+                  This event cannot be edited in its current status.
                 </p>
               </div>
             </CardContent>
@@ -337,6 +391,7 @@ export default function EventEditPage() {
           onClose={() => setShowChangeRequestModal(false)}
           eventName={event.name}
           eventId={event.id}
+          eventStatus={event.status}
           onSubmit={handleChangeRequest}
         />
       </div>

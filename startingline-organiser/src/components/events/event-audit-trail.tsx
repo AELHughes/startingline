@@ -40,7 +40,9 @@ const ACTION_ICONS = {
   created: Calendar,
   submitted_for_approval: Send,
   change_requested: Edit,
+  content_edited: Edit,
   admin_updated: User,
+  admin_edit_section: User,
   published: CheckCircle,
   cancelled: XCircle,
   rejected: XCircle
@@ -50,7 +52,9 @@ const ACTION_COLORS = {
   created: 'bg-blue-50 text-blue-700 border-blue-200',
   submitted_for_approval: 'bg-yellow-50 text-yellow-700 border-yellow-200',
   change_requested: 'bg-orange-100 text-orange-800 border-orange-300 border-2',
+  content_edited: 'bg-amber-50 text-amber-700 border-amber-200',
   admin_updated: 'bg-purple-50 text-purple-700 border-purple-200',
+  admin_edit_section: 'bg-purple-50 text-purple-700 border-purple-200',
   published: 'bg-green-50 text-green-700 border-green-200',
   cancelled: 'bg-red-50 text-red-700 border-red-200',
   rejected: 'bg-red-50 text-red-700 border-red-200'
@@ -60,7 +64,9 @@ const ACTION_LABELS = {
   created: 'Event Created',
   submitted_for_approval: 'Submitted for Approval',
   change_requested: 'Change Requested',
+  content_edited: 'Content Edited',
   admin_updated: 'Admin Update',
+  admin_edit_section: 'Admin Edit',
   published: 'Published Live',
   cancelled: 'Cancelled',
   rejected: 'Rejected'
@@ -126,6 +132,157 @@ export default function EventAuditTrail({ eventId, className = '' }: EventAuditT
       return `${entry.first_name} ${entry.last_name}`
     }
     return entry.email
+  }
+
+  const formatChangeSummary = (metadata: any) => {
+    if (!metadata || !metadata.changes) return null
+
+    const changes = metadata.changes
+    const section = metadata.section || 'event'
+    
+    // Handle different section types
+    if (section === 'distances' && changes.distances) {
+      return formatDistanceChanges(changes.distances)
+    } else if (section === 'overview' && changes) {
+      return formatOverviewChanges(changes)
+    } else if (section === 'location' && changes) {
+      return formatLocationChanges(changes)
+    } else if (section === 'merchandise' && changes.merchandise) {
+      return formatMerchandiseChanges(changes.merchandise)
+    }
+    
+    return null
+  }
+
+  const formatDistanceChanges = (distances: any[]) => {
+    if (!Array.isArray(distances) || distances.length === 0) return null
+
+    const changes = []
+    
+    distances.forEach((distance, index) => {
+      const distanceName = distance.name || `Distance ${index + 1}`
+      
+      if (distance.entry_limit !== undefined) {
+        changes.push({
+          field: `${distanceName} - Entry Limit`,
+          value: distance.entry_limit
+        })
+      }
+      if (distance.price !== undefined) {
+        changes.push({
+          field: `${distanceName} - Price`,
+          value: `R${distance.price}`
+        })
+      }
+      if (distance.distance_km !== undefined) {
+        changes.push({
+          field: `${distanceName} - Distance`,
+          value: `${distance.distance_km} km`
+        })
+      }
+      if (distance.min_age !== undefined) {
+        changes.push({
+          field: `${distanceName} - Minimum Age`,
+          value: distance.min_age
+        })
+      }
+      if (distance.start_time !== undefined) {
+        changes.push({
+          field: `${distanceName} - Start Time`,
+          value: distance.start_time
+        })
+      }
+    })
+
+    return changes.length > 0 ? changes : null
+  }
+
+  const formatOverviewChanges = (changes: any) => {
+    const formattedChanges = []
+    
+    const fieldMappings = {
+      name: 'Event Name',
+      category: 'Category',
+      event_type: 'Event Type',
+      start_date: 'Start Date',
+      end_date: 'End Date',
+      start_time: 'Start Time',
+      registration_deadline: 'Registration Deadline',
+      description: 'Description',
+      license_required: 'License Required',
+      temp_license_fee: 'License Fee',
+      license_details: 'License Details'
+    }
+
+    Object.entries(changes).forEach(([key, value]) => {
+      if (fieldMappings[key] && value !== undefined && value !== null && value !== '') {
+        let displayValue = value
+        
+        if (key === 'event_type') {
+          displayValue = value === 'multi' ? 'Multi-Day' : 'Single Day'
+        } else if (key === 'license_required') {
+          displayValue = value ? 'Yes' : 'No'
+        } else if (key === 'temp_license_fee') {
+          displayValue = `R${value}`
+        } else if (key.includes('date')) {
+          displayValue = new Date(value).toLocaleDateString('en-GB')
+        }
+        
+        formattedChanges.push({
+          field: fieldMappings[key],
+          value: displayValue
+        })
+      }
+    })
+
+    return formattedChanges.length > 0 ? formattedChanges : null
+  }
+
+  const formatLocationChanges = (changes: any) => {
+    const formattedChanges = []
+    
+    const fieldMappings = {
+      venue_name: 'Venue Name',
+      address: 'Address',
+      city: 'City',
+      province: 'Province'
+    }
+
+    Object.entries(changes).forEach(([key, value]) => {
+      if (fieldMappings[key] && value !== undefined && value !== null && value !== '') {
+        formattedChanges.push({
+          field: fieldMappings[key],
+          value: value
+        })
+      }
+    })
+
+    return formattedChanges.length > 0 ? formattedChanges : null
+  }
+
+  const formatMerchandiseChanges = (merchandise: any[]) => {
+    if (!Array.isArray(merchandise) || merchandise.length === 0) return null
+
+    const changes = []
+    
+    merchandise.forEach((item, index) => {
+      const itemName = item.name || `Item ${index + 1}`
+      
+      if (item.base_price !== undefined) {
+        changes.push({
+          field: `${itemName} - Price`,
+          value: `R${item.base_price}`
+        })
+      }
+      if (item.description !== undefined) {
+        changes.push({
+          field: `${itemName} - Description`,
+          value: item.description
+        })
+      }
+    })
+
+    return changes.length > 0 ? changes : null
   }
 
   if (loading) {
@@ -233,8 +390,32 @@ export default function EventAuditTrail({ eventId, className = '' }: EventAuditT
                     
                     {/* Metadata */}
                     {entry.metadata && (
-                      <div className="mt-3 p-2 bg-white/50 rounded border text-xs">
-                        <strong>Details:</strong> {JSON.stringify(entry.metadata, null, 2)}
+                      <div className="mt-3">
+                        <strong className="text-sm">Changes Made:</strong>
+                        {(() => {
+                          const changeSummary = formatChangeSummary(entry.metadata)
+                          if (changeSummary && changeSummary.length > 0) {
+                            return (
+                              <div className="mt-2 space-y-2">
+                                {changeSummary.map((change, index) => (
+                                  <div key={index} className="p-2 bg-white/50 rounded border text-xs">
+                                    <div className="font-medium text-gray-700">{change.field}:</div>
+                                    <div className="text-gray-600 mt-1">{change.value}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          } else {
+                            // Fallback to JSON for unsupported change types
+                            return (
+                              <div className="mt-2 p-3 bg-white/50 rounded border text-xs font-mono overflow-x-auto">
+                                <pre className="whitespace-pre-wrap">
+                                  {JSON.stringify(entry.metadata, null, 2)}
+                                </pre>
+                              </div>
+                            )
+                          }
+                        })()}
                       </div>
                     )}
                   </div>
