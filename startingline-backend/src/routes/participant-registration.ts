@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express'
+import express, { Request, Response, NextFunction } from 'express'
 import { pool } from '../lib/database'
 import { authenticateToken, optionalAuth } from '../middleware/auth-local'
 import { ApiResponse } from '../types'
@@ -185,43 +185,7 @@ router.post('/validate-participant', async (req: Request, res: Response) => {
   }
 })
 
-/**
- * Get saved participants for a user
- */
-router.get('/saved-participants', optionalAuth, async (req: Request, res: Response) => {
-  try {
-    const userId = req.localUser?.userId
-
-    // If user is not authenticated, return empty array
-    if (!userId) {
-      return res.json({
-        success: true,
-        data: []
-      })
-    }
-
-    const result = await pool.query(`
-      SELECT 
-        id, participant_first_name as first_name, participant_last_name as last_name, participant_email as email, participant_mobile as mobile, participant_date_of_birth as date_of_birth,
-        participant_medical_aid as medical_aid_name, participant_medical_aid_number as medical_aid_number, emergency_contact_name, emergency_contact_number
-      FROM saved_participants
-      WHERE user_profile_id = $1
-      ORDER BY created_at DESC
-    `, [userId])
-
-    res.json({
-      success: true,
-      data: result.rows
-    } as ApiResponse)
-
-  } catch (error: any) {
-    console.error('Get saved participants error:', error)
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to get saved participants'
-    } as ApiResponse)
-  }
-})
+// Removed duplicate route
 
 /**
  * Save a participant for future use
@@ -848,6 +812,190 @@ router.get('/ticket/:ticketId', authenticateToken, async (req: Request, res: Res
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get ticket'
+    } as ApiResponse)
+  }
+})
+
+/**
+ * Get saved participants for the authenticated user
+ */
+router.get('/saved-participants', (req: Request, res: Response, next: NextFunction) => {
+  console.log('🎯 GET /saved-participants endpoint hit - before auth')
+  console.log('🔍 Request headers:', req.headers)
+  next()
+}, authenticateToken, async (req: Request, res: Response) => {
+  console.log('🎯 GET /saved-participants endpoint hit - after auth')
+  try {
+    const userId = req.localUser!.userId
+    console.log('🔍 Getting saved participants for user:', userId)
+
+    // Get user profile ID
+    const userProfileResult = await pool.query(
+      'SELECT id FROM user_profiles WHERE user_id = $1',
+      [userId]
+    )
+    console.log('🔍 User profile result:', userProfileResult.rows)
+
+    if (userProfileResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User profile not found'
+      } as ApiResponse)
+    }
+
+    const userProfileId = userProfileResult.rows[0].id
+
+    // Get saved participants
+    console.log('🔍 Looking for saved participants with user_profile_id:', userProfileId)
+    const result = await pool.query(`
+      SELECT 
+        id, participant_first_name, participant_last_name, participant_email, 
+        participant_mobile, participant_date_of_birth, participant_medical_aid, 
+        participant_medical_aid_number, emergency_contact_name, emergency_contact_number,
+        created_at, updated_at
+      FROM saved_participants 
+      WHERE user_profile_id = $1
+      ORDER BY created_at DESC
+    `, [userProfileId])
+    console.log('🔍 Found saved participants:', result.rows)
+
+    res.json({
+      success: true,
+      data: result.rows
+    } as ApiResponse)
+  } catch (error) {
+    console.error('Get saved participants error:', error)
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get saved participants'
+    } as ApiResponse)
+  }
+})
+
+/**
+ * Update a saved participant
+ */
+router.put('/saved-participants/:participantId', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { participantId } = req.params
+    const userId = req.localUser!.userId
+    const updateData = req.body
+
+    // Get user profile ID
+    const userProfileResult = await pool.query(
+      'SELECT id FROM user_profiles WHERE user_id = $1',
+      [userId]
+    )
+
+    if (userProfileResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User profile not found'
+      } as ApiResponse)
+    }
+
+    const userProfileId = userProfileResult.rows[0].id
+
+    // Verify the participant belongs to this user
+    const participantCheck = await pool.query(
+      'SELECT id FROM saved_participants WHERE id = $1 AND user_profile_id = $2',
+      [participantId, userProfileId]
+    )
+
+    if (participantCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Participant not found or access denied'
+      } as ApiResponse)
+    }
+
+    // Update the participant
+    const result = await pool.query(`
+      UPDATE saved_participants SET
+        participant_first_name = $1,
+        participant_last_name = $2,
+        participant_email = $3,
+        participant_mobile = $4,
+        participant_date_of_birth = $5,
+        participant_medical_aid = $6,
+        participant_medical_aid_number = $7,
+        emergency_contact_name = $8,
+        emergency_contact_number = $9,
+        updated_at = NOW()
+      WHERE id = $10 AND user_profile_id = $11
+      RETURNING *
+    `, [
+      updateData.participant_first_name,
+      updateData.participant_last_name,
+      updateData.participant_email,
+      updateData.participant_mobile,
+      updateData.participant_date_of_birth,
+      updateData.participant_medical_aid || null,
+      updateData.participant_medical_aid_number || null,
+      updateData.emergency_contact_name,
+      updateData.emergency_contact_number,
+      participantId,
+      userProfileId
+    ])
+
+    res.json({
+      success: true,
+      data: result.rows[0]
+    } as ApiResponse)
+  } catch (error) {
+    console.error('Update saved participant error:', error)
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update participant'
+    } as ApiResponse)
+  }
+})
+
+/**
+ * Delete a saved participant
+ */
+router.delete('/saved-participants/:participantId', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { participantId } = req.params
+    const userId = req.localUser!.userId
+
+    // Get user profile ID
+    const userProfileResult = await pool.query(
+      'SELECT id FROM user_profiles WHERE user_id = $1',
+      [userId]
+    )
+
+    if (userProfileResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User profile not found'
+      } as ApiResponse)
+    }
+
+    const userProfileId = userProfileResult.rows[0].id
+
+    // Delete the participant
+    const result = await pool.query(
+      'DELETE FROM saved_participants WHERE id = $1 AND user_profile_id = $2',
+      [participantId, userProfileId]
+    )
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Participant not found or access denied'
+      } as ApiResponse)
+    }
+
+    res.json({
+      success: true,
+      message: 'Participant deleted successfully'
+    } as ApiResponse)
+  } catch (error) {
+    console.error('Delete saved participant error:', error)
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete participant'
     } as ApiResponse)
   }
 })

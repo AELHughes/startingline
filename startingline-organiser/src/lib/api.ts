@@ -1250,6 +1250,95 @@ class ParticipantRegistrationApi {
       }
     }
   }
+
+  async getSavedParticipants(): Promise<{
+    success: boolean
+    data?: any[]
+    error?: string
+  }> {
+    try {
+      console.log('🔍 getSavedParticipants - Making API call...')
+      const headers = getAuthHeaders()
+      console.log('🔍 getSavedParticipants - Headers:', headers)
+      
+      const response = await fetch(`${API_BASE}/api/participant-registration/saved-participants`, {
+        headers
+      })
+
+      console.log('🔍 getSavedParticipants - Response status:', response.status)
+      const result = await response.json()
+      console.log('🔍 getSavedParticipants - Response result:', result)
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to get saved participants')
+      }
+
+      return result
+    } catch (error) {
+      console.error('❌ Get saved participants error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get saved participants'
+      }
+    }
+  }
+
+  async updateSavedParticipant(participantId: string, data: any): Promise<{
+    success: boolean
+    data?: any
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/participant-registration/saved-participants/${participantId}`, {
+        method: 'PUT',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update participant')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Update saved participant error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update participant'
+      }
+    }
+  }
+
+  async deleteSavedParticipant(participantId: string): Promise<{
+    success: boolean
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/participant-registration/saved-participants/${participantId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to delete participant')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Delete saved participant error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete participant'
+      }
+    }
+  }
 }
 
 export const participantRegistrationApi = new ParticipantRegistrationApi()

@@ -130,202 +130,138 @@ export default function ParticipantDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">My Events</h1>
-          <p className="text-gray-600">Manage your event registrations and view your race history</p>
+    <div className="bg-gray-50 min-h-screen">
+      <div className="p-6">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+        <p className="text-gray-600">Welcome back! Here's an overview of your event registrations</p>
+      </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Calendar className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Upcoming Events</p>
+                  <p className="text-2xl font-bold text-gray-900">{upcomingOrders.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <Trophy className="h-6 w-6 text-green-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Past Events</p>
+                  <p className="text-2xl font-bold text-gray-900">{pastOrders.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Users className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Total Participants</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {orders.reduce((total, order) => total + order.tickets.length, 0)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Tabs */}
-        <div className="mb-6">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8">
-              <button
-                onClick={() => setActiveTab('upcoming')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'upcoming'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Upcoming Events ({upcomingOrders.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('past')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'past'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Past Events ({pastOrders.length})
-              </button>
-            </nav>
-          </div>
-        </div>
-
-        {/* Events Grid */}
-        {activeTab === 'upcoming' && (
-          <div className="space-y-6">
-            {upcomingOrders.length > 0 ? (
-              upcomingOrders.map((order) => (
-                <Card key={order.id} className="hover:shadow-lg transition-shadow">
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Recent Events
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {upcomingOrders.length > 0 ? (
+                <div className="space-y-3">
+                  {upcomingOrders.slice(0, 3).map((order) => (
+                    <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div>
-                        <CardTitle className="text-lg">{order.event_name}</CardTitle>
-                        <p className="text-sm text-gray-600 mt-1">
-                          Order #{order.id.slice(-8).toUpperCase()} • {order.tickets.length} participant{order.tickets.length !== 1 ? 's' : ''}
+                        <p className="font-medium text-sm">{order.event_name}</p>
+                        <p className="text-xs text-gray-600">
+                          {format(new Date(order.start_date), 'MMM dd, yyyy')}
                         </p>
                       </div>
                       <Badge className={getStatusColor(order.status)}>
                         {order.status}
                       </Badge>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Calendar className="w-4 h-4" />
-                        <span>{format(new Date(order.start_date), 'EEEE, MMMM do, yyyy')}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Clock className="w-4 h-4" />
-                        <span>{order.start_time}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <MapPin className="w-4 h-4" />
-                        <span>{order.city}</span>
-                      </div>
-                    </div>
+                  ))}
+                  {upcomingOrders.length > 3 && (
+                    <Link href="/participant-dashboard/events">
+                      <Button variant="outline" size="sm" className="w-full">
+                        View All Events
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-gray-600 text-sm">No upcoming events</p>
+                  <Link href="/events">
+                    <Button variant="outline" size="sm" className="mt-2">
+                      Browse Events
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-                    <div className="pt-4 border-t">
-                      <div className="flex justify-between items-center mb-4">
-                        <span className="text-sm text-gray-600">Total Amount</span>
-                        <span className="font-semibold">R{order.total_amount}</span>
-                      </div>
-
-                      <div className="space-y-2">
-                        <h4 className="font-medium text-sm text-gray-900">Tickets:</h4>
-                        {order.tickets.map((ticket) => (
-                          <div key={ticket.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                            <div>
-                              <span className="text-sm font-medium">{ticket.participant_name}</span>
-                              <p className="text-xs text-gray-600">#{ticket.ticket_number}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm">R{ticket.amount}</span>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => downloadTicket(ticket.id)}
-                              >
-                                <Download className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            ) : (
-              <div className="text-center py-12">
-                <Trophy className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Upcoming Events</h3>
-                <p className="text-gray-600 mb-4">You don't have any upcoming event registrations.</p>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Quick Actions
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <Link href="/participant-dashboard/events">
+                  <Button variant="outline" className="w-full justify-start">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    View My Events
+                  </Button>
+                </Link>
+                <Link href="/participant-dashboard/members">
+                  <Button variant="outline" className="w-full justify-start">
+                    <Users className="h-4 w-4 mr-2" />
+                    Manage Members
+                  </Button>
+                </Link>
                 <Link href="/events">
-                  <Button>Browse Events</Button>
+                  <Button className="w-full justify-start">
+                    <Trophy className="h-4 w-4 mr-2" />
+                    Register for Event
+                  </Button>
                 </Link>
               </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'past' && (
-          <div className="space-y-6">
-            {pastOrders.length > 0 ? (
-              pastOrders.map((order) => (
-                <Card key={order.id} className="hover:shadow-lg transition-shadow">
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="text-lg">{order.event_name}</CardTitle>
-                        <p className="text-sm text-gray-600 mt-1">
-                          Order #{order.id.slice(-8).toUpperCase()} • {order.tickets.length} participant{order.tickets.length !== 1 ? 's' : ''}
-                        </p>
-                      </div>
-                      <Badge className={getStatusColor(order.status)}>
-                        {order.status}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Calendar className="w-4 h-4" />
-                        <span>{format(new Date(order.start_date), 'EEEE, MMMM do, yyyy')}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Clock className="w-4 h-4" />
-                        <span>{order.start_time}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <MapPin className="w-4 h-4" />
-                        <span>{order.city}</span>
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t">
-                      <div className="flex justify-between items-center mb-4">
-                        <span className="text-sm text-gray-600">Total Amount</span>
-                        <span className="font-semibold">R{order.total_amount}</span>
-                      </div>
-
-                      <div className="space-y-2">
-                        <h4 className="font-medium text-sm text-gray-900">Tickets:</h4>
-                        {order.tickets.map((ticket) => (
-                          <div key={ticket.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                            <div>
-                              <span className="text-sm font-medium">{ticket.participant_name}</span>
-                              <p className="text-xs text-gray-600">#{ticket.ticket_number}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm">R{ticket.amount}</span>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => downloadTicket(ticket.id)}
-                              >
-                                <Download className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            ) : (
-              <div className="text-center py-12">
-                <Trophy className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Past Events</h3>
-                <p className="text-gray-600 mb-4">You haven't participated in any events yet.</p>
-                <Link href="/events">
-                  <Button>Browse Events</Button>
-                </Link>
-              </div>
-            )}
-          </div>
-        )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )
