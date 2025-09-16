@@ -6,13 +6,15 @@ import { useAuth } from '@/contexts/auth-context'
 import { participantRegistrationApi } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { 
   Users, 
   Plus, 
-  Edit, 
+  Edit,
+  Eye,
   Trash2, 
   Phone, 
   Mail, 
@@ -25,35 +27,48 @@ import { format } from 'date-fns'
 
 interface SavedParticipant {
   id: string
-  participant_first_name: string
-  participant_last_name: string
-  participant_email: string
-  participant_mobile: string
-  participant_date_of_birth: string
-  participant_medical_aid?: string
-  participant_medical_aid_number?: string
+  first_name: string
+  last_name: string
+  email: string
+  mobile: string
+  date_of_birth: string
+  medical_aid_name: string | null
+  medical_aid_number: string | null
   emergency_contact_name: string
   emergency_contact_number: string
   created_at: string
-  updated_at: string
+}
+
+interface SaveParticipantInput {
+  first_name: string
+  last_name: string
+  email: string
+  mobile: string
+  date_of_birth: string
+  medical_aid_name: string | null
+  medical_aid_number: string | null
+  emergency_contact_name: string
+  emergency_contact_number: string
 }
 
 export default function MembersPage() {
   const router = useRouter()
   const { user } = useAuth()
-  const [participants, setParticipants] = useState<SavedParticipant[]>([])
+  const [participants, setParticipants] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>('')
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
+  const [viewingParticipant, setViewingParticipant] = useState<SavedParticipant | null>(null)
   const [editingParticipant, setEditingParticipant] = useState<SavedParticipant | null>(null)
   const [formData, setFormData] = useState({
-    participant_first_name: '',
-    participant_last_name: '',
-    participant_email: '',
-    participant_mobile: '',
-    participant_date_of_birth: '',
-    participant_medical_aid: '',
-    participant_medical_aid_number: '',
+    first_name: '',
+    last_name: '',
+    email: '',
+    mobile: '',
+    date_of_birth: '',
+    medical_aid_name: '',
+    medical_aid_number: '',
     emergency_contact_name: '',
     emergency_contact_number: ''
   })
@@ -82,6 +97,11 @@ export default function MembersPage() {
       
       if (response.success && response.data) {
         console.log('✅ Participants loaded:', response.data)
+        console.log('🔍 First participant sample:', response.data[0])
+        console.log('🔍 Participant fields:', Object.keys(response.data[0]))
+        console.log('🔍 Email field:', response.data[0].participant_email)
+        console.log('🔍 Mobile field:', response.data[0].participant_mobile)
+        console.log('🔍 DOB field:', response.data[0].participant_date_of_birth)
         setParticipants(response.data)
       } else {
         console.error('❌ Failed to load participants:', response.error)
@@ -98,13 +118,13 @@ export default function MembersPage() {
   const handleEdit = (participant: SavedParticipant) => {
     setEditingParticipant(participant)
     setFormData({
-      participant_first_name: participant.participant_first_name,
-      participant_last_name: participant.participant_last_name,
-      participant_email: participant.participant_email,
-      participant_mobile: participant.participant_mobile,
-      participant_date_of_birth: participant.participant_date_of_birth,
-      participant_medical_aid: participant.participant_medical_aid || '',
-      participant_medical_aid_number: participant.participant_medical_aid_number || '',
+      first_name: participant.first_name,
+      last_name: participant.last_name,
+      email: participant.email,
+      mobile: participant.mobile,
+      date_of_birth: participant.date_of_birth,
+      medical_aid_name: participant.medical_aid_name || '',
+      medical_aid_number: participant.medical_aid_number || '',
       emergency_contact_name: participant.emergency_contact_name,
       emergency_contact_number: participant.emergency_contact_number
     })
@@ -113,9 +133,22 @@ export default function MembersPage() {
 
   const handleSave = async () => {
     try {
-      if (!editingParticipant) return
+      console.log('🔍 Saving member with data:', formData)
+      console.log('🔍 Current user:', user)
+      // Validate required fields
+      if (!formData.first_name || !formData.last_name || !formData.email || !formData.mobile) {
+        alert('Please fill in all required fields')
+        return
+      }
       
-      const response = await participantRegistrationApi.updateSavedParticipant(editingParticipant.id, formData)
+      // Use form data directly since it already matches backend field names
+      const mappedData = {
+        ...formData
+      }
+      
+      const response = editingParticipant
+        ? await participantRegistrationApi.updateSavedParticipant(editingParticipant.id, formData as SaveParticipantInput)
+        : await participantRegistrationApi.saveParticipant(formData as SaveParticipantInput)
       
       if (response.success) {
         setIsEditDialogOpen(false)
@@ -147,15 +180,26 @@ export default function MembersPage() {
     }
   }
 
-  const calculateAge = (dateOfBirth: string) => {
-    const today = new Date()
-    const birthDate = new Date(dateOfBirth)
-    let age = today.getFullYear() - birthDate.getFullYear()
-    const monthDiff = today.getMonth() - birthDate.getMonth()
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--
+  const calculateAge = (dateOfBirth: string | null) => {
+    if (!dateOfBirth) return 'N/A'
+    try {
+      const today = new Date()
+      const birthDate = new Date(dateOfBirth)
+      
+      // Check if date is valid
+      if (isNaN(birthDate.getTime())) {
+        return 'N/A'
+      }
+      
+      let age = today.getFullYear() - birthDate.getFullYear()
+      const monthDiff = today.getMonth() - birthDate.getMonth()
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--
+      }
+      return age
+    } catch (error) {
+      return 'N/A'
     }
-    return age
   }
 
   if (!user) {
@@ -207,7 +251,21 @@ export default function MembersPage() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Members</h1>
             <p className="text-gray-600">Manage your saved participants for quick registration</p>
           </div>
-          <Button>
+          <Button onClick={() => {
+            setEditingParticipant(null)
+            setFormData({
+              first_name: '',
+              last_name: '',
+              email: '',
+              mobile: '',
+              date_of_birth: '',
+              medical_aid_name: '',
+              medical_aid_number: '',
+              emergency_contact_name: '',
+              emergency_contact_number: ''
+            })
+            setIsEditDialogOpen(true)
+          }}>
             <Plus className="w-4 h-4 mr-2" />
             Add Member
           </Button>
@@ -227,14 +285,31 @@ export default function MembersPage() {
                     </div>
                     <div>
                       <CardTitle className="text-lg">
-                        {participant.participant_first_name} {participant.participant_last_name}
+                        {participant.first_name} {participant.last_name}
                       </CardTitle>
                       <p className="text-sm text-gray-600">
-                        Age {calculateAge(participant.participant_date_of_birth)}
+                        {calculateAge(participant.date_of_birth) === 'N/A' ? 
+                          'Age not provided' : 
+                          `Age ${calculateAge(participant.date_of_birth)}`
+                        }
                       </p>
                     </div>
                   </div>
                   <div className="flex space-x-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        console.log('🔍 Viewing participant:', participant)
+                        console.log('🔍 Participant fields:', Object.keys(participant))
+                        console.log('🔍 Participant email:', participant.email, participant.participant_email)
+                        console.log('🔍 Participant date:', participant.date_of_birth, participant.participant_date_of_birth)
+                        setViewingParticipant(participant)
+                        setIsViewDialogOpen(true)
+                      }}
+                    >
+                      <Eye className="w-3 h-3" />
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -256,23 +331,30 @@ export default function MembersPage() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Mail className="w-4 h-4" />
-                    <span>{participant.participant_email}</span>
+                    <span>{participant.email || 'Not provided'}</span>
                   </div>
                   
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Phone className="w-4 h-4" />
-                    <span>{participant.participant_mobile}</span>
+                    <span>{participant.mobile || 'Not provided'}</span>
                   </div>
                   
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Calendar className="w-4 h-4" />
-                    <span>{format(new Date(participant.participant_date_of_birth), 'MMM dd, yyyy')}</span>
+                    <span>
+                      {participant.date_of_birth ? 
+                        format(new Date(participant.date_of_birth), 'MMM dd, yyyy') 
+                        : 'Not provided'}
+                    </span>
                   </div>
 
-                  {participant.participant_medical_aid && (
+                  {participant.medical_aid_name && (
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Heart className="w-4 h-4" />
-                      <span>{participant.participant_medical_aid}</span>
+                      <span>
+                        {participant.medical_aid_name}
+                        {participant.medical_aid_number && ` - ${participant.medical_aid_number}`}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -302,23 +384,23 @@ export default function MembersPage() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Edit Member</DialogTitle>
+            <DialogTitle>{editingParticipant ? 'Edit Member' : 'Add New Member'}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="first_name">First Name</Label>
               <Input
                 id="first_name"
-                value={formData.participant_first_name}
-                onChange={(e) => setFormData({...formData, participant_first_name: e.target.value})}
+                value={formData.first_name}
+                onChange={(e) => setFormData({...formData, first_name: e.target.value})}
               />
             </div>
             <div>
               <Label htmlFor="last_name">Last Name</Label>
               <Input
                 id="last_name"
-                value={formData.participant_last_name}
-                onChange={(e) => setFormData({...formData, participant_last_name: e.target.value})}
+                value={formData.last_name}
+                onChange={(e) => setFormData({...formData, last_name: e.target.value})}
               />
             </div>
             <div>
@@ -326,16 +408,16 @@ export default function MembersPage() {
               <Input
                 id="email"
                 type="email"
-                value={formData.participant_email}
-                onChange={(e) => setFormData({...formData, participant_email: e.target.value})}
+                value={formData.email}
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
               />
             </div>
             <div>
               <Label htmlFor="mobile">Mobile</Label>
               <Input
                 id="mobile"
-                value={formData.participant_mobile}
-                onChange={(e) => setFormData({...formData, participant_mobile: e.target.value})}
+                value={formData.mobile}
+                onChange={(e) => setFormData({...formData, mobile: e.target.value})}
               />
             </div>
             <div>
@@ -343,24 +425,24 @@ export default function MembersPage() {
               <Input
                 id="date_of_birth"
                 type="date"
-                value={formData.participant_date_of_birth}
-                onChange={(e) => setFormData({...formData, participant_date_of_birth: e.target.value})}
+                value={formData.date_of_birth}
+                onChange={(e) => setFormData({...formData, date_of_birth: e.target.value})}
               />
             </div>
             <div>
               <Label htmlFor="medical_aid">Medical Aid</Label>
               <Input
                 id="medical_aid"
-                value={formData.participant_medical_aid}
-                onChange={(e) => setFormData({...formData, participant_medical_aid: e.target.value})}
+                value={formData.medical_aid_name || ''}
+                onChange={(e) => setFormData({...formData, medical_aid_name: e.target.value || null})}
               />
             </div>
             <div>
               <Label htmlFor="medical_aid_number">Medical Aid Number</Label>
               <Input
                 id="medical_aid_number"
-                value={formData.participant_medical_aid_number}
-                onChange={(e) => setFormData({...formData, participant_medical_aid_number: e.target.value})}
+                value={formData.medical_aid_number || ''}
+                onChange={(e) => setFormData({...formData, medical_aid_number: e.target.value || null})}
               />
             </div>
             <div>
@@ -388,6 +470,87 @@ export default function MembersPage() {
               Save Changes
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Dialog */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Member Details</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="max-h-[80vh]">
+            <div className="space-y-6 p-2">
+              <div className="flex items-center space-x-3">
+                <div className="h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center">
+                  <User className="h-8 w-8 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-semibold">
+                    {viewingParticipant?.first_name} {viewingParticipant?.last_name}
+                  </h2>
+                  <p className="text-gray-600">
+                    {calculateAge(viewingParticipant?.date_of_birth || '') === 'N/A' ? 
+                      'Age not provided' : 
+                      `Age ${calculateAge(viewingParticipant?.date_of_birth || '')}`
+                    }
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <h3 className="font-semibold mb-2">Contact Information</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-gray-500" />
+                      <span>{viewingParticipant?.email || 'Not provided'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-gray-500" />
+                      <span>{viewingParticipant?.mobile || 'Not provided'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-500" />
+                      <span>
+                        {viewingParticipant?.date_of_birth ? 
+                          format(new Date(viewingParticipant.date_of_birth), 'MMM dd, yyyy') 
+                          : 'Not provided'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-2">Medical Information</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Heart className="w-4 h-4 text-gray-500" />
+                      <span>
+                        {viewingParticipant?.medical_aid_name ? 
+                          `${viewingParticipant.medical_aid_name}${viewingParticipant.medical_aid_number ? ` - ${viewingParticipant.medical_aid_number}` : ''}` 
+                          : 'No medical aid provided'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2">Emergency Contact</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4 text-gray-500" />
+                    <span>{viewingParticipant?.emergency_contact_name}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-gray-500" />
+                    <span>{viewingParticipant?.emergency_contact_number}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
     </div>

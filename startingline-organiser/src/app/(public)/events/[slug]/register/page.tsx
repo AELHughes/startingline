@@ -115,7 +115,7 @@ export default function EventRegistrationPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>('')
   const [savedParticipants, setSavedParticipants] = useState<SavedParticipant[]>([])
-  const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
+  const [participantAllocations, setParticipantAllocations] = useState<Array<{ participantId: string, participantIndex: number }>>([])
   
   // Registration flow state
   const [currentStep, setCurrentStep] = useState<'distances' | 'account' | 'participants' | 'checkout'>('distances')
@@ -289,8 +289,8 @@ export default function EventRegistrationPage() {
         // Fetch saved participants for logged in user
         fetchSavedParticipants()
         
-        // Proceed to participants step
-        proceedToParticipants()
+        // Stay on the current page and show success message
+        setLoginError('')
       } else {
         setLoginError(data.error || 'Login failed')
       }
@@ -430,21 +430,80 @@ export default function EventRegistrationPage() {
     }))
   }
 
-  const handleAccountHolderSubmit = () => {
-    // Validate account holder form
-    if (accountHolderOption === 'new') {
-      if (!accountHolderForm.first_name || !accountHolderForm.last_name || !accountHolderForm.email || !accountHolderForm.mobile) {
-        setError('Please fill in all required account holder details')
+  const handleAccountHolderSubmit = async () => {
+    if (user) {
+      proceedToParticipants()
+      return
+    }
+
+    if (accountHolderOption === 'login') {
+      if (!loginForm.email || !loginForm.password) {
+        setError('Please enter your email and password')
         return
       }
-      if (accountHolderForm.password !== accountHolderForm.confirm_password) {
-        setError('Passwords do not match')
-        return
+
+      try {
+        setIsLoggingIn(true)
+        setLoginError('')
+        
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}/api/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(loginForm),
+        })
+
+        const data = await response.json()
+        
+        if (data.success && data.data) {
+          const { user: userData, token } = data.data
+          
+          // Update auth context and store auth data
+          updateAuthState(userData, token)
+          
+          // Update order data
+          setOrderData(prev => ({
+            ...prev,
+            account_holder_first_name: userData.first_name || '',
+            account_holder_last_name: userData.last_name || '',
+            account_holder_email: userData.email || '',
+            account_holder_mobile: userData.phone || '',
+            account_holder_company: userData.company_name || '',
+            account_holder_address: userData.company_address || '',
+            emergency_contact_name: userData.first_name ? `${userData.first_name} ${userData.last_name}` : '',
+            emergency_contact_number: userData.phone || ''
+          }))
+          
+          // Fetch saved participants for logged in user
+          await fetchSavedParticipants()
+          
+          // Proceed to participants step
+          proceedToParticipants()
+        } else {
+          setError(data.error || 'Login failed')
+        }
+      } catch (error) {
+        console.error('Login error:', error)
+        setError('Login failed. Please try again.')
+      } finally {
+        setIsLoggingIn(false)
       }
-      if (accountHolderForm.password.length < 6) {
-        setError('Password must be at least 6 characters long')
-        return
-      }
+      return
+    }
+
+    // For new accounts
+    if (!accountHolderForm.first_name || !accountHolderForm.last_name || !accountHolderForm.email || !accountHolderForm.mobile) {
+      setError('Please fill in all required account holder details')
+      return
+    }
+    if (accountHolderForm.password !== accountHolderForm.confirm_password) {
+      setError('Passwords do not match')
+      return
+    }
+    if (accountHolderForm.password.length < 6) {
+      setError('Password must be at least 6 characters long')
+      return
     }
 
     // Update order data with account holder information
@@ -484,24 +543,61 @@ export default function EventRegistrationPage() {
     }
   }
 
-  const loadSavedParticipant = (index: number, savedParticipant: SavedParticipant) => {
-    updateParticipantForm(index, 'first_name', savedParticipant.first_name)
-    updateParticipantForm(index, 'last_name', savedParticipant.last_name)
-    updateParticipantForm(index, 'email', savedParticipant.email)
-    updateParticipantForm(index, 'mobile', savedParticipant.mobile)
-    updateParticipantForm(index, 'date_of_birth', savedParticipant.date_of_birth)
-    updateParticipantForm(index, 'medical_aid_name', savedParticipant.medical_aid_name || '')
-    updateParticipantForm(index, 'medical_aid_number', savedParticipant.medical_aid_number || '')
-    updateParticipantForm(index, 'emergency_contact_name', savedParticipant.emergency_contact_name)
-    updateParticipantForm(index, 'emergency_contact_number', savedParticipant.emergency_contact_number)
+  const loadSavedParticipant = (index: number, savedParticipant: SavedParticipant | null) => {
+    // Update all fields at once to prevent multiple re-renders
+    setParticipantForms(prev => prev.map((form, i) => {
+      if (i === index) {
+        if (savedParticipant === null) {
+          // Clear the form
+          return {
+            ...form,
+            first_name: '',
+            last_name: '',
+            email: '',
+            mobile: '',
+            date_of_birth: '',
+            medical_aid_name: '',
+            medical_aid_number: '',
+            emergency_contact_name: '',
+            emergency_contact_number: ''
+          }
+        } else {
+          // Fill the form with saved participant data
+          return {
+            ...form,
+            first_name: savedParticipant.first_name || '',
+            last_name: savedParticipant.last_name || '',
+            email: savedParticipant.email || '',
+            mobile: savedParticipant.mobile || '',
+            date_of_birth: savedParticipant.date_of_birth ? new Date(savedParticipant.date_of_birth).toISOString().split('T')[0] : '',
+            medical_aid_name: savedParticipant.medical_aid_name || '',
+            medical_aid_number: savedParticipant.medical_aid_number || '',
+            emergency_contact_name: savedParticipant.emergency_contact_name || '',
+            emergency_contact_number: savedParticipant.emergency_contact_number || ''
+          }
+        }
+      }
+      return form
+    }))
     
-    // Add participant ID to selected list
-    setSelectedParticipantIds(prev => [...prev, savedParticipant.id])
+    // Update participant allocations
+    if (savedParticipant === null) {
+      // Remove the allocation for this participant index
+      setParticipantAllocations(prev => prev.filter(a => a.participantIndex !== index))
+    } else {
+      // Add or update allocation for this participant index
+      setParticipantAllocations(prev => {
+        const withoutCurrent = prev.filter(a => a.participantIndex !== index)
+        return [...withoutCurrent, { participantId: savedParticipant.id, participantIndex: index }]
+      })
+    }
     
     // Validate age for the loaded participant after a short delay to ensure form is updated
-    setTimeout(() => {
-      validateParticipantAge(index)
-    }, 100)
+    if (savedParticipant) {
+      setTimeout(() => {
+        validateParticipantAge(index)
+      }, 100)
+    }
   }
 
   const removeParticipant = (index: number) => {
@@ -521,15 +617,8 @@ export default function EventRegistrationPage() {
       return selection
     }))
     
-    // Remove participant from selected list if they were loaded from saved participants
-    const savedParticipant = savedParticipants.find(p => 
-      p.first_name === formToRemove.first_name && 
-      p.last_name === formToRemove.last_name && 
-      p.email === formToRemove.email
-    )
-    if (savedParticipant) {
-      setSelectedParticipantIds(prev => prev.filter(id => id !== savedParticipant.id))
-    }
+    // Remove participant allocation
+    setParticipantAllocations(prev => prev.filter(a => a.participantIndex !== index))
   }
 
   const proceedToCheckout = () => {
@@ -654,7 +743,19 @@ export default function EventRegistrationPage() {
       const response = await participantRegistrationApi.register(registrationOrderData)
       
       if (response.success) {
-        // If authentication data is provided, log the user in
+        // Store order data in sessionStorage for the success page
+        const orderId = response.data?.order?.id
+        const orderData = response.data?.order
+        const ticketsData = response.data?.tickets
+        
+        if (orderData && ticketsData) {
+          sessionStorage.setItem('registration_order', JSON.stringify({
+            order: orderData,
+            tickets: ticketsData
+          }))
+        }
+        
+        // If authentication data is provided, log the user in BEFORE redirecting
         if ((response.data as any)?.auth) {
           console.log('🔐 Registration response includes auth data:', (response.data as any).auth)
           // Update auth context immediately
@@ -663,21 +764,9 @@ export default function EventRegistrationPage() {
         } else {
           console.log('🔐 No auth data in registration response')
         }
-        
-        // Redirect to success page with order data
-        const orderId = response.data?.order?.id
-        const orderData = response.data?.order
-        const ticketsData = response.data?.tickets
-        
-        // Store order data in sessionStorage for the success page
-        if (orderData && ticketsData) {
-          sessionStorage.setItem('registration_order', JSON.stringify({
-            order: orderData,
-            tickets: ticketsData
-          }))
-        }
-        
-        router.push(`/events/${slug}/registration-success?orderId=${orderId}`)
+
+        // Use window.location.href to force a full page navigation to the success page
+        window.location.href = `/events/${slug}/registration-success?orderId=${orderId}`
       } else {
         setError(response.error || 'Registration failed')
       }
@@ -773,7 +862,7 @@ export default function EventRegistrationPage() {
           </div>
         </div>
 
-        {error && (
+        {error && currentStep === 'account' && !user && (
           <Alert className="mb-6">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
@@ -896,11 +985,6 @@ export default function EventRegistrationPage() {
                             />
                           </div>
                         </div>
-                        <div className="flex justify-end">
-                          <Button onClick={handleLogin} disabled={isLoggingIn || !loginForm.email || !loginForm.password}>
-                            {isLoggingIn ? 'Logging in...' : 'Login & Continue'}
-                          </Button>
-                        </div>
                       </div>
                     )}
 
@@ -1009,10 +1093,14 @@ export default function EventRegistrationPage() {
                     Back to Distances
                   </Button>
                   <Button 
-                    onClick={user ? proceedToParticipants : handleAccountHolderSubmit}
-                    disabled={!user && accountHolderOption === 'new' && (!accountHolderForm.first_name || !accountHolderForm.last_name || !accountHolderForm.email || !accountHolderForm.mobile || !accountHolderForm.password)}
+                    onClick={handleAccountHolderSubmit}
+                    disabled={
+                      isLoggingIn || 
+                      (!user && accountHolderOption === 'login' && (!loginForm.email || !loginForm.password)) ||
+                      (!user && accountHolderOption === 'new' && (!accountHolderForm.first_name || !accountHolderForm.last_name || !accountHolderForm.email || !accountHolderForm.mobile || !accountHolderForm.password))
+                    }
                   >
-                    Continue to Participants
+                    {isLoggingIn ? 'Logging in...' : 'Continue to Participants'}
                   </Button>
                 </div>
               </CardContent>
@@ -1054,29 +1142,29 @@ export default function EventRegistrationPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyFromAccountHolder(index)}
-                      >
-                        <Copy className="h-4 w-4 mr-1" />
-                        Copy from Account Holder
-                      </Button>
-                      {user && (
+                      {!user && (
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => copyFromPrimary(index)}
+                          onClick={() => copyFromAccountHolder(index)}
                         >
                           <Copy className="h-4 w-4 mr-1" />
-                          Copy from Account
+                          Copy from Account Holder
                         </Button>
                       )}
                       {savedParticipants.length > 0 && (
                         <SavedParticipantsModal
                           savedParticipants={savedParticipants}
-                          selectedParticipantIds={selectedParticipantIds}
+                          participantAllocations={participantAllocations}
+                          participantIndex={index}
+                          currentParticipantId={savedParticipants.find(p => 
+                            p.first_name === form.first_name && 
+                            p.last_name === form.last_name && 
+                            p.email === form.email
+                          )?.id}
                           onSelectParticipant={(participant) => loadSavedParticipant(index, participant)}
+                          anyParticipantSelected={participantAllocations.some(a => a.participantIndex === index)}
+                          user={user}
                         />
                       )}
                     </div>

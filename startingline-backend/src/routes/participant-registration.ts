@@ -195,6 +195,21 @@ router.post('/save-participant', authenticateToken, async (req: Request, res: Re
     const userId = req.localUser!.userId
     const participantData = req.body
 
+    // Get user profile ID
+    const userProfileResult = await pool.query(
+      'SELECT id FROM user_profiles WHERE user_id = $1',
+      [userId]
+    )
+
+    if (userProfileResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User profile not found'
+      } as ApiResponse)
+    }
+
+    const userProfileId = userProfileResult.rows[0].id
+
     const result = await pool.query(`
       INSERT INTO saved_participants (
         user_profile_id, participant_first_name, participant_last_name, participant_email, participant_mobile, participant_date_of_birth,
@@ -202,7 +217,7 @@ router.post('/save-participant', authenticateToken, async (req: Request, res: Re
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `, [
-      userId,
+      userProfileId,
       participantData.first_name,
       participantData.last_name,
       participantData.email,
@@ -849,14 +864,23 @@ router.get('/saved-participants', (req: Request, res: Response, next: NextFuncti
     console.log('🔍 Looking for saved participants with user_profile_id:', userProfileId)
     const result = await pool.query(`
       SELECT 
-        id, participant_first_name, participant_last_name, participant_email, 
-        participant_mobile, participant_date_of_birth, participant_medical_aid, 
-        participant_medical_aid_number, emergency_contact_name, emergency_contact_number,
-        created_at, updated_at
-      FROM saved_participants 
-      WHERE user_profile_id = $1
-      ORDER BY created_at DESC
-    `, [userProfileId])
+        sp.id, 
+        sp.participant_first_name as first_name, 
+        sp.participant_last_name as last_name, 
+        sp.participant_email as email, 
+        sp.participant_mobile as mobile, 
+        sp.participant_date_of_birth as date_of_birth,
+        sp.participant_medical_aid as medical_aid_name, 
+        sp.participant_medical_aid_number as medical_aid_number, 
+        sp.emergency_contact_name, 
+        sp.emergency_contact_number,
+        sp.created_at, 
+        sp.updated_at
+      FROM saved_participants sp
+      JOIN user_profiles up ON sp.user_profile_id = up.id
+      WHERE up.user_id = $1
+      ORDER BY sp.created_at DESC
+    `, [userId])
     console.log('🔍 Found saved participants:', result.rows)
 
     res.json({

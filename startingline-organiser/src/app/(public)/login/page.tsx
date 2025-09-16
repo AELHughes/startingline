@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/auth-context'
@@ -12,7 +12,7 @@ import { AlertCircle, Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
-  const { user, login, isLoading } = useAuth()
+  const { login } = useAuth()
   
   const [formData, setFormData] = useState({
     email: '',
@@ -21,49 +21,6 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-
-  // Clear any stale authentication data on page load
-  useEffect(() => {
-    // Clear any cached auth data that might cause conflicts
-    const clearStaleAuth = () => {
-      const staleKeys = ['auth_token', 'user', 'user_type', 'admin_user']
-      staleKeys.forEach(key => {
-        if (localStorage.getItem(key)) {
-          console.log(`🧹 Clearing stale auth data: ${key}`)
-          localStorage.removeItem(key)
-        }
-      })
-    }
-    
-    clearStaleAuth()
-  }, [])
-
-  // Cross-auth protection: Redirect if already authenticated
-  useEffect(() => {
-    if (!isLoading && user) {
-      if (user.role === 'organiser') {
-        router.push('/dashboard')
-      } else if (user.role === 'admin' || user.role === 'super_admin') {
-        // Prevent admin from accessing organiser login
-        router.push('/admin')
-      } else if (user.role === 'participant') {
-        // Redirect participants to their dashboard
-        router.push('/participant-dashboard')
-      } else {
-        // Unknown role, redirect to appropriate login
-        router.push('/login')
-      }
-    }
-  }, [user, isLoading, router])
-
-  // Don't render if still loading or already authenticated
-  if (isLoading || user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -127,12 +84,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+    <div className="flex items-center justify-center min-h-[calc(100vh-4rem)]">
+      <div className="max-w-md w-full space-y-8 px-4">
         <div className="text-center">
-          <div className="mx-auto w-16 h-16 bg-blue-600 rounded-lg flex items-center justify-center mb-4">
-            <span className="text-white font-bold text-2xl">S</span>
-          </div>
           <h2 className="text-3xl font-bold text-gray-900">Welcome back</h2>
           <p className="mt-2 text-gray-600">Sign in to your organiser account</p>
         </div>
@@ -233,3 +187,4 @@ export default function LoginPage() {
     </div>
   )
 }
+

@@ -974,13 +974,14 @@ export interface OrderData {
 
 export interface SavedParticipant {
   id: string
-  first_name: string
-  last_name: string
-  email: string
-  mobile: string
-  date_of_birth: string
-  medical_aid_name?: string
-  medical_aid_number?: string
+  user_profile_id: string
+  participant_first_name: string
+  participant_last_name: string
+  participant_email: string
+  participant_mobile: string
+  participant_date_of_birth: string
+  participant_medical_aid: string | null
+  participant_medical_aid_number: string | null
   emergency_contact_name: string
   emergency_contact_number: string
   created_at: string
@@ -1131,7 +1132,7 @@ class ParticipantRegistrationApi {
     }
   }
 
-  async saveParticipant(participantData: Omit<SavedParticipant, 'id' | 'created_at'>): Promise<{
+  async saveParticipant(participantData: Omit<SavedParticipant, 'id' | 'created_at' | 'updated_at'>): Promise<{
     success: boolean
     data?: SavedParticipant
     error?: string
