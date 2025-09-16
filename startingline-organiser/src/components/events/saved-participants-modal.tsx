@@ -31,9 +31,10 @@ interface SavedParticipantsModalProps {
   participantAllocations: ParticipantAllocation[]
   participantIndex: number
   currentParticipantId?: string
-  onSelectParticipant: (participant: SavedParticipant | null) => void
+  onSelectParticipant: (participant: SavedParticipant | null) => Promise<void>
   anyParticipantSelected: boolean
   user: { email: string, first_name: string, last_name: string } | null
+  error?: string
 }
 
 export default function SavedParticipantsModal({
@@ -43,10 +44,14 @@ export default function SavedParticipantsModal({
   currentParticipantId,
   onSelectParticipant,
   anyParticipantSelected,
-  user
+  user,
+  error
 }: SavedParticipantsModalProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<'name' | 'date'>('name')
+
+  // Debug logging
+  console.log('🔍 SavedParticipantsModal - error prop:', error)
 
   const filteredAndSortedParticipants = useMemo(() => {
     return savedParticipants
@@ -80,6 +85,12 @@ export default function SavedParticipantsModal({
           <DialogDescription>
             Choose a member to auto-fill the participant form. Members who have already been added to this registration will be disabled.
           </DialogDescription>
+          {error && (
+            <div className="mt-2 text-sm font-medium text-red-600">
+              {error}
+            </div>
+          )}
+          {console.log('🔍 Modal error display - error:', error, 'should show:', !!error)}
         </DialogHeader>
         <div className="flex items-center gap-4 p-4 border-b">
           <div className="flex-1">
@@ -148,7 +159,7 @@ export default function SavedParticipantsModal({
                 <div className="flex items-center gap-2">
                   {currentParticipantId === participant.id ? (
                     <Button
-                      onClick={() => onSelectParticipant(null)}
+                              onClick={async () => await onSelectParticipant(null)}
                       variant="destructive"
                       size="sm"
                       className="ml-4"
@@ -157,7 +168,7 @@ export default function SavedParticipantsModal({
                     </Button>
                   ) : (
                     <Button
-                      onClick={() => onSelectParticipant(participant)}
+                              onClick={async () => await onSelectParticipant(participant)}
                       disabled={isSelected || isDisabled}
                       variant={isSelected ? "secondary" : "default"}
                       size="sm"

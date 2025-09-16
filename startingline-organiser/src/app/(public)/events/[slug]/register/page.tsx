@@ -29,6 +29,7 @@ import {
   Mail,
   Heart,
   AlertCircle,
+  AlertTriangle,
   CheckCircle,
   ShoppingCart,
   Eye,
@@ -114,6 +115,7 @@ export default function EventRegistrationPage() {
   const [registrationDetails, setRegistrationDetails] = useState<RegistrationDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>('')
+  const [modalError, setModalError] = useState<string>('')
   const [savedParticipants, setSavedParticipants] = useState<SavedParticipant[]>([])
   const [participantAllocations, setParticipantAllocations] = useState<Array<{ participantId: string, participantIndex: number }>>([])
   
@@ -384,6 +386,16 @@ export default function EventRegistrationPage() {
   }
 
   const updateParticipantForm = (index: number, field: keyof ParticipantFormData, value: any) => {
+    // Clear modal error when user starts manually editing the form
+    if (modalError) {
+      setModalError('')
+    }
+    
+    // Clear form error when user changes first name or last name (key fields for duplicate check)
+    if ((field === 'first_name' || field === 'last_name') && error) {
+      setError('')
+    }
+    
     setParticipantForms(prev => prev.map((form, i) => {
       if (i === index) {
         const updatedForm = { ...form, [field]: value }
@@ -410,6 +422,48 @@ export default function EventRegistrationPage() {
       }
       return form
     }))
+  }
+
+  const checkForDuplicateParticipant = async (index: number) => {
+    const form = participantForms[index]
+    
+    // Only check if we have the minimum required fields
+    if (!form.first_name || !form.last_name || !form.email || !form.date_of_birth) {
+      return
+    }
+
+    try {
+      console.log('🔍 Checking for duplicate participant:', {
+        event_id: registrationDetails!.event.id,
+        email: form.email,
+        first_name: form.first_name,
+        last_name: form.last_name,
+        date_of_birth: form.date_of_birth
+      })
+
+      const checkResult = await participantRegistrationApi.checkParticipantRegistration(
+        registrationDetails!.event.id,
+        {
+          email: form.email,
+          first_name: form.first_name,
+          last_name: form.last_name,
+          date_of_birth: form.date_of_birth
+        }
+      )
+
+      console.log('🔍 Duplicate check result:', checkResult)
+
+      if (checkResult.success && checkResult.data?.isRegistered) {
+        const errorMessage = `${form.first_name} ${form.last_name} is already registered for this event (${checkResult.data.registrationDetails?.distance_name}). Want to register someone else?`
+        console.log('🔍 Setting form duplicate error:', errorMessage)
+        setError(errorMessage)
+      } else {
+        // Clear error if no duplicate found
+        setError('')
+      }
+    } catch (error) {
+      console.error('Error checking for duplicate participant:', error)
+    }
   }
 
   const validateParticipantAge = (index: number) => {
@@ -543,12 +597,14 @@ export default function EventRegistrationPage() {
     }
   }
 
-  const loadSavedParticipant = (index: number, savedParticipant: SavedParticipant | null) => {
-    // Update all fields at once to prevent multiple re-renders
-    setParticipantForms(prev => prev.map((form, i) => {
-      if (i === index) {
-        if (savedParticipant === null) {
-          // Clear the form
+  const loadSavedParticipant = async (index: number, savedParticipant: SavedParticipant | null) => {
+    // Clear any existing modal error
+    setModalError('')
+
+    if (!savedParticipant) {
+      // Clear the form
+      setParticipantForms(prev => prev.map((form, i) => {
+        if (i === index) {
           return {
             ...form,
             first_name: '',
@@ -561,43 +617,62 @@ export default function EventRegistrationPage() {
             emergency_contact_name: '',
             emergency_contact_number: ''
           }
-        } else {
-          // Fill the form with saved participant data
-          return {
-            ...form,
-            first_name: savedParticipant.first_name || '',
-            last_name: savedParticipant.last_name || '',
-            email: savedParticipant.email || '',
-            mobile: savedParticipant.mobile || '',
-            date_of_birth: savedParticipant.date_of_birth ? new Date(savedParticipant.date_of_birth).toISOString().split('T')[0] : '',
-            medical_aid_name: savedParticipant.medical_aid_name || '',
-            medical_aid_number: savedParticipant.medical_aid_number || '',
-            emergency_contact_name: savedParticipant.emergency_contact_name || '',
-            emergency_contact_number: savedParticipant.emergency_contact_number || ''
-          }
+        }
+        return form
+      }))
+      
+      // Remove the allocation
+      setParticipantAllocations(prev => prev.filter(a => a.participantIndex !== index))
+      return
+    }
+
+    // Check if participant is already registered for this event
+    const checkResult = await participantRegistrationApi.checkParticipantRegistration(
+      registrationDetails!.event.id,
+      {
+        email: savedParticipant.email,
+        first_name: savedParticipant.first_name,
+        last_name: savedParticipant.last_name,
+        date_of_birth: savedParticipant.date_of_birth
+      }
+    )
+
+    if (checkResult.success && checkResult.data?.isRegistered) {
+      const errorMessage = `${savedParticipant.first_name} ${savedParticipant.last_name} is already registered for this event (${checkResult.data.registrationDetails?.distance_name}). Want to register someone else?`
+      console.log('🔍 Setting modal error message:', errorMessage)
+      setModalError(errorMessage)
+      return
+    }
+
+    // Fill the form with saved participant data
+    setParticipantForms(prev => prev.map((form, i) => {
+      if (i === index) {
+        return {
+          ...form,
+          first_name: savedParticipant.first_name || '',
+          last_name: savedParticipant.last_name || '',
+          email: savedParticipant.email || '',
+          mobile: savedParticipant.mobile || '',
+          date_of_birth: savedParticipant.date_of_birth ? new Date(savedParticipant.date_of_birth).toISOString().split('T')[0] : '',
+          medical_aid_name: savedParticipant.medical_aid_name || '',
+          medical_aid_number: savedParticipant.medical_aid_number || '',
+          emergency_contact_name: savedParticipant.emergency_contact_name || '',
+          emergency_contact_number: savedParticipant.emergency_contact_number || ''
         }
       }
       return form
     }))
     
-    // Update participant allocations
-    if (savedParticipant === null) {
-      // Remove the allocation for this participant index
-      setParticipantAllocations(prev => prev.filter(a => a.participantIndex !== index))
-    } else {
-      // Add or update allocation for this participant index
-      setParticipantAllocations(prev => {
-        const withoutCurrent = prev.filter(a => a.participantIndex !== index)
-        return [...withoutCurrent, { participantId: savedParticipant.id, participantIndex: index }]
-      })
-    }
+    // Add or update allocation
+    setParticipantAllocations(prev => {
+      const withoutCurrent = prev.filter(a => a.participantIndex !== index)
+      return [...withoutCurrent, { participantId: savedParticipant.id, participantIndex: index }]
+    })
     
-    // Validate age for the loaded participant after a short delay to ensure form is updated
-    if (savedParticipant) {
-      setTimeout(() => {
-        validateParticipantAge(index)
-      }, 100)
-    }
+    // Validate age
+    setTimeout(() => {
+      validateParticipantAge(index)
+    }, 100)
   }
 
   const removeParticipant = (index: number) => {
@@ -621,9 +696,15 @@ export default function EventRegistrationPage() {
     setParticipantAllocations(prev => prev.filter(a => a.participantIndex !== index))
   }
 
-  const proceedToCheckout = () => {
-    // Validate all participant forms and add validation errors
-    let hasErrors = false
+  const proceedToCheckout = async () => {
+    try {
+      console.log('🔍 Starting proceedToCheckout')
+      setSubmitting(true)
+      // Clear any existing error
+      setError('')
+
+      // Validate all participant forms and add validation errors
+      let hasErrors = false
     
     setParticipantForms(prev => prev.map(form => {
       const updatedForm = { ...form }
@@ -691,7 +772,48 @@ export default function EventRegistrationPage() {
       return
     }
 
+    // Check each participant for existing registration
+    for (const form of participantForms) {
+      console.log('🔍 Checking participant:', {
+        event_id: registrationDetails!.event.id,
+        email: form.email,
+        first_name: form.first_name,
+        last_name: form.last_name
+      })
+
+      try {
+          const checkResult = await participantRegistrationApi.checkParticipantRegistration(
+            registrationDetails!.event.id,
+            {
+              email: form.email,
+              first_name: form.first_name,
+              last_name: form.last_name,
+              date_of_birth: form.date_of_birth
+            }
+          )
+
+        console.log('🔍 Check result:', checkResult)
+
+        if (checkResult.success && checkResult.data?.isRegistered) {
+          const errorMessage = `${form.first_name} ${form.last_name} is already registered for this event (${checkResult.data.registrationDetails?.distance_name}). Want to register someone else?`
+          console.log('❌ Setting error:', errorMessage)
+          setError(errorMessage)
+          return
+        }
+      } catch (error) {
+        console.error('Error checking participant registration:', error)
+        setError('Failed to verify participant registration. Please try again.')
+        return
+      }
+    }
+
     setCurrentStep('checkout')
+    } catch (error) {
+      console.error('Error checking participants:', error)
+      setError('Failed to verify participant registration. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const calculateTotal = () => {
@@ -862,9 +984,9 @@ export default function EventRegistrationPage() {
           </div>
         </div>
 
-        {error && currentStep === 'account' && !user && (
-          <Alert className="mb-6">
-            <AlertCircle className="h-4 w-4" />
+        {error && (currentStep === 'checkout' || currentStep === 'participants') && (
+          <Alert variant="warning" className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -1165,6 +1287,7 @@ export default function EventRegistrationPage() {
                           onSelectParticipant={(participant) => loadSavedParticipant(index, participant)}
                           anyParticipantSelected={participantAllocations.some(a => a.participantIndex === index)}
                           user={user}
+                          error={modalError}
                         />
                       )}
                     </div>
@@ -1235,6 +1358,10 @@ export default function EventRegistrationPage() {
                         onBlur={() => {
                           console.log('🔍 Date of birth onBlur triggered for index:', index)
                           validateParticipantAge(index)
+                          // Check for duplicate after age validation
+                          setTimeout(() => {
+                            checkForDuplicateParticipant(index)
+                          }, 100)
                         }}
                         required
                         className={form.dateOfBirthError || form.ageError ? 'border-red-500' : ''}
@@ -1310,8 +1437,8 @@ export default function EventRegistrationPage() {
               <Button variant="outline" onClick={() => setCurrentStep('account')}>
                 Back to Account Holder
               </Button>
-              <Button onClick={proceedToCheckout}>
-                Continue to Checkout
+              <Button onClick={proceedToCheckout} disabled={submitting || error !== ''}>
+                {submitting ? 'Checking...' : 'Continue to Checkout'}
               </Button>
             </div>
           </div>
@@ -1357,7 +1484,7 @@ export default function EventRegistrationPage() {
               </Button>
               <Button 
                 onClick={handleSubmitRegistration} 
-                disabled={submitting}
+                disabled={submitting || error !== ''}
                 className="bg-green-600 hover:bg-green-700"
               >
                 {submitting ? 'Processing...' : 'Complete Registration'}

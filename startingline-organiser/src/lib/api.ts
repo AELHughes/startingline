@@ -975,16 +975,17 @@ export interface OrderData {
 export interface SavedParticipant {
   id: string
   user_profile_id: string
-  participant_first_name: string
-  participant_last_name: string
-  participant_email: string
-  participant_mobile: string
-  participant_date_of_birth: string
-  participant_medical_aid: string | null
-  participant_medical_aid_number: string | null
+  first_name: string
+  last_name: string
+  email: string
+  mobile: string
+  date_of_birth: string
+  medical_aid_name: string | null
+  medical_aid_number: string | null
   emergency_contact_name: string
   emergency_contact_number: string
   created_at: string
+  updated_at: string
 }
 
 export interface Order {
@@ -1043,6 +1044,44 @@ export interface Ticket {
 }
 
 class ParticipantRegistrationApi {
+  async checkParticipantRegistration(eventId: string, participant: { email: string, first_name: string, last_name: string, date_of_birth: string }): Promise<{
+    success: boolean
+    data?: {
+      isRegistered: boolean
+      registrationDetails?: {
+        participant_first_name: string
+        participant_last_name: string
+        participant_email: string
+        distance_name: string
+      }
+    }
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/participant-registration/check-participant-registration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_id: eventId,
+          ...participant
+        })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to check participant registration')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Check participant registration error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to check participant registration'
+      }
+    }
+  }
   async getRegistrationDetails(eventId: string): Promise<{
     success: boolean
     data?: RegistrationDetails
@@ -1252,37 +1291,6 @@ class ParticipantRegistrationApi {
     }
   }
 
-  async getSavedParticipants(): Promise<{
-    success: boolean
-    data?: any[]
-    error?: string
-  }> {
-    try {
-      console.log('🔍 getSavedParticipants - Making API call...')
-      const headers = getAuthHeaders()
-      console.log('🔍 getSavedParticipants - Headers:', headers)
-      
-      const response = await fetch(`${API_BASE}/api/participant-registration/saved-participants`, {
-        headers
-      })
-
-      console.log('🔍 getSavedParticipants - Response status:', response.status)
-      const result = await response.json()
-      console.log('🔍 getSavedParticipants - Response result:', result)
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to get saved participants')
-      }
-
-      return result
-    } catch (error) {
-      console.error('❌ Get saved participants error:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to get saved participants'
-      }
-    }
-  }
 
   async updateSavedParticipant(participantId: string, data: any): Promise<{
     success: boolean

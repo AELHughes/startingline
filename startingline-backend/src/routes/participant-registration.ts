@@ -43,6 +43,71 @@ interface OrderData {
 }
 
 /**
+ * Check if a participant is already registered for an event
+ */
+router.post('/check-participant-registration', async (req: Request, res: Response) => {
+  try {
+    console.log('🔍 Check participant registration request:', req.body)
+    const { event_id, email, first_name, last_name, date_of_birth } = req.body
+
+    if (!event_id || !email || !first_name || !last_name || !date_of_birth) {
+      console.log('❌ Missing required fields:', { event_id, email, first_name, last_name, date_of_birth })
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields'
+      } as ApiResponse)
+    }
+
+    // Check if participant exists in tickets table for this event
+    const query = `
+      WITH match_scores AS (
+        SELECT 
+          t.id,
+          t.participant_first_name,
+          t.participant_last_name,
+          t.participant_email,
+          t.participant_date_of_birth,
+          ed.name as distance_name,
+          (CASE WHEN LOWER(t.participant_email) = LOWER($2) THEN 1 ELSE 0 END) +
+          (CASE WHEN LOWER(t.participant_first_name) = LOWER($3) THEN 1 ELSE 0 END) +
+          (CASE WHEN LOWER(t.participant_last_name) = LOWER($4) THEN 1 ELSE 0 END) +
+          (CASE WHEN t.participant_date_of_birth = $5 THEN 1 ELSE 0 END) as match_count
+        FROM tickets t
+        JOIN event_distances ed ON t.distance_id = ed.id
+        WHERE t.event_id = $1 
+        AND t.status = 'active'
+      )
+      SELECT *
+      FROM match_scores
+      WHERE match_count >= 3
+    `
+    console.log('🔍 Running query:', query)
+    console.log('🔍 Query parameters:', [event_id, email, first_name, last_name])
+
+    const result = await pool.query(query, [event_id, email, first_name, last_name, date_of_birth])
+    console.log('🔍 Query result:', result.rows)
+
+    const response = {
+      success: true,
+      data: {
+        isRegistered: result.rows.length > 0,
+        registrationDetails: result.rows[0] || null
+      }
+    } as ApiResponse
+
+    console.log('✅ Sending response:', response)
+    res.json(response)
+
+  } catch (error: any) {
+    console.error('Check participant registration error:', error)
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to check participant registration'
+    } as ApiResponse)
+  }
+})
+
+/**
  * Get event registration details (distances, pricing, merchandise)
  */
 router.get('/event/:eventId/registration-details', async (req: Request, res: Response) => {
