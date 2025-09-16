@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
 import { participantRegistrationApi, type RegistrationDetails, type ParticipantData, type OrderData, type SavedParticipant } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import SavedParticipantsModal from '@/components/events/saved-participants-modal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -114,6 +115,7 @@ export default function EventRegistrationPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>('')
   const [savedParticipants, setSavedParticipants] = useState<SavedParticipant[]>([])
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
   
   // Registration flow state
   const [currentStep, setCurrentStep] = useState<'distances' | 'account' | 'participants' | 'checkout'>('distances')
@@ -494,6 +496,9 @@ export default function EventRegistrationPage() {
     updateParticipantForm(index, 'emergency_contact_name', savedParticipant.emergency_contact_name)
     updateParticipantForm(index, 'emergency_contact_number', savedParticipant.emergency_contact_number)
     
+    // Add participant ID to selected list
+    setSelectedParticipantIds(prev => [...prev, savedParticipant.id])
+    
     // Validate age for the loaded participant after a short delay to ensure form is updated
     setTimeout(() => {
       validateParticipantAge(index)
@@ -516,6 +521,16 @@ export default function EventRegistrationPage() {
       }
       return selection
     }))
+    
+    // Remove participant from selected list if they were loaded from saved participants
+    const savedParticipant = savedParticipants.find(p => 
+      p.first_name === formToRemove.first_name && 
+      p.last_name === formToRemove.last_name && 
+      p.email === formToRemove.email
+    )
+    if (savedParticipant) {
+      setSelectedParticipantIds(prev => prev.filter(id => id !== savedParticipant.id))
+    }
   }
 
   const proceedToCheckout = () => {
@@ -1059,21 +1074,11 @@ export default function EventRegistrationPage() {
                         </Button>
                       )}
                       {savedParticipants.length > 0 && (
-                        <Select onValueChange={(value) => {
-                          const saved = savedParticipants.find(p => p.id === value)
-                          if (saved) loadSavedParticipant(index, saved)
-                        }}>
-                          <SelectTrigger className="w-48">
-                            <SelectValue placeholder="Load saved participant" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {savedParticipants.map((saved) => (
-                              <SelectItem key={saved.id} value={saved.id}>
-                                {saved.first_name} {saved.last_name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <SavedParticipantsModal
+                          savedParticipants={savedParticipants}
+                          selectedParticipantIds={selectedParticipantIds}
+                          onSelectParticipant={(participant) => loadSavedParticipant(index, participant)}
+                        />
                       )}
                     </div>
                   </div>
