@@ -79,10 +79,11 @@ export default function ArticlePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <Link href="/" className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">S</span>
-                </div>
-                <span className="text-xl font-bold text-gray-900">Starting Line</span>
+                <img 
+                  src="/Logo.png" 
+                  alt="StartingLine" 
+                  className="h-8 w-auto"
+                />
               </Link>
             </div>
           </div>
@@ -112,10 +113,11 @@ export default function ArticlePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <Link href="/" className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">S</span>
-                </div>
-                <span className="text-xl font-bold text-gray-900">Starting Line</span>
+                <img 
+                  src="/Logo.png" 
+                  alt="StartingLine" 
+                  className="h-8 w-auto"
+                />
               </Link>
             </div>
           </div>
@@ -143,10 +145,11 @@ export default function ArticlePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <Link href="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">S</span>
-              </div>
-              <span className="text-xl font-bold text-gray-900">Starting Line</span>
+              <img 
+                src="/Logo.png" 
+                alt="StartingLine" 
+                className="h-8 w-auto"
+              />
             </Link>
             <nav className="hidden md:flex items-center space-x-8">
               <Link href="/events" className="text-gray-700 hover:text-blue-600 font-medium">
@@ -304,10 +307,11 @@ export default function ArticlePage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
               <div className="flex items-center space-x-2 mb-4">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">S</span>
-                </div>
-                <span className="text-xl font-bold">Starting Line</span>
+                <img 
+                  src="/Logo.png" 
+                  alt="StartingLine" 
+                  className="h-8 w-auto"
+                />
               </div>
               <p className="text-gray-400">
                 Your premier destination for cycling, running, and triathlon events across South Africa.

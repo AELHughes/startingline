@@ -8,10 +8,11 @@ export function LoggedOutHeader() {
     <header className="fixed top-0 left-0 right-0 z-50 bg-white border-b">
       <div className="container mx-auto px-4 h-16 flex items-center">
         <Link href="/" className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">
-            <span className="text-white font-bold text-lg">S</span>
-          </div>
-          <span className="text-xl font-bold text-gray-900">StartingLine</span>
+          <img 
+            src="/Logo.png" 
+            alt="StartingLine" 
+            className="h-8 w-auto"
+          />
         </Link>
 
         <nav className="hidden md:flex items-center justify-center flex-1 space-x-8">

@@ -72,15 +72,18 @@ export default function ParticipantLayout({ children }: ParticipantLayoutProps) 
   return (
     <div className="flex h-screen">
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 lg:sticky lg:top-0 lg:h-screen ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-            <div className="flex items-center space-x-2">
-              <Trophy className="h-8 w-8 text-blue-600" />
-              <span className="text-xl font-bold text-gray-900">StartingLine</span>
+            <div className="flex items-center w-full">
+              <img 
+                src="/Logo.png" 
+                alt="StartingLine" 
+                className="h-12 w-auto max-w-full"
+              />
             </div>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -151,15 +154,18 @@ export default function ParticipantLayout({ children }: ParticipantLayoutProps) 
           >
             <Menu className="h-6 w-6" />
           </button>
-          <div className="flex items-center space-x-2">
-            <Trophy className="h-6 w-6 text-blue-600" />
-            <span className="text-lg font-bold text-gray-900">StartingLine</span>
+          <div className="flex items-center w-full">
+            <img 
+              src="/Logo.png" 
+              alt="StartingLine" 
+              className="h-10 w-auto max-w-full"
+            />
           </div>
           <div className="w-10"></div> {/* Spacer for centering */}
         </div>
 
         {/* Page content */}
-        <main className="flex-1 bg-gray-50">
+        <main className="flex-1 bg-gray-50 overflow-y-auto">
           {children}
         </main>
       </div>

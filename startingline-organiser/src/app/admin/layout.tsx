@@ -126,13 +126,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               <X className="h-6 w-6 text-white" />
             </button>
           </div>
-          <div className="flex-shrink-0 flex items-center px-4">
-            <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">A</span>
-            </div>
-            <div className="ml-3">
-              <h1 className="text-lg font-bold text-gray-900">Admin Portal</h1>
-            </div>
+          <div className="flex-shrink-0 flex flex-col items-start px-4 py-4">
+            <img 
+              src="/Logo.png" 
+              alt="StartingLine" 
+              className="h-12 w-auto max-w-full mb-2"
+            />
+            <h1 className="text-lg font-bold text-gray-900">Admin Portal</h1>
+            <p className="text-xs text-gray-500">Starting Line Administration</p>
           </div>
           <div className="mt-5 flex-1 h-0 overflow-y-auto">
             <nav className="px-2 space-y-1">
@@ -161,14 +162,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       <div className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0">
         <div className="flex-1 flex flex-col min-h-0 border-r border-gray-200 bg-white">
           <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
-            <div className="flex items-center flex-shrink-0 px-4">
-              <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">A</span>
-              </div>
-              <div className="ml-3">
-                <h1 className="text-lg font-bold text-gray-900">Admin Portal</h1>
-                <p className="text-xs text-gray-500">Starting Line Administration</p>
-              </div>
+            <div className="flex flex-col items-start flex-shrink-0 px-4 py-4">
+              <img 
+                src="/Logo.png" 
+                alt="StartingLine" 
+                className="h-12 w-auto max-w-full mb-2"
+              />
+              <h1 className="text-lg font-bold text-gray-900">Admin Portal</h1>
+              <p className="text-xs text-gray-500">Starting Line Administration</p>
             </div>
             <nav className="mt-5 flex-1 px-2 space-y-1">
               {navigation.map((item) => {

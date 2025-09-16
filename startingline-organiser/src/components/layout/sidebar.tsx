@@ -29,14 +29,15 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+    <div className="hidden lg:sticky lg:top-0 lg:h-screen lg:flex lg:w-64 lg:flex-col">
       <div className="flex min-h-0 flex-1 flex-col bg-gray-900">
         <div className="flex h-16 flex-shrink-0 items-center px-4">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">S</span>
-            </div>
-            <span className="text-white text-xl font-bold">Starting Line</span>
+          <div className="flex items-center w-full">
+            <img 
+              src="/SL_Logo_WtV2.png" 
+              alt="StartingLine" 
+              className="h-12 w-auto max-w-full"
+            />
           </div>
         </div>
         

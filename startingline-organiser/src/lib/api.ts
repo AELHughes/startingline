@@ -555,6 +555,83 @@ export const eventsApi = {
       console.error('❌ Update admin comment error:', error)
       throw error
     }
+  },
+
+  // Get participant analytics for an event
+  getParticipantAnalytics: async (eventId: string): Promise<{
+    success: boolean
+    data?: {
+      event: {
+        id: string
+        name: string
+        start_date: string
+        start_time: string
+        city: string
+      }
+      summary: {
+        total_participants: number
+        active_participants: number
+        disabled_participants: number
+        total_entry_limit: number
+        utilization_percentage: number
+      }
+      distances: Array<{
+        id: string
+        name: string
+        price: number
+        entry_limit: number
+        min_age?: number
+        start_time?: string
+        participant_count: number
+        active_participants: number
+        utilization_percentage: number
+      }>
+      participants: Array<{
+        ticket_id: string
+        ticket_number: string
+        participant_first_name: string
+        participant_last_name: string
+        participant_email: string
+        participant_mobile: string
+        participant_date_of_birth: string
+        participant_disabled: boolean
+        participant_medical_aid_name?: string
+        participant_medical_aid_number?: string
+        emergency_contact_name: string
+        emergency_contact_number: string
+        amount: number
+        status: string
+        created_at: string
+        distance_name: string
+        distance_price: number
+        account_holder_first_name: string
+        account_holder_last_name: string
+        account_holder_email: string
+      }>
+    }
+    error?: string
+  }> => {
+    try {
+      console.log('🔍 Fetching participant analytics for event:', eventId)
+      
+      const response = await fetch(`${API_BASE}/api/events/${eventId}/participant-analytics`, {
+        headers: getAuthHeaders()
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to get participant analytics')
+      }
+
+      return result
+    } catch (error) {
+      console.error('❌ Get participant analytics error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get participant analytics'
+      }
+    }
   }
 }
 
