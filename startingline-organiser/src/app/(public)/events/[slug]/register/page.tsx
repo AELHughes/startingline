@@ -258,9 +258,8 @@ export default function EventRegistrationPage() {
       if (data.success && data.data) {
         const { user: userData, token } = data.data
         
-        // Store auth data
-        localStorage.setItem('auth_token', token)
-        localStorage.setItem('user', JSON.stringify(userData))
+        // Update auth context and store auth data
+        updateAuthState(userData, token)
         
         // Populate account holder form with user data
         setAccountHolderForm({
