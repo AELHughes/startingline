@@ -3,12 +3,13 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMyEvents } from '@/hooks/use-events'
+import { eventsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Calendar, MapPin, Users, DollarSign, Plus, Search, Filter, Eye, Edit, History } from 'lucide-react'
+import { Calendar, MapPin, Users, DollarSign, Plus, Search, Filter, Eye, Edit, History, Send } from 'lucide-react'
 
 const STATUS_COLORS = {
   draft: 'bg-gray-100 text-gray-800',
@@ -55,6 +56,20 @@ export default function EventsPage() {
       month: 'short',
       day: 'numeric'
     })
+  }
+
+  const handleSubmitForApproval = async (eventId: string) => {
+    try {
+      // Update event status to pending_approval
+      await eventsApi.updateEvent(eventId, { status: 'pending_approval' })
+      
+      // Show success message and refresh the page
+      alert('Event submitted for approval successfully!')
+      window.location.reload()
+    } catch (error) {
+      console.error('Failed to submit event for approval:', error)
+      alert('Failed to submit event for approval. Please try again.')
+    }
   }
 
   if (isLoading) {
@@ -231,6 +246,16 @@ export default function EventsPage() {
                       <Edit className="h-4 w-4" />
                       Edit
                     </Button>
+                    {event.status === 'draft' && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleSubmitForApproval(event.id)}
+                        className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        <Send className="h-4 w-4" />
+                        Request to Publish
+                      </Button>
+                    )}
                   </div>
                 </div>
 

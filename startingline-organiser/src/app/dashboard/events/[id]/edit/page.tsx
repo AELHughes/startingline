@@ -246,25 +246,9 @@ export default function EventEditPage() {
               </Button>
             </div>
 
-            {/* Right Side - Status and Primary Actions */}
+            {/* Right Side - Status */}
             <div className="flex flex-wrap items-center gap-3">
               {getStatusBadge(event.status)}
-              {event.status === 'draft' && (
-                <Button
-                  onClick={handleSubmitForApproval}
-                  disabled={submitting}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {submitting ? (
-                    'Submitting...'
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4 mr-2" />
-                      Request to Publish
-                    </>
-                  )}
-                </Button>
-              )}
             </div>
           </div>
 

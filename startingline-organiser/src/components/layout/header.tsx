@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { useAuth } from '@/contexts/auth-context'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -9,14 +10,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { User, LogOut } from 'lucide-react'
+import { User, LogOut, Home } from 'lucide-react'
 import NotificationBell from './notification-bell'
 
 export default function Header() {
   const { user, logout } = useAuth()
+  const router = useRouter()
 
   const handleLogout = () => {
     logout()
+  }
+
+  const handleDashboard = () => {
+    router.push('/dashboard')
   }
 
   return (
@@ -48,6 +54,10 @@ export default function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={handleDashboard}>
+                  <Home className="mr-2 h-4 w-4" />
+                  <span>Dashboard</span>
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Logout</span>

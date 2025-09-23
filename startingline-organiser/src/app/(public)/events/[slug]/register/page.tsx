@@ -226,7 +226,8 @@ export default function EventRegistrationPage() {
               distance_id: distanceId,
               distance_name: distance.name,
               price: distance.price,
-              quantity
+              quantity,
+              min_age: distance.min_age
             }]
           }
         })
@@ -312,6 +313,10 @@ export default function EventRegistrationPage() {
     const birthDate = new Date(dateOfBirth)
     const today = new Date()
     
+    // Set both dates to start of day for accurate comparison
+    birthDate.setHours(0, 0, 0, 0)
+    today.setHours(0, 0, 0, 0)
+    
     console.log('🔍 Date comparison:', {
       birthDate: birthDate.toISOString(),
       today: today.toISOString(),
@@ -326,7 +331,7 @@ export default function EventRegistrationPage() {
     
     // Check if date of birth is too far in the past (reasonable limit)
     const maxAge = 120
-    const maxBirthDate = new Date()
+    const maxBirthDate = new Date(today)
     maxBirthDate.setFullYear(today.getFullYear() - maxAge)
     if (birthDate < maxBirthDate) {
       console.log('🔍 Date too far in past')
@@ -338,14 +343,24 @@ export default function EventRegistrationPage() {
       return null
     }
     
+    // Calculate age more precisely
     let age = today.getFullYear() - birthDate.getFullYear()
     const monthDiff = today.getMonth() - birthDate.getMonth()
     
+    // Adjust age if birthday hasn't occurred this year
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
       age--
     }
     
-    console.log('🔍 Age calculation:', { age, minAge, ageLessThanMin: age < minAge })
+    console.log('🔍 Age calculation:', { 
+      age,
+      minAge,
+      ageLessThanMin: age < minAge,
+      birthYear: birthDate.getFullYear(),
+      todayYear: today.getFullYear(),
+      monthDiff,
+      dayDiff: today.getDate() - birthDate.getDate()
+    })
     
     if (age < minAge) {
       console.log('🔍 Age validation failed')
@@ -357,27 +372,41 @@ export default function EventRegistrationPage() {
   }
 
   const proceedToParticipants = () => {
-    // Create participant forms for each distance selection
+    // Only create new forms if they don't exist or if the quantities have changed
+    const existingFormsByDistance = participantForms.reduce((acc, form) => {
+      if (!acc[form.distance_id]) {
+        acc[form.distance_id] = []
+      }
+      acc[form.distance_id].push(form)
+      return acc
+    }, {} as Record<string, ParticipantFormData[]>)
+
     const forms: ParticipantFormData[] = []
     distanceSelections.forEach(selection => {
+      const existingForms = existingFormsByDistance[selection.distance_id] || []
       for (let i = 0; i < selection.quantity; i++) {
-        forms.push({
-          distance_id: selection.distance_id,
-          distance_name: selection.distance_name,
-          price: selection.price,
-          min_age: selection.min_age,
-          first_name: '',
-          last_name: '',
-          email: '',
-          mobile: '',
-          date_of_birth: '',
-          disabled: false,
-          medical_aid_name: '',
-          medical_aid_number: '',
-          emergency_contact_name: orderData.emergency_contact_name || '',
-          emergency_contact_number: orderData.emergency_contact_number || '',
-          merchandise: []
-        })
+        // Use existing form data if available
+        if (existingForms[i]) {
+          forms.push(existingForms[i])
+        } else {
+          forms.push({
+            distance_id: selection.distance_id,
+            distance_name: selection.distance_name,
+            price: selection.price,
+            min_age: selection.min_age,
+            first_name: '',
+            last_name: '',
+            email: '',
+            mobile: '',
+            date_of_birth: '',
+            disabled: false,
+            medical_aid_name: '',
+            medical_aid_number: '',
+            emergency_contact_name: orderData.emergency_contact_name || '',
+            emergency_contact_number: orderData.emergency_contact_number || '',
+            merchandise: []
+          })
+        }
       }
     })
 
@@ -385,7 +414,7 @@ export default function EventRegistrationPage() {
     setCurrentStep('participants')
   }
 
-  const updateParticipantForm = (index: number, field: keyof ParticipantFormData, value: any) => {
+  const updateParticipantForm = async (index: number, field: keyof ParticipantFormData, value: any) => {
     // Clear modal error when user starts manually editing the form
     if (modalError) {
       setModalError('')
@@ -396,32 +425,91 @@ export default function EventRegistrationPage() {
       setError('')
     }
     
-    setParticipantForms(prev => prev.map((form, i) => {
-      if (i === index) {
-        const updatedForm = { ...form, [field]: value }
-        
-        // Clear validation errors when field is filled
-        if (field === 'first_name' && value) {
-          updatedForm.firstNameError = undefined
-        } else if (field === 'last_name' && value) {
-          updatedForm.lastNameError = undefined
-        } else if (field === 'email' && value) {
-          updatedForm.emailError = undefined
-        } else if (field === 'mobile' && value) {
-          updatedForm.mobileError = undefined
-        } else if (field === 'date_of_birth' && value) {
-          updatedForm.dateOfBirthError = undefined
-          // Don't validate age on change, only on blur
-        } else if (field === 'emergency_contact_name' && value) {
-          updatedForm.emergencyContactNameError = undefined
-        } else if (field === 'emergency_contact_number' && value) {
-          updatedForm.emergencyContactNumberError = undefined
+    setParticipantForms(prev => {
+      const updatedForms = prev.map((form, i) => {
+        if (i === index) {
+          const updatedForm = { ...form, [field]: value }
+          
+          // Clear validation errors when field is filled
+          if (field === 'first_name' && value) {
+            updatedForm.firstNameError = undefined
+          } else if (field === 'last_name' && value) {
+            updatedForm.lastNameError = undefined
+          } else if (field === 'email' && value) {
+            updatedForm.emailError = undefined
+          } else if (field === 'mobile' && value) {
+            updatedForm.mobileError = undefined
+          } else if (field === 'date_of_birth') {
+            updatedForm.dateOfBirthError = undefined
+            // Validate age immediately when date of birth changes
+            if (value) {
+              const ageError = validateAge(value, form.min_age)
+              if (ageError) {
+                updatedForm.ageError = ageError
+                // Set global error to prevent proceeding
+                setError('One or more participants do not meet the minimum age requirement')
+              } else {
+                updatedForm.ageError = undefined
+                // Clear global error if no other age errors exist
+                const otherFormsWithAgeErrors = prev.some((f, idx) => idx !== index && f.ageError)
+                if (!otherFormsWithAgeErrors) {
+                  setError('')
+                }
+              }
+
+              // Check if senior discount applies
+              const birthDate = new Date(value)
+              const today = new Date()
+              let age = today.getFullYear() - birthDate.getFullYear()
+              const monthDiff = today.getMonth() - birthDate.getMonth()
+              if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                age--
+              }
+
+              // Get distance details to check senior age threshold
+              const distance = registrationDetails?.event.distances.find(d => d.id === form.distance_id)
+              if (distance?.free_for_seniors && age >= (distance.senior_age_threshold || 65)) {
+                updatedForm.price = 0
+                console.log('🎫 Applied senior discount - price set to 0')
+              } else if (!updatedForm.disabled) {
+                // Reset price if not senior and not disabled
+                updatedForm.price = distance?.price || 0
+                console.log('🎫 Reset price to original:', updatedForm.price)
+              }
+            }
+          } else if (field === 'disabled') {
+            // Check if disabled discount applies
+            const distance = registrationDetails?.event.distances.find(d => d.id === form.distance_id)
+            if (value && distance?.free_for_disability) {
+              updatedForm.price = 0
+              console.log('🎫 Applied disability discount - price set to 0')
+            } else if (!value) {
+              // Reset price if disability unchecked and not a senior
+              const birthDate = new Date(form.date_of_birth)
+              const today = new Date()
+              let age = today.getFullYear() - birthDate.getFullYear()
+              const monthDiff = today.getMonth() - birthDate.getMonth()
+              if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                age--
+              }
+              if (!(distance?.free_for_seniors && age >= (distance.senior_age_threshold || 65))) {
+                updatedForm.price = distance?.price || 0
+                console.log('🎫 Reset price to original:', updatedForm.price)
+              }
+            }
+          } else if (field === 'emergency_contact_name' && value) {
+            updatedForm.emergencyContactNameError = undefined
+          } else if (field === 'emergency_contact_number' && value) {
+            updatedForm.emergencyContactNumberError = undefined
+          }
+          
+          return updatedForm
         }
-        
-        return updatedForm
-      }
-      return form
-    }))
+        return form
+      })
+
+      return updatedForms
+    })
   }
 
   const checkForDuplicateParticipant = async (index: number) => {
@@ -705,6 +793,7 @@ export default function EventRegistrationPage() {
 
       // Validate all participant forms and add validation errors
       let hasErrors = false
+      let ageValidationErrors = false
     
     setParticipantForms(prev => prev.map(form => {
       const updatedForm = { ...form }
@@ -742,7 +831,15 @@ export default function EventRegistrationPage() {
         updatedForm.dateOfBirthError = 'Date of birth is required'
         hasErrors = true
       } else {
-        updatedForm.dateOfBirthError = undefined
+        // Validate age for each participant
+        const ageError = validateAge(form.date_of_birth, form.min_age)
+        if (ageError) {
+          updatedForm.ageError = ageError
+          ageValidationErrors = true
+          hasErrors = true
+        } else {
+          updatedForm.ageError = undefined
+        }
       }
       
       if (!form.emergency_contact_name) {
@@ -759,16 +856,15 @@ export default function EventRegistrationPage() {
         updatedForm.emergencyContactNumberError = undefined
       }
       
-      // Age validation error (already set in updateParticipantForm)
-      if (form.ageError) {
-        hasErrors = true
-      }
-      
       return updatedForm
     }))
 
     if (hasErrors) {
-      setError('Please fill in all required participant details and fix any validation errors')
+      if (ageValidationErrors) {
+        setError('One or more participants do not meet the minimum age requirement for their selected distance')
+      } else {
+        setError('Please fill in all required participant details and fix any validation errors')
+      }
       return
     }
 
@@ -1354,7 +1450,31 @@ export default function EventRegistrationPage() {
                         id={`date_of_birth_${index}`}
                         type="date"
                         value={form.date_of_birth}
-                        onChange={(e) => updateParticipantForm(index, 'date_of_birth', e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          console.log('🔍 Date of birth changed for index:', index, 'to:', value)
+                          
+                          // Get the current form data
+                          const currentForm = participantForms[index]
+                          
+                          // Validate age immediately
+                          const ageError = validateAge(value, currentForm.min_age)
+                          console.log('🔍 Age validation result:', { ageError, min_age: currentForm.min_age })
+                          
+                          // Update form with validation result
+                          updateParticipantForm(index, 'date_of_birth', value)
+                          if (ageError) {
+                            updateParticipantForm(index, 'ageError', ageError)
+                            setError('One or more participants do not meet the minimum age requirement')
+                          } else {
+                            updateParticipantForm(index, 'ageError', undefined)
+                            // Only clear error if no other age errors exist
+                            const otherFormsWithAgeErrors = participantForms.some((f, idx) => idx !== index && f.ageError)
+                            if (!otherFormsWithAgeErrors) {
+                              setError('')
+                            }
+                          }
+                        }}
                         onBlur={() => {
                           console.log('🔍 Date of birth onBlur triggered for index:', index)
                           validateParticipantAge(index)
@@ -1437,7 +1557,14 @@ export default function EventRegistrationPage() {
               <Button variant="outline" onClick={() => setCurrentStep('account')}>
                 Back to Account Holder
               </Button>
-              <Button onClick={proceedToCheckout} disabled={submitting || error !== ''}>
+              <Button 
+                onClick={proceedToCheckout} 
+                disabled={
+                  submitting || 
+                  error !== '' || 
+                  participantForms.some(form => form.ageError || !form.date_of_birth)
+                }
+              >
                 {submitting ? 'Checking...' : 'Continue to Checkout'}
               </Button>
             </div>
@@ -1453,27 +1580,93 @@ export default function EventRegistrationPage() {
                 <CardDescription>Review your registration details before proceeding to payment.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {participantForms.map((form, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <h4 className="font-semibold">{form.first_name} {form.last_name}</h4>
-                      <p className="text-sm text-gray-600">{form.distance_name}</p>
-                      <p className="text-sm text-gray-600">{form.email}</p>
+                {participantForms.map((form, index) => {
+                  // Get distance details
+                  const distance = registrationDetails?.event.distances.find(d => d.id === form.distance_id)
+                  const originalPrice = distance?.price || 0
+                  const currentPrice = form.price || 0
+                  const hasDiscount = originalPrice > currentPrice
+
+                  // Calculate age for senior check
+                  const birthDate = new Date(form.date_of_birth)
+                  const today = new Date()
+                  let age = today.getFullYear() - birthDate.getFullYear()
+                  const monthDiff = today.getMonth() - birthDate.getMonth()
+                  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                    age--
+                  }
+
+                  // Determine discount reason
+                  let discountReason = ''
+                  if (form.disabled && distance?.free_for_disability) {
+                    discountReason = 'Disability Discount'
+                  } else if (distance?.free_for_seniors && age >= (distance.senior_age_threshold || 65)) {
+                    discountReason = `Senior Discount (${age} years)`
+                  }
+
+                  return (
+                    <div key={index} className="p-4 border rounded-lg space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold">{form.first_name} {form.last_name}</h4>
+                          <p className="text-sm text-gray-600">{form.distance_name}</p>
+                          <p className="text-sm text-gray-600">{form.email}</p>
+                        </div>
+                      </div>
+                      
+                      {/* Price Breakdown */}
+                      <div className="border-t pt-2 space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span>Entry Fee</span>
+                          <span>R{Number(originalPrice).toFixed(2)}</span>
+                        </div>
+                        
+                        {hasDiscount && (
+                          <div className="flex justify-between text-sm text-green-600">
+                            <span>{discountReason}</span>
+                            <span>-R{Number(originalPrice - currentPrice).toFixed(2)}</span>
+                          </div>
+                        )}
+                        
+                        <div className="flex justify-between font-semibold border-t pt-1">
+                          <span>Total</span>
+                          <span>R{Number(currentPrice).toFixed(2)}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold">R{Number(form.price).toFixed(2)}</p>
-                      {form.disabled && (
-                        <Badge variant="secondary" className="text-xs">Free Entry</Badge>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
                 
                 <Separator />
                 
-                <div className="flex justify-between items-center text-lg font-semibold">
-                  <span>Total</span>
-                  <span>R{calculateTotal().toFixed(2)}</span>
+                {/* Order Totals */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-base">
+                    <span>Subtotal</span>
+                    <span>R{Number(participantForms.reduce((total, form) => {
+                      const distance = registrationDetails?.event.distances.find(d => d.id === form.distance_id)
+                      return total + (distance?.price || 0)
+                    }, 0)).toFixed(2)}</span>
+                  </div>
+                  
+                  {/* Show total discounts if any */}
+                  {participantForms.some(form => {
+                    const distance = registrationDetails?.event.distances.find(d => d.id === form.distance_id)
+                    return (distance?.price || 0) > (form.price || 0)
+                  }) && (
+                    <div className="flex justify-between items-center text-base text-green-600">
+                      <span>Total Discounts</span>
+                      <span>-R{Number(participantForms.reduce((total, form) => {
+                        const distance = registrationDetails?.event.distances.find(d => d.id === form.distance_id)
+                        return total + ((distance?.price || 0) - (form.price || 0))
+                      }, 0)).toFixed(2)}</span>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-between items-center text-lg font-semibold border-t pt-2">
+                    <span>Total</span>
+                    <span>R{calculateTotal().toFixed(2)}</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>

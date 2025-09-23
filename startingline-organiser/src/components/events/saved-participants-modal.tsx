@@ -90,7 +90,6 @@ export default function SavedParticipantsModal({
               {error}
             </div>
           )}
-          {console.log('🔍 Modal error display - error:', error, 'should show:', !!error)}
         </DialogHeader>
         <div className="flex items-center gap-4 p-4 border-b">
           <div className="flex-1">
@@ -120,7 +119,7 @@ export default function SavedParticipantsModal({
           {filteredAndSortedParticipants.map((participant) => {
             const allocation = participantAllocations.find(a => a.participantId === participant.id)
             const isSelected = allocation !== undefined
-            const isDisabled = anyParticipantSelected && !currentParticipantId
+            const isDisabled = false // Allow selecting any participant
             return (
               <div
                 key={participant.id}

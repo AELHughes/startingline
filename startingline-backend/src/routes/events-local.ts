@@ -203,9 +203,61 @@ router.get('/my', authenticateToken, requireOrganiser, async (req: Request, res:
     
     console.log(`✅ Found ${result.rows.length} events for organizer`)
     
+    // Get distances and merchandise for each event
+    const eventsWithDetails = await Promise.all(
+      result.rows.map(async (event) => {
+        // Get distances with capacity information
+        const distancesResult = await pool.query(`
+          SELECT 
+            ed.*,
+            ed.current_participants,
+            ed.is_full,
+            CASE 
+              WHEN ed.entry_limit IS NULL OR ed.entry_limit = 0 THEN 'unlimited'
+              WHEN ed.is_full THEN 'full'
+              WHEN ed.current_participants >= (ed.entry_limit * 0.9) THEN 'almost_full'
+              ELSE 'available'
+            END as capacity_status,
+            CASE 
+              WHEN ed.entry_limit IS NULL OR ed.entry_limit = 0 THEN 0
+              ELSE ed.entry_limit - ed.current_participants
+            END as available_spots
+          FROM event_distances ed 
+          WHERE ed.event_id = $1 
+          ORDER BY ed.distance_km ASC
+        `, [event.id])
+        
+        // Get merchandise
+        const merchandiseResult = await pool.query(`
+          SELECT 
+            em.*,
+            COALESCE(
+              json_agg(
+                json_build_object(
+                  'id', mv.id,
+                  'variation_name', mv.variation_name,
+                  'variation_options', mv.variation_options
+                )
+              ) FILTER (WHERE mv.id IS NOT NULL),
+              '[]'::json
+            ) as variations
+          FROM event_merchandise em
+          LEFT JOIN merchandise_variations mv ON em.id = mv.merchandise_id
+          WHERE em.event_id = $1
+          GROUP BY em.id
+        `, [event.id])
+        
+        return {
+          ...event,
+          distances: distancesResult.rows,
+          merchandise: merchandiseResult.rows
+        }
+      })
+    )
+    
     res.json({
       success: true,
-      data: result.rows
+      data: eventsWithDetails
     } as ApiResponse<Event[]>)
     
   } catch (error: any) {
@@ -673,7 +725,18 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
     for (const field of allowedFields) {
       if (updates[field] !== undefined) {
         updateFields.push(`${field} = $${paramCounter}`)
-        updateValues.push(field === 'gallery_images' ? JSON.stringify(updates[field]) : updates[field])
+        
+        let fieldValue = updates[field]
+        
+        // Handle special cases
+        if (field === 'gallery_images') {
+          fieldValue = JSON.stringify(updates[field])
+        } else if ((field.includes('date') || field.includes('deadline')) && fieldValue === '') {
+          // Convert empty date strings to null for PostgreSQL compatibility
+          fieldValue = null
+        }
+        
+        updateValues.push(fieldValue)
         paramCounter++
       }
     }
@@ -833,6 +896,89 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
       } catch (notificationError: any) {
         console.error('❌ Failed to create edit notifications:', notificationError.message)
         // Don't fail the entire operation if notifications fail
+      }
+    }
+    
+    // Handle distances update
+    if (updates.distances !== undefined) {
+      console.log('🔍 Updating distances:', updates.distances)
+      
+      // Delete existing distances
+      await pool.query('DELETE FROM event_distances WHERE event_id = $1', [id])
+      console.log('✅ Deleted existing distances')
+      
+      // Insert new distances
+      if (updates.distances && updates.distances.length > 0) {
+        for (const distance of updates.distances) {
+          await pool.query(`
+            INSERT INTO event_distances (
+              event_id, name, distance_km, price, min_age, entry_limit,
+              start_time, free_for_seniors, free_for_disability, senior_age_threshold
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `, [
+            id,
+            distance.name,
+            distance.distance_km,
+            distance.price,
+            distance.min_age,
+            distance.entry_limit,
+            distance.start_time,
+            distance.free_for_seniors || false,
+            distance.free_for_disability || false,
+            distance.senior_age_threshold || 65
+          ])
+        }
+        console.log('✅ Created new distances')
+      }
+    }
+    
+    // Handle merchandise update
+    if (updates.merchandise !== undefined) {
+      console.log('🔍 Updating merchandise:', updates.merchandise)
+      
+      // Delete existing merchandise and variations
+      await pool.query('DELETE FROM merchandise_variations WHERE merchandise_id IN (SELECT id FROM event_merchandise WHERE event_id = $1)', [id])
+      await pool.query('DELETE FROM event_merchandise WHERE event_id = $1', [id])
+      console.log('✅ Deleted existing merchandise')
+      
+      // Insert new merchandise
+      if (updates.merchandise && updates.merchandise.length > 0) {
+        for (const item of updates.merchandise) {
+          // Extract variations from the item
+          const { variations, ...merchandiseData } = item
+          
+          // Create the merchandise item
+          const merchandiseResult = await pool.query(`
+            INSERT INTO event_merchandise (
+              event_id, name, description, price, image_url
+            ) VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+          `, [
+            id,
+            merchandiseData.name,
+            merchandiseData.description,
+            merchandiseData.price,
+            merchandiseData.image_url
+          ])
+          
+          const merchandiseId = merchandiseResult.rows[0].id
+          
+          // Create variations if provided
+          if (variations && variations.length > 0) {
+            for (const variation of variations) {
+              await pool.query(`
+                INSERT INTO merchandise_variations (
+                  merchandise_id, variation_name, variation_options
+                ) VALUES ($1, $2, $3)
+              `, [
+                merchandiseId,
+                variation.name,
+                JSON.stringify(variation.options || [])
+              ])
+            }
+          }
+        }
+        console.log('✅ Created new merchandise')
       }
     }
     
