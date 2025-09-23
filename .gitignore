@@ -115,3 +115,6 @@ wp-content/sites/
 # But keep these custom files if they exist
 !wp-config-local.php
 !wp-config-production.php
+
+# Uploaded files
+startingline-backend/uploads/
