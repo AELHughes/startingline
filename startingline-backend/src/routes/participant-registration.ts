@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express'
 import { pool } from '../lib/database'
 import { authenticateToken, optionalAuth } from '../middleware/auth-local'
 import { ApiResponse } from '../types'
+import { emailService } from '../services/emailService'
 
 const router = express.Router()
 
@@ -17,6 +18,8 @@ interface ParticipantData {
   medical_aid_number?: string
   emergency_contact_name: string
   emergency_contact_number: string
+  requires_temp_license?: boolean
+  permanent_license_number?: string
   merchandise?: Array<{
     merchandise_id: string
     variation_id?: string
@@ -36,11 +39,140 @@ interface OrderData {
   emergency_contact_name: string
   emergency_contact_number: string
   account_holder_password?: string
+  license_fees?: number
   participants: Array<{
     distance_id: string
+    adjusted_price?: number
     participant: ParticipantData
   }>
 }
+
+/**
+ * Check if email is already associated with an existing account
+ */
+router.post('/check-email-exists', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email is required'
+      } as ApiResponse)
+    }
+
+    // Check if email exists in users table
+    const result = await pool.query(
+      'SELECT id, email, first_name, last_name FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    )
+
+    const exists = result.rows.length > 0
+    const user = exists ? result.rows[0] : null
+
+    res.json({
+      success: true,
+      data: {
+        exists,
+        user: user ? {
+          id: user.id,
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name
+        } : null
+      }
+    } as ApiResponse)
+
+  } catch (error: any) {
+    console.error('Check email exists error:', error)
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to check email'
+    } as ApiResponse)
+  }
+})
+
+/**
+ * Test email functionality
+ */
+router.post('/test-email', async (req: Request, res: Response) => {
+  try {
+    console.log('🧪 Testing email functionality...')
+    
+    const testEmailData: any = {
+      participantName: 'Test User',
+      participantEmail: 'elownehughes@gmail.com',
+      eventName: 'Test Event',
+      eventDate: '2025-09-20',
+      eventTime: '08:00',
+      eventLocation: 'Test Location',
+      distanceName: '5K',
+      ticketNumber: 'TEST-001',
+      organizerName: 'Test Organizer',
+      organizerLogo: undefined,
+      eventSlug: 'test-event',
+      orderId: 'test-order-123',
+      ticketPDF: undefined
+    }
+
+    // Test PDF generation
+    try {
+      console.log('📄 Testing PDF generation...')
+      const { generatePDFTicket } = require('../lib/pdfGenerator')
+      const pdfBuffer = await generatePDFTicket({
+        ticketNumber: testEmailData.ticketNumber,
+        participantName: testEmailData.participantName,
+        participantEmail: testEmailData.participantEmail,
+        participantMobile: '1234567890',
+        eventName: testEmailData.eventName,
+        eventDate: testEmailData.eventDate,
+        eventTime: testEmailData.eventTime,
+        eventLocation: testEmailData.eventLocation,
+        distanceName: testEmailData.distanceName,
+        distancePrice: 50.00,
+        organizerName: testEmailData.organizerName,
+        organizerLogo: testEmailData.organizerLogo
+      })
+      
+      testEmailData.ticketPDF = pdfBuffer
+      console.log('✅ PDF generated successfully, size:', pdfBuffer.length, 'bytes')
+    } catch (pdfError: any) {
+      console.error('❌ PDF generation failed:', pdfError)
+      if (pdfError instanceof Error) {
+        console.error('❌ PDF Error details:', pdfError.message)
+      }
+    }
+
+    // Test email sending
+    console.log('📧 Testing email sending...')
+    const emailSent = await emailService.sendEventRegistrationEmail(testEmailData)
+    
+    if (emailSent) {
+      console.log('✅ Test email sent successfully')
+      res.json({
+        success: true,
+        message: 'Test email sent successfully',
+        data: {
+          pdfGenerated: !!testEmailData.ticketPDF,
+          pdfSize: testEmailData.ticketPDF ? testEmailData.ticketPDF.length : 0
+        }
+      } as ApiResponse)
+    } else {
+      console.error('❌ Test email failed to send')
+      res.status(500).json({
+        success: false,
+        error: 'Failed to send test email'
+      } as ApiResponse)
+    }
+
+  } catch (error: any) {
+    console.error('Test email error:', error)
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to test email'
+    } as ApiResponse)
+  }
+})
 
 /**
  * Check if a participant is already registered for an event
@@ -259,6 +391,10 @@ router.post('/save-participant', authenticateToken, async (req: Request, res: Re
   try {
     const userId = req.localUser!.userId
     const participantData = req.body
+    
+    console.log('🔍 Save participant - received data:', participantData)
+    console.log('🔍 Save participant - first_name:', participantData.first_name)
+    console.log('🔍 Save participant - last_name:', participantData.last_name)
 
     // Get user profile ID
     const userProfileResult = await pool.query(
@@ -283,13 +419,13 @@ router.post('/save-participant', authenticateToken, async (req: Request, res: Re
       RETURNING *
     `, [
       userProfileId,
-      participantData.first_name,
-      participantData.last_name,
-      participantData.email,
-      participantData.mobile,
-      participantData.date_of_birth,
-      participantData.medical_aid_name || null,
-      participantData.medical_aid_number || null,
+      participantData.first_name || participantData.participant_first_name,
+      participantData.last_name || participantData.participant_last_name,
+      participantData.email || participantData.participant_email,
+      participantData.mobile || participantData.participant_mobile,
+      participantData.date_of_birth || participantData.participant_date_of_birth,
+      participantData.medical_aid_name || participantData.participant_medical_aid || null,
+      participantData.medical_aid_number || participantData.participant_medical_aid_number || null,
       participantData.emergency_contact_name,
       participantData.emergency_contact_number
     ])
@@ -451,6 +587,56 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
       } as ApiResponse)
     }
 
+    // Check capacity for each distance before processing
+    console.log('🔍 Checking capacity for all distances...')
+    for (const item of orderData.participants) {
+      console.log('🔍 Checking capacity for distance:', item.distance_id)
+      
+      // Get distance details with capacity information
+      const distanceResult = await client.query(`
+        SELECT 
+          ed.*,
+          ed.current_participants,
+          ed.is_full,
+          CASE 
+            WHEN ed.entry_limit IS NULL OR ed.entry_limit = 0 THEN 'unlimited'
+            WHEN ed.is_full THEN 'full'
+            WHEN ed.current_participants >= (ed.entry_limit * 0.9) THEN 'almost_full'
+            ELSE 'available'
+          END as capacity_status,
+          CASE 
+            WHEN ed.entry_limit IS NULL OR ed.entry_limit = 0 THEN 0
+            ELSE ed.entry_limit - ed.current_participants
+          END as available_spots
+        FROM event_distances ed 
+        WHERE ed.id = $1
+      `, [item.distance_id])
+      
+      if (distanceResult.rows.length === 0) {
+        throw new Error(`Distance not found: ${item.distance_id}`)
+      }
+      
+      const distance = distanceResult.rows[0]
+      
+      // Check if distance is full
+      if (distance.capacity_status === 'full') {
+        return res.status(400).json({
+          success: false,
+          error: `Distance "${distance.name}" is sold out. No spots available.`
+        } as ApiResponse)
+      }
+      
+      // Check if there are enough spots available
+      if (distance.capacity_status !== 'unlimited' && distance.available_spots < 1) {
+        return res.status(400).json({
+          success: false,
+          error: `Distance "${distance.name}" is full. Only ${distance.available_spots} spots available.`
+        } as ApiResponse)
+      }
+      
+      console.log(`✅ Capacity check passed for distance: ${distance.name}`)
+    }
+
     // Calculate total amount
     let totalAmount = 0
     const ticketDetails = []
@@ -481,15 +667,24 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
         age--
       }
 
-      // Check if participant qualifies for free entry
-      let isFree = false
-      if (item.participant.disabled && distance.free_for_disabled) {
-        isFree = true
-      } else if (distance.free_for_seniors && age >= distance.senior_age_threshold) {
-        isFree = true
+      // Use adjusted price from frontend if provided, otherwise calculate here
+      let ticketAmount = Number(distance.price)
+      
+      if (item.adjusted_price !== undefined) {
+        // Frontend has already calculated the adjusted price
+        ticketAmount = Number(item.adjusted_price)
+        console.log('Using adjusted price from frontend:', ticketAmount)
+      } else {
+        // Fallback: calculate here (backward compatibility)
+        let isFree = false
+        if (item.participant.disabled && distance.free_for_disabled) {
+          isFree = true
+        } else if (distance.free_for_seniors && age >= distance.senior_age_threshold) {
+          isFree = true
+        }
+        ticketAmount = isFree ? 0 : Number(distance.price)
+        console.log('Calculated price on backend:', ticketAmount)
       }
-
-      const ticketAmount = isFree ? 0 : Number(distance.price)
       console.log('Ticket amount:', ticketAmount, 'Type:', typeof ticketAmount)
       totalAmount += ticketAmount
       console.log('Running total:', totalAmount, 'Type:', typeof totalAmount)
@@ -503,8 +698,13 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
     }
 
     console.log('Calculated total amount:', totalAmount, 'Type:', typeof totalAmount)
-    const finalTotalAmount = Number(totalAmount)
-    console.log('Final total amount:', finalTotalAmount, 'Type:', typeof finalTotalAmount)
+    
+    // Add license fees to total
+    const licenseFees = orderData.license_fees || 0
+    console.log('License fees:', licenseFees, 'Type:', typeof licenseFees)
+    
+    const finalTotalAmount = Number(totalAmount) + Number(licenseFees)
+    console.log('Final total amount (including license fees):', finalTotalAmount, 'Type:', typeof finalTotalAmount)
     
     // STEP 2A: Create order
     console.log('🔍 STEP 2A: Creating order for user ID:', userId)
@@ -553,8 +753,8 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
           order_id, event_id, distance_id, participant_first_name, participant_last_name,
           participant_email, participant_mobile, participant_date_of_birth, participant_disabled,
           participant_medical_aid_name, participant_medical_aid_number, emergency_contact_name,
-          emergency_contact_number, amount, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'active')
+          emergency_contact_number, amount, status, requires_temp_license, permanent_license_number
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'active', $15, $16)
         RETURNING *
       `, [
         order.id,
@@ -570,7 +770,9 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
         ticketDetail.participant.medical_aid_number || null,
         ticketDetail.participant.emergency_contact_name,
         ticketDetail.participant.emergency_contact_number,
-        ticketDetail.amount
+        ticketDetail.amount,
+        ticketDetail.participant.requires_temp_license || false,
+        ticketDetail.participant.permanent_license_number || null
       ])
 
       const ticket = ticketResult.rows[0]
@@ -756,6 +958,65 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
       console.log('🔐 No authentication data needed:')
       console.log('  - req.localUser?.userId:', req.localUser?.userId)
       console.log('  - userId:', userId)
+    }
+
+    // STEP 4: Send confirmation emails to participants
+    console.log('📧 STEP 4: Sending confirmation emails...')
+    try {
+      // Get organizer details for email
+      const organizerResult = await client.query(`
+        SELECT u.first_name, u.last_name, u.organizer_logo_url
+        FROM events e
+        JOIN users u ON e.organiser_id = u.id
+        WHERE e.id = $1
+      `, [orderData.event_id])
+      
+      const organizer = organizerResult.rows[0]
+      const organizerName = `${organizer.first_name} ${organizer.last_name}`
+      const organizerLogo = organizer.organizer_logo_url ? 
+        `${process.env.BACKEND_URL || 'http://localhost:5001'}${organizer.organizer_logo_url}` : 
+        undefined
+
+      // Send email for each ticket
+      for (const ticket of tickets) {
+        // Get distance name for this ticket
+        const distanceResult = await client.query(`
+          SELECT name FROM event_distances WHERE id = $1
+        `, [ticket.distance_id])
+        
+        const distanceName = distanceResult.rows[0]?.name || 'Unknown Distance'
+        
+        const emailData: any = {
+          participantName: `${ticket.participant_first_name} ${ticket.participant_last_name}`,
+          participantEmail: ticket.participant_email,
+          eventName: event.name,
+          eventDate: event.start_date,
+          eventTime: event.start_time,
+          eventLocation: event.city,
+          distanceName: distanceName,
+          ticketNumber: ticket.ticket_number,
+          organizerName: organizerName,
+          organizerLogo: organizerLogo,
+          eventSlug: event.slug,
+          orderId: order.id,
+          ticketPDF: undefined
+        }
+
+        // Note: PDF tickets are now downloaded from the participant dashboard
+        // No need to generate PDF for email attachment
+
+        const emailSent = await emailService.sendEventRegistrationEmail(emailData)
+        if (emailSent) {
+          console.log(`✅ Confirmation email sent to ${ticket.participant_email}`)
+        } else {
+          console.error(`❌ Failed to send confirmation email to ${ticket.participant_email}`)
+        }
+      }
+      
+      console.log('✅ STEP 4 COMPLETE: Email sending process completed')
+    } catch (emailError) {
+      console.error('❌ Email sending error (non-blocking):', emailError)
+      // Don't fail the registration if email fails
     }
 
     res.status(201).json({
@@ -1014,13 +1275,13 @@ router.put('/saved-participants/:participantId', authenticateToken, async (req: 
       WHERE id = $10 AND user_profile_id = $11
       RETURNING *
     `, [
-      updateData.participant_first_name,
-      updateData.participant_last_name,
-      updateData.participant_email,
-      updateData.participant_mobile,
-      updateData.participant_date_of_birth,
-      updateData.participant_medical_aid || null,
-      updateData.participant_medical_aid_number || null,
+      updateData.first_name || updateData.participant_first_name,
+      updateData.last_name || updateData.participant_last_name,
+      updateData.email || updateData.participant_email,
+      updateData.mobile || updateData.participant_mobile,
+      updateData.date_of_birth || updateData.participant_date_of_birth,
+      updateData.medical_aid_name || updateData.participant_medical_aid || null,
+      updateData.medical_aid_number || updateData.participant_medical_aid_number || null,
       updateData.emergency_contact_name,
       updateData.emergency_contact_number,
       participantId,

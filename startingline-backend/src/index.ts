@@ -2,18 +2,23 @@ import express from 'express'
 import cors from 'cors'
 import morgan from 'morgan'
 import dotenv from 'dotenv'
+import path from 'path'
 
 // Import routes
 import authRoutes from './routes/auth-local' // Using local PostgreSQL auth
 import eventsRoutes from './routes/events-local' // Using local PostgreSQL events
 import storageRoutes from './routes/storage-local' // Using local file storage
+import usersRoutes from './routes/users-local' // Using local PostgreSQL users
+import ticketsRoutes from './routes/tickets-local' // Using local PostgreSQL tickets
 import notificationsRoutes from './routes/notifications'
 import messagesRoutes from './routes/messages'
+import emailSettingsRoutes from './routes/email-settings'
 // import usersRoutes from './routes/users'
 import debugRoutes from './routes/debug'
-import ticketsRoutes from './routes/tickets'
+// import ticketsRoutes from './routes/tickets'
 import articlesRoutes from './routes/articles'
 import participantRegistrationRoutes from './routes/participant-registration'
+import userLicensesRoutes from './routes/user-licenses'
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler'
@@ -37,6 +42,9 @@ app.use(morgan('combined'))
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 
+// Serve static files (uploaded logos)
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')))
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
@@ -51,13 +59,17 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/events', eventsRoutes)
 app.use('/api/storage', storageRoutes)
+app.use('/api/users', usersRoutes)
+app.use('/api/tickets', ticketsRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/messages', messagesRoutes)
+app.use('/api/admin', emailSettingsRoutes)
 // app.use('/api/users', usersRoutes)
 app.use('/api/debug', debugRoutes)
-app.use('/api/tickets', ticketsRoutes)
+// app.use('/api/tickets', ticketsRoutes)
 app.use('/api/articles', articlesRoutes)
 app.use('/api/participant-registration', participantRegistrationRoutes)
+app.use('/api/user-licenses', userLicensesRoutes)
 
 // Error handling middleware
 app.use(notFound)

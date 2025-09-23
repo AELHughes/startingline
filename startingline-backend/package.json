@@ -6,6 +6,8 @@
     "dev": "nodemon --exec ts-node src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "migrate": "node scripts/migrate.js",
+    "migrate:staging": "NODE_ENV=staging node scripts/migrate.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -17,6 +19,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/multer": "^2.0.0",
     "@types/pg": "^8.15.5",
+    "@types/puppeteer": "^5.4.7",
     "axios": "^1.11.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
@@ -30,6 +33,7 @@
     "multer": "^2.0.2",
     "nodemailer": "^7.0.6",
     "pg": "^8.16.3",
+    "puppeteer": "^24.21.0",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {

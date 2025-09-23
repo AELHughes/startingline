@@ -167,6 +167,21 @@ export interface Ticket {
   updated_at: Date
 }
 
+export interface TicketData {
+  ticketNumber: string
+  participantName: string
+  participantEmail: string
+  participantMobile: string
+  eventName: string
+  eventDate: string
+  eventTime: string
+  eventLocation: string
+  distanceName: string
+  distancePrice: number
+  organizerName: string
+  organizerLogo?: string
+}
+
 // Payment Types
 export interface Payment {
   id: string

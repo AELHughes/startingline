@@ -41,7 +41,9 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const database_1 = require("../lib/database");
 const authenticateToken = async (req, res, next) => {
     try {
+        console.log('🔍 authenticateToken middleware called');
         const authHeader = req.headers.authorization;
+        console.log('🔍 authHeader:', authHeader ? 'present' : 'missing');
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return res.status(401).json({
                 success: false,
@@ -49,18 +51,24 @@ const authenticateToken = async (req, res, next) => {
             });
         }
         const token = authHeader.substring(7);
+        console.log('🔍 Auth middleware - verifying token:', token.substring(0, 50) + '...');
         let decoded;
         try {
             decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'fallback-secret-for-development');
+            console.log('🔍 Auth middleware - token decoded successfully:', decoded);
         }
         catch (jwtError) {
+            console.log('❌ Auth middleware - token verification failed:', jwtError.message);
             return res.status(401).json({
                 success: false,
                 error: 'Invalid or expired token'
             });
         }
+        console.log('🔍 Auth middleware - looking up user with ID:', decoded.userId);
         const user = await (0, database_1.getUserById)(decoded.userId);
+        console.log('🔍 Auth middleware - user lookup result:', user ? { id: user.id, email: user.email, role: user.role } : 'null');
         if (!user) {
+            console.log('❌ Auth middleware - user not found for ID:', decoded.userId);
             return res.status(401).json({
                 success: false,
                 error: 'User not found'
@@ -117,13 +125,18 @@ const optionalAuth = async (req, res, next) => {
 exports.optionalAuth = optionalAuth;
 const requireRole = (roles) => {
     return (req, res, next) => {
+        console.log('🔍 requireRole middleware called with roles:', roles);
+        console.log('🔍 req.localUser:', req.localUser);
         if (!req.localUser) {
+            console.log('❌ requireRole: No localUser found');
             return res.status(401).json({
                 success: false,
                 error: 'Authentication required'
             });
         }
         const allowedRoles = Array.isArray(roles) ? roles : [roles];
+        console.log('🔍 requireRole: allowedRoles:', allowedRoles);
+        console.log('🔍 requireRole: user role:', req.localUser.role);
         if (!allowedRoles.includes(req.localUser.role)) {
             console.log(`❌ Access denied: User ${req.localUser.email} (${req.localUser.role}) attempted to access ${allowedRoles.join('/')} endpoint`);
             return res.status(403).json({

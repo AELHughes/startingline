@@ -39,11 +39,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
+const auth_local_1 = require("../middleware/auth-local");
 const database_1 = require("../lib/database");
 const router = express_1.default.Router();
 const authLimiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
-    max: 5,
+    max: 50,
     message: {
         success: false,
         error: 'Too many authentication attempts, please try again later.'
@@ -184,39 +185,43 @@ router.post('/login', authLimiter, async (req, res) => {
     try {
         const { email, password } = req.body;
         console.log('🔍 Login attempt for:', email);
+        console.log('🔍 Password length:', password ? password.length : 'undefined');
+        console.log('🔍 Request body keys:', Object.keys(req.body));
         if (!email || !password) {
+            console.log('❌ Missing email or password');
+            console.log('🔍 Email provided:', !!email);
+            console.log('🔍 Password provided:', !!password);
             return res.status(400).json({
                 success: false,
                 error: 'Email and password are required'
             });
         }
         if (!validateEmail(email)) {
+            console.log('❌ Invalid email format:', email);
             return res.status(400).json({
                 success: false,
                 error: 'Valid email address is required'
             });
         }
+        console.log('🔍 About to call authenticateUser with:', { email, passwordLength: password.length });
         const user = await (0, database_1.authenticateUser)(email, password);
+        console.log('🔍 authenticateUser returned:', user ? 'User found' : 'No user');
+        console.log('🔍 User details:', user ? { id: user.id, email: user.email, role: user.role } : 'null');
         const token = generateJWT(user);
+        console.log('🔍 JWT token generated, length:', token.length);
         console.log('✅ User logged in successfully:', user.email, '(Role:', user.role, ')');
         res.json({
             success: true,
             data: {
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    first_name: user.first_name,
-                    last_name: user.last_name,
-                    role: user.role,
-                    email_verified: user.email_verified,
-                    last_login_at: user.last_login_at
-                },
+                user,
                 token
             }
         });
     }
     catch (error) {
         console.error('❌ Login error:', error.message);
+        console.error('❌ Error stack:', error.stack);
+        console.error('❌ Full error object:', error);
         res.status(401).json({
             success: false,
             error: 'Invalid email or password'
@@ -244,16 +249,7 @@ router.get('/me', async (req, res) => {
             }
             res.json({
                 success: true,
-                data: {
-                    id: user.id,
-                    email: user.email,
-                    first_name: user.first_name,
-                    last_name: user.last_name,
-                    role: user.role,
-                    email_verified: user.email_verified,
-                    last_login_at: user.last_login_at,
-                    created_at: user.created_at
-                }
+                data: user
             });
         }
         catch (jwtError) {
@@ -283,7 +279,12 @@ router.put('/profile', async (req, res) => {
         const token = authHeader.substring(7);
         const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'fallback-secret-for-development');
         const updates = req.body;
-        const allowedUpdates = ['first_name', 'last_name', 'email'];
+        const allowedUpdates = [
+            'first_name', 'last_name', 'email', 'phone',
+            'company_name', 'company_address', 'vat_number', 'company_registration_number',
+            'company_phone', 'company_email', 'bank_name', 'account_holder_name',
+            'account_number', 'branch_code', 'account_type'
+        ];
         const filteredUpdates = {};
         for (const key of allowedUpdates) {
             if (updates[key] !== undefined) {
@@ -317,11 +318,23 @@ router.put('/profile', async (req, res) => {
         });
     }
 });
-router.post('/logout', (req, res) => {
-    res.json({
-        success: true,
-        message: 'Logged out successfully'
-    });
+router.post('/logout', auth_local_1.authenticateToken, async (req, res) => {
+    try {
+        const userId = req.localUser.userId;
+        const token = req.headers.authorization?.replace('Bearer ', '');
+        console.log(`🚪 User ${userId} logging out`);
+        res.json({
+            success: true,
+            message: 'Logged out successfully'
+        });
+    }
+    catch (error) {
+        console.error('❌ Logout error:', error.message);
+        res.json({
+            success: true,
+            message: 'Logged out successfully'
+        });
+    }
 });
 router.get('/health', async (req, res) => {
     try {

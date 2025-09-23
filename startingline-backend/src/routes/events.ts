@@ -1015,4 +1015,140 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
   }
 })
 
+/**
+ * Get participant analytics for an organiser's event
+ */
+router.get('/:eventId/participant-analytics', authenticateToken, requireOrganiserOrAdmin, async (req: Request, res: Response) => {
+  try {
+    const { eventId } = req.params
+    const userId = req.localUser!.userId
+
+    // Verify the user has access to this event
+    const eventCheck = await pool.query(`
+      SELECT e.id, e.name, e.start_date, e.start_time, e.city,
+             u.role, u.email
+      FROM events e
+      LEFT JOIN users u ON e.organiser_id = u.id
+      WHERE e.id = $1 AND (e.organiser_id = $2 OR u.role = 'admin')
+    `, [eventId, userId])
+
+    if (eventCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found or access denied'
+      })
+    }
+
+    const event = eventCheck.rows[0]
+
+    // Get distance details with participant counts
+    const distancesResult = await pool.query(`
+      SELECT 
+        ed.id,
+        ed.name,
+        ed.price,
+        ed.entry_limit,
+        ed.min_age,
+        ed.start_time,
+        COUNT(t.id) as participant_count,
+        COUNT(CASE WHEN t.status = 'active' THEN 1 END) as active_participants
+      FROM event_distances ed
+      LEFT JOIN tickets t ON ed.id = t.distance_id AND t.event_id = $1
+      WHERE ed.event_id = $1
+      GROUP BY ed.id, ed.name, ed.price, ed.entry_limit, ed.min_age, ed.start_time
+      ORDER BY ed.price ASC
+    `, [eventId])
+
+    // Get total participants
+    const totalParticipantsResult = await pool.query(`
+      SELECT 
+        COUNT(*) as total_participants,
+        COUNT(CASE WHEN status = 'active' THEN 1 END) as active_participants,
+        COUNT(CASE WHEN participant_disabled = true THEN 1 END) as disabled_participants
+      FROM tickets 
+      WHERE event_id = $1
+    `, [eventId])
+
+    // Get participant details for export
+    const participantsResult = await pool.query(`
+      SELECT 
+        t.id as ticket_id,
+        t.ticket_number,
+        t.participant_first_name,
+        t.participant_last_name,
+        t.participant_email,
+        t.participant_mobile,
+        t.participant_date_of_birth,
+        t.participant_disabled,
+        t.participant_medical_aid_name,
+        t.participant_medical_aid_number,
+        t.emergency_contact_name,
+        t.emergency_contact_number,
+        t.amount,
+        t.status,
+        t.created_at,
+        ed.name as distance_name,
+        ed.price as distance_price,
+        o.account_holder_first_name,
+        o.account_holder_last_name,
+        o.account_holder_email
+      FROM tickets t
+      JOIN event_distances ed ON t.distance_id = ed.id
+      JOIN orders o ON t.order_id = o.id
+      WHERE t.event_id = $1
+      ORDER BY t.created_at DESC
+    `, [eventId])
+
+    // Calculate total entry limit
+    const totalEntryLimit = distancesResult.rows.reduce((sum, distance) => {
+      return sum + (distance.entry_limit || 0)
+    }, 0)
+
+    const totalParticipants = totalParticipantsResult.rows[0]
+    const totalActiveParticipants = totalParticipants.active_participants || 0
+
+    // Prepare analytics data
+    const analytics = {
+      event: {
+        id: event.id,
+        name: event.name,
+        start_date: event.start_date,
+        start_time: event.start_time,
+        city: event.city
+      },
+      summary: {
+        total_participants: totalParticipants.total_participants || 0,
+        active_participants: totalActiveParticipants,
+        disabled_participants: totalParticipants.disabled_participants || 0,
+        total_entry_limit: totalEntryLimit,
+        utilization_percentage: totalEntryLimit > 0 ? Math.round((totalActiveParticipants / totalEntryLimit) * 100) : 0
+      },
+      distances: distancesResult.rows.map(distance => ({
+        id: distance.id,
+        name: distance.name,
+        price: distance.price,
+        entry_limit: distance.entry_limit,
+        min_age: distance.min_age,
+        start_time: distance.start_time,
+        participant_count: parseInt(distance.participant_count) || 0,
+        active_participants: parseInt(distance.active_participants) || 0,
+        utilization_percentage: distance.entry_limit > 0 ? Math.round((parseInt(distance.active_participants) / distance.entry_limit) * 100) : 0
+      })),
+      participants: participantsResult.rows
+    }
+
+    res.json({
+      success: true,
+      data: analytics
+    })
+
+  } catch (error: any) {
+    console.error('Get participant analytics error:', error)
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get participant analytics'
+    })
+  }
+})
+
 export default router

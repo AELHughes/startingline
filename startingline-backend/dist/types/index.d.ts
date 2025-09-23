@@ -8,6 +8,18 @@ export interface User {
     last_login_at?: Date;
     created_at: Date;
     updated_at: Date;
+    phone?: string;
+    company_name?: string;
+    company_address?: string;
+    vat_number?: string;
+    company_registration_number?: string;
+    company_phone?: string;
+    company_email?: string;
+    bank_name?: string;
+    account_holder_name?: string;
+    account_number?: string;
+    branch_code?: string;
+    account_type?: 'cheque' | 'savings';
 }
 export interface CreateUserData {
     email: string;
@@ -132,6 +144,20 @@ export interface Ticket {
     status: 'active' | 'cancelled' | 'refunded';
     created_at: Date;
     updated_at: Date;
+}
+export interface TicketData {
+    ticketNumber: string;
+    participantName: string;
+    participantEmail: string;
+    participantMobile: string;
+    eventName: string;
+    eventDate: string;
+    eventTime: string;
+    eventLocation: string;
+    distanceName: string;
+    distancePrice: number;
+    organizerName: string;
+    organizerLogo?: string;
 }
 export interface Payment {
     id: string;

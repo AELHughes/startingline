@@ -12,6 +12,18 @@ export declare function updatePassword(userId: string, newPassword: string): Pro
 export declare function verifyPassword(userId: string, password: string): Promise<boolean>;
 export declare function testConnection(): Promise<boolean>;
 export declare function getTableCounts(): Promise<Record<string, number>>;
+export declare function createAuditTrailEntry(eventId: string, actionType: string, performedBy: string, performedByRole: 'organiser' | 'admin', message?: string, metadata?: any): Promise<any>;
+export declare function getEventAuditTrail(eventId: string): Promise<any[]>;
+export declare function createNotification(userId: string, type: string, title: string, message: string, link?: string, metadata?: any): Promise<any>;
+export declare function getUserNotifications(userId: string, limit?: number): Promise<any[]>;
+export declare function getUnreadNotificationCount(userId: string): Promise<number>;
+export declare function markNotificationAsRead(notificationId: string, userId: string): Promise<any>;
+export declare function markAllNotificationsAsRead(userId: string): Promise<any[]>;
+export declare function createMessage(eventId: string | null, senderId: string, recipientId: string, subject: string, body: string, parentMessageId?: string): Promise<any>;
+export declare function getUserMessages(userId: string, limit?: number): Promise<any[]>;
+export declare function getMessageThread(messageId: string, userId: string): Promise<any[]>;
+export declare function markMessageAsRead(messageId: string, userId: string): Promise<any>;
+export declare function getUnreadMessageCount(userId: string): Promise<number>;
 export { pool };
 export default pool;
 //# sourceMappingURL=database.d.ts.map
