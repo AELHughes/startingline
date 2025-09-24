@@ -45,11 +45,37 @@ interface DistanceSelection {
   min_age?: number
 }
 
+interface Merchandise {
+  id: string
+  name: string
+  description?: string
+  price: number
+  image_url?: string
+  available_stock: number
+  current_stock: number
+  variations: Array<{
+    variation_name: string
+    variation_options: string[]
+  }>
+}
+
+interface MerchandiseSelection {
+  merchandise_id: string
+  name: string
+  unit_price: number
+  quantity: number
+  variation_id?: string
+  variations: { [key: string]: string }
+  available_stock: number
+  current_stock: number
+}
+
 interface ParticipantFormData extends ParticipantData {
   distance_id: string
   distance_name: string
   price: number
   min_age?: number
+  merchandise: MerchandiseSelection[]
   ageError?: string
   firstNameError?: string
   lastNameError?: string
@@ -1584,6 +1610,123 @@ export default function EventRegistrationPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* Merchandise Section */}
+                  {registrationDetails?.event?.merchandise && registrationDetails.event.merchandise.length > 0 && (
+                    <div className="mt-6">
+                      <h3 className="text-lg font-semibold mb-4">Add Merchandise</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {registrationDetails.event.merchandise.map((merch, merchIndex) => {
+                          const participantMerch = form.merchandise.find(m => m.merchandise_id === merch.id)
+                          const isOutOfStock = merch.current_stock <= 0
+                          
+                          return (
+                            <Card key={merchIndex} className={`relative ${isOutOfStock ? 'opacity-60' : ''}`}>
+                              <CardContent className="pt-4">
+                                <div className="flex justify-between items-start mb-2">
+                                  <div>
+                                    <h4 className="font-medium">{merch.name}</h4>
+                                    <p className="text-sm text-gray-600">{merch.description}</p>
+                                    <p className="text-sm font-medium mt-1">R {merch.price.toFixed(2)}</p>
+                                  </div>
+                                  {merch.image_url && (
+                                    <img 
+                                      src={merch.image_url} 
+                                      alt={merch.name}
+                                      className="w-20 h-20 object-cover rounded"
+                                    />
+                                  )}
+                                </div>
+
+                                {isOutOfStock ? (
+                                  <Badge variant="destructive" className="mt-2">Sold Out</Badge>
+                                ) : (
+                                  <div className="space-y-4">
+                                    <div className="flex items-center gap-4">
+                                      <Label htmlFor={`merch_${index}_${merchIndex}_quantity`}>Quantity</Label>
+                                      <Input
+                                        id={`merch_${index}_${merchIndex}_quantity`}
+                                        type="number"
+                                        min="0"
+                                        max={merch.current_stock}
+                                        value={participantMerch?.quantity || 0}
+                                        onChange={(e) => {
+                                          const quantity = parseInt(e.target.value, 10) || 0
+                                          if (quantity > merch.current_stock) return
+
+                                          const updatedMerchandise = [...form.merchandise]
+                                          const existingIndex = updatedMerchandise.findIndex(m => m.merchandise_id === merch.id)
+
+                                          if (quantity === 0 && existingIndex !== -1) {
+                                            updatedMerchandise.splice(existingIndex, 1)
+                                          } else if (quantity > 0) {
+                                            const merchandiseItem = {
+                                              merchandise_id: merch.id,
+                                              name: merch.name,
+                                              unit_price: merch.price,
+                                              quantity,
+                                              variations: participantMerch?.variations || {},
+                                              available_stock: merch.available_stock,
+                                              current_stock: merch.current_stock
+                                            }
+
+                                            if (existingIndex !== -1) {
+                                              updatedMerchandise[existingIndex] = merchandiseItem
+                                            } else {
+                                              updatedMerchandise.push(merchandiseItem)
+                                            }
+                                          }
+
+                                          updateParticipantForm(index, 'merchandise', updatedMerchandise)
+                                        }}
+                                        className="w-24"
+                                      />
+                                      <span className="text-sm text-gray-600">
+                                        {merch.current_stock} available
+                                      </span>
+                                    </div>
+
+                                    {participantMerch && participantMerch.quantity > 0 && merch.variations.map((variation, varIndex) => (
+                                      <div key={varIndex} className="flex items-center gap-4">
+                                        <Label htmlFor={`merch_${index}_${merchIndex}_var_${varIndex}`}>
+                                          {variation.variation_name}
+                                        </Label>
+                                        <Select
+                                          value={participantMerch.variations[variation.variation_name] || ''}
+                                          onValueChange={(value) => {
+                                            const updatedMerchandise = [...form.merchandise]
+                                            const item = updatedMerchandise.find(m => m.merchandise_id === merch.id)
+                                            if (item) {
+                                              item.variations = {
+                                                ...item.variations,
+                                                [variation.variation_name]: value
+                                              }
+                                              updateParticipantForm(index, 'merchandise', updatedMerchandise)
+                                            }
+                                          }}
+                                        >
+                                          <SelectTrigger id={`merch_${index}_${merchIndex}_var_${varIndex}`}>
+                                            <SelectValue placeholder={`Select ${variation.variation_name}`} />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {variation.variation_options.map((option: string, optIndex: number) => (
+                                              <SelectItem key={optIndex} value={option}>
+                                                {option}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </CardContent>
+                            </Card>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
@@ -1662,10 +1805,36 @@ export default function EventRegistrationPage() {
                             <span>-R{Number(originalPrice - currentPrice).toFixed(2)}</span>
                           </div>
                         )}
+
+                        {/* Merchandise Items */}
+                        {form.merchandise && form.merchandise.length > 0 && (
+                          <>
+                            <div className="border-t pt-1 mt-2">
+                              <h5 className="text-sm font-medium mb-1">Merchandise</h5>
+                              {form.merchandise.map((item, merchIndex) => (
+                                <div key={merchIndex} className="space-y-1">
+                                  <div className="flex justify-between text-sm">
+                                    <span className="flex-1">
+                                      {item.name} x{item.quantity}
+                                      {Object.entries(item.variations).length > 0 && (
+                                        <span className="block text-xs text-gray-500">
+                                          {Object.entries(item.variations).map(([key, value]) => (
+                                            `${key}: ${value}`
+                                          )).join(', ')}
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span>R{Number(item.unit_price * item.quantity).toFixed(2)}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
                         
-                        <div className="flex justify-between font-semibold border-t pt-1">
+                        <div className="flex justify-between font-semibold border-t pt-1 mt-2">
                           <span>Total</span>
-                          <span>R{Number(currentPrice).toFixed(2)}</span>
+                          <span>R{Number(currentPrice + (form.merchandise?.reduce((total, item) => total + (item.price * item.quantity), 0) || 0)).toFixed(2)}</span>
                         </div>
                       </div>
                     </div>
@@ -1676,8 +1845,9 @@ export default function EventRegistrationPage() {
                 
                 {/* Order Totals */}
                 <div className="space-y-2">
+                  {/* Entry Fees */}
                   <div className="flex justify-between items-center text-base">
-                    <span>Subtotal</span>
+                    <span>Entry Fees Subtotal</span>
                     <span>R{Number(participantForms?.reduce((total, form) => {
                       const distance = registrationDetails?.event?.distances?.find(d => d.id === form.distance_id)
                       const price = distance?.price ?? 0
@@ -1685,7 +1855,7 @@ export default function EventRegistrationPage() {
                     }, 0) ?? 0).toFixed(2)}</span>
                   </div>
                   
-                  {/* Show total discounts if any */}
+                  {/* Show entry fee discounts if any */}
                   {participantForms.some(form => {
                     const distance = registrationDetails?.event?.distances?.find(d => d.id === form.distance_id)
                     const originalPrice = distance?.price ?? 0
@@ -1693,7 +1863,7 @@ export default function EventRegistrationPage() {
                     return originalPrice > currentPrice
                   }) && (
                     <div className="flex justify-between items-center text-base text-green-600">
-                      <span>Total Discounts</span>
+                      <span>Entry Fee Discounts</span>
                       <span>-R{Number(participantForms?.reduce((total, form) => {
                         const distance = registrationDetails?.event?.distances?.find(d => d.id === form.distance_id)
                         const originalPrice = distance?.price ?? 0
@@ -1702,7 +1872,22 @@ export default function EventRegistrationPage() {
                       }, 0) ?? 0).toFixed(2)}</span>
                     </div>
                   )}
+
+                  {/* Merchandise Subtotal */}
+                  {participantForms.some(form => form.merchandise?.length > 0) && (
+                    <>
+                      <div className="flex justify-between items-center text-base border-t pt-2">
+                        <span>Merchandise Subtotal</span>
+                        <span>R{Number(participantForms?.reduce((total, form) => {
+                          return total + (form.merchandise?.reduce((merchTotal, item) => {
+                            return merchTotal + (item.unit_price * item.quantity)
+                          }, 0) ?? 0)
+                        }, 0) ?? 0).toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
                   
+                  {/* Final Total */}
                   <div className="flex justify-between items-center text-lg font-semibold border-t pt-2">
                     <span>Total</span>
                     <span>R{calculateTotal().toFixed(2)}</span>
