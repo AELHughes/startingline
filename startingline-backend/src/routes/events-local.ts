@@ -2069,7 +2069,7 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
                 'unit_price', tm.unit_price,
                 'total_price', tm.total_price,
                 'variation_id', tm.variation_id,
-                'variations', COALESCE(mv.variation_options, '[]'::json),
+                'variations', COALESCE(mv.variation_options::json, '[]'::json),
                 'variation_name', mv.variation_name
               )
             END
@@ -2110,7 +2110,7 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
               json_build_object(
                 'id', mv.id,
                 'variation_name', mv.variation_name,
-                'variation_options', mv.variation_options
+                'variation_options', mv.variation_options::json
               )
             END
           ) FILTER (WHERE mv.id IS NOT NULL),
