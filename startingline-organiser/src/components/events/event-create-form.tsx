@@ -190,8 +190,17 @@ export default function EventCreateForm({
         merchandise: (initialData.merchandise || []).map((merch: any) => ({
           ...merch,
           variations: (merch.variations || []).map((variation: any) => ({
-            ...variation,
-            options: variation.options || []
+            name: variation.variation_name || variation.name || '',
+            options: (variation.variation_options || variation.options || []).map((option: any) => {
+              // Handle both old format (string) and new format (object)
+              if (typeof option === 'string') {
+                return { value: option, stock: 0 }
+              } else if (typeof option === 'object' && option.value !== undefined) {
+                return { value: option.value || '', stock: option.stock || 0 }
+              } else {
+                return { value: '', stock: 0 }
+              }
+            })
           }))
         }))
       })
@@ -1489,32 +1498,39 @@ export default function EventCreateForm({
 
                                 <div className="space-y-2">
                                   <Label className="text-sm">Options & Stock</Label>
-                                  {(variation.options || []).map((option, optionIndex) => (
-                                    <div key={optionIndex} className="flex items-center gap-2">
-                                      <Input
-                                        value={option.value}
-                                        onChange={(e) => updateVariationOption(merchIndex, variationIndex, optionIndex, 'value', e.target.value)}
-                                        placeholder="Option value (e.g., Small)"
-                                        className="flex-1"
-                                      />
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        value={option.stock}
-                                        onChange={(e) => updateVariationOption(merchIndex, variationIndex, optionIndex, 'stock', parseInt(e.target.value) || 0)}
-                                        placeholder="Stock"
-                                        className="w-20"
-                                      />
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => removeVariationOption(merchIndex, variationIndex, optionIndex)}
-                                      >
-                                        <Trash2 className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  ))}
+                                  {(variation.options || []).map((option, optionIndex) => {
+                                    // Ensure option is an object with value and stock
+                                    const safeOption = typeof option === 'object' && option !== null 
+                                      ? { value: option.value || '', stock: option.stock || 0 }
+                                      : { value: String(option || ''), stock: 0 }
+                                    
+                                    return (
+                                      <div key={optionIndex} className="flex items-center gap-2">
+                                        <Input
+                                          value={safeOption.value}
+                                          onChange={(e) => updateVariationOption(merchIndex, variationIndex, optionIndex, 'value', e.target.value)}
+                                          placeholder="Option value (e.g., Small)"
+                                          className="flex-1"
+                                        />
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          value={safeOption.stock}
+                                          onChange={(e) => updateVariationOption(merchIndex, variationIndex, optionIndex, 'stock', parseInt(e.target.value) || 0)}
+                                          placeholder="Stock"
+                                          className="w-20"
+                                        />
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => removeVariationOption(merchIndex, variationIndex, optionIndex)}
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    )
+                                  })}
                                   <Button
                                     type="button"
                                     variant="outline"
