@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Trash2, Plus, Upload, Check, AlertCircle, Calendar, MapPin, Users, DollarSign, Package, Image as ImageIcon, CheckCircle, Circle } from 'lucide-react'
+import { Trash2, Plus, Upload, Check, AlertCircle, Calendar, MapPin, Users, DollarSign, Package, Image as ImageIcon, CheckCircle, Circle, Info as InfoIcon } from 'lucide-react'
 
 interface EventDistance {
   id?: string
@@ -798,9 +798,12 @@ export default function EventCreateForm({
 
           {/* Basic Information Tab */}
           <TabsContent value="basic" className="mt-4 space-y-6">
-            <div className="mb-4">
-              <h3 className="text-sm font-medium text-gray-700">Required Information</h3>
-              <p className="text-sm text-gray-600">Please fill in all required fields marked with *</p>
+            <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <h3 className="text-sm font-medium text-amber-800">Required Information</h3>
+              </div>
+              <p className="text-sm text-amber-700">Please fill in all required fields marked with *</p>
             </div>
             <Card>
               <CardHeader>
@@ -1055,9 +1058,12 @@ export default function EventCreateForm({
 
           {/* Location Tab */}
           <TabsContent value="location" className="mt-4 space-y-6">
-            <div className="mb-4">
-              <h3 className="text-sm font-medium text-gray-700">Required Information</h3>
-              <p className="text-sm text-gray-600">Please fill in all required fields marked with *</p>
+            <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <h3 className="text-sm font-medium text-amber-800">Required Information</h3>
+              </div>
+              <p className="text-sm text-amber-700">Please fill in all required fields marked with *</p>
             </div>
             <Card>
               <CardHeader>
@@ -1132,9 +1138,12 @@ export default function EventCreateForm({
 
           {/* Distances Tab */}
           <TabsContent value="distances" className="mt-4 space-y-6">
-            <div className="mb-4">
-              <h3 className="text-sm font-medium text-gray-700">Required Information</h3>
-              <p className="text-sm text-gray-600">At least one distance must be added with required fields marked with *</p>
+            <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <h3 className="text-sm font-medium text-amber-800">Required Information</h3>
+              </div>
+              <p className="text-sm text-amber-700">At least one distance must be added with required fields marked with *</p>
             </div>
             <Card>
               <CardHeader>
@@ -1309,9 +1318,12 @@ export default function EventCreateForm({
 
           {/* Merchandise Tab */}
           <TabsContent value="merchandise" className="mt-4 space-y-6">
-            <div className="mb-4">
-              <h3 className="text-sm font-medium text-gray-700">Optional Information</h3>
-              <p className="text-sm text-gray-600">You can add merchandise items for participants to purchase during registration</p>
+            <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <InfoIcon className="h-4 w-4 text-amber-600" />
+                <h3 className="text-sm font-medium text-amber-800">Optional Information</h3>
+              </div>
+              <p className="text-sm text-amber-700">You can add merchandise items for participants to purchase during registration</p>
             </div>
             <Card>
               <CardHeader>
