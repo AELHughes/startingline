@@ -1702,7 +1702,7 @@ export default function EventRegistrationPage() {
                                         </div>
 
                                         {/* Variations Selection */}
-                                        {participantMerch && participantMerch.quantity > 0 && merch.variations && merch.variations.length > 0 && (
+                                        {participantMerch && participantMerch.quantity > 0 && Array.isArray(merch.variations) && merch.variations.length > 0 && (
                                           <div className="border-t pt-4 mt-4">
                                             <Label className="block mb-4 text-base font-medium">Select Options</Label>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1712,7 +1712,7 @@ export default function EventRegistrationPage() {
                                                     htmlFor={`merch_${index}_${merchIndex}_var_${varIndex}`}
                                                     className="block text-sm text-gray-600 mb-2"
                                                   >
-                                                    {variation.variation_name}
+                                                    {variation.variation_name || 'Option'}
                                                   </Label>
                                                   <Select
                                                     value={participantMerch.variations?.[variation.variation_name] || ''}
@@ -1732,7 +1732,7 @@ export default function EventRegistrationPage() {
                                                       id={`merch_${index}_${merchIndex}_var_${varIndex}`}
                                                       className="w-full"
                                                     >
-                                                      <SelectValue placeholder={`Select ${variation.variation_name.toLowerCase()}`} />
+                                                      <SelectValue placeholder={`Select ${(variation.variation_name || 'option').toLowerCase()}`} />
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                       {Array.isArray(variation.variation_options) ? variation.variation_options.map((option: string, optIndex: number) => (
