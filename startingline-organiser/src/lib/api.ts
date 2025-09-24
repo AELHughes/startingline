@@ -607,6 +607,31 @@ export const eventsApi = {
         account_holder_first_name: string
         account_holder_last_name: string
         account_holder_email: string
+        merchandise: Array<{
+          merchandise_id: string
+          merchandise_name: string
+          quantity: number
+          unit_price: number
+          total_price: number
+          variation_id?: string
+          variations: any[]
+          variation_name?: string
+        }>
+      }>
+      merchandise: Array<{
+        id: string
+        name: string
+        description?: string
+        price: number
+        image_url?: string
+        available_stock: number
+        current_stock: number
+        total_sold: number
+        variations: Array<{
+          id: string
+          variation_name: string
+          variation_options: any[]
+        }>
       }>
     }
     error?: string

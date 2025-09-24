@@ -20,7 +20,12 @@ import {
   PieChart,
   UserCheck,
   UserX,
-  Target
+  Target,
+  Package,
+  ShoppingBag,
+  CheckCircle,
+  XCircle,
+  Eye
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
@@ -72,6 +77,31 @@ interface ParticipantAnalytics {
     account_holder_first_name: string
     account_holder_last_name: string
     account_holder_email: string
+    merchandise: Array<{
+      merchandise_id: string
+      merchandise_name: string
+      quantity: number
+      unit_price: number
+      total_price: number
+      variation_id?: string
+      variations: any[]
+      variation_name?: string
+    }>
+  }>
+  merchandise: Array<{
+    id: string
+    name: string
+    description?: string
+    price: number
+    image_url?: string
+    available_stock: number
+    current_stock: number
+    total_sold: number
+    variations: Array<{
+      id: string
+      variation_name: string
+      variation_options: any[]
+    }>
   }>
 }
 
@@ -148,29 +178,59 @@ export default function ParticipantsDashboard() {
       'Emergency Contact Number',
       'Account Holder Name',
       'Account Holder Email',
-      'Registration Date'
+      'Registration Date',
+      'Has Merchandise',
+      'Merchandise Items',
+      'Merchandise Variations',
+      'Merchandise Total'
     ]
 
     const csvContent = [
       headers.join(','),
-      ...analytics.participants.map(participant => [
-        participant.ticket_number,
-        `"${participant.participant_first_name} ${participant.participant_last_name}"`,
-        participant.participant_email,
-        participant.participant_mobile,
-        participant.participant_date_of_birth,
-        participant.distance_name,
-        participant.amount,
-        participant.status,
-        participant.participant_disabled ? 'Yes' : 'No',
-        participant.participant_medical_aid_name || '',
-        participant.participant_medical_aid_number || '',
-        participant.emergency_contact_name,
-        participant.emergency_contact_number,
-        `"${participant.account_holder_first_name} ${participant.account_holder_last_name}"`,
-        participant.account_holder_email,
-        format(new Date(participant.created_at), 'yyyy-MM-dd HH:mm:ss')
-      ].join(','))
+      ...analytics.participants.map(participant => {
+        const hasMerchandise = participant.merchandise && participant.merchandise.length > 0
+        const merchandiseItems = hasMerchandise 
+          ? participant.merchandise.map(m => `${m.merchandise_name} (${m.quantity})`).join('; ')
+          : ''
+        const merchandiseVariations = hasMerchandise
+          ? participant.merchandise.map(m => {
+              if (m.variation_name && m.variations && m.variations.length > 0) {
+                // Extract variation values from the variations array
+                const selectedVariations = m.variations.map((v: any) => 
+                  typeof v === 'object' && v.value ? v.value : String(v)
+                ).join(', ')
+                return `${m.merchandise_name}: ${m.variation_name} - ${selectedVariations}`
+              }
+              return `${m.merchandise_name}: No variations`
+            }).join('; ')
+          : ''
+        const merchandiseTotal = hasMerchandise
+          ? participant.merchandise.reduce((total, m) => total + Number(m.total_price), 0).toFixed(2)
+          : '0.00'
+
+        return [
+          participant.ticket_number,
+          `"${participant.participant_first_name} ${participant.participant_last_name}"`,
+          participant.participant_email,
+          participant.participant_mobile,
+          participant.participant_date_of_birth,
+          participant.distance_name,
+          participant.amount,
+          participant.status,
+          participant.participant_disabled ? 'Yes' : 'No',
+          participant.participant_medical_aid_name || '',
+          participant.participant_medical_aid_number || '',
+          participant.emergency_contact_name,
+          participant.emergency_contact_number,
+          `"${participant.account_holder_first_name} ${participant.account_holder_last_name}"`,
+          participant.account_holder_email,
+          format(new Date(participant.created_at), 'yyyy-MM-dd HH:mm:ss'),
+          hasMerchandise ? 'Yes' : 'No',
+          `"${merchandiseItems}"`,
+          `"${merchandiseVariations}"`,
+          merchandiseTotal
+        ].join(',')
+      })
     ].join('\n')
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -497,6 +557,110 @@ export default function ParticipantsDashboard() {
               </CardContent>
             </Card>
 
+            {/* Merchandise Section */}
+            {analytics.merchandise && analytics.merchandise.length > 0 && (
+              <Card className="mb-8">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Package className="h-5 w-5" />
+                    Event Merchandise
+                  </CardTitle>
+                  <CardDescription>
+                    Stock levels, variations, and purchase summary for merchandise items
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {analytics.merchandise.map((item) => (
+                      <Card key={item.id} className="border-l-4 border-l-blue-500">
+                        <CardContent className="pt-4">
+                          <div className="flex items-start gap-3">
+                            {item.image_url && (
+                              <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                                <img
+                                  src={item.image_url}
+                                  alt={item.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-lg truncate">{item.name}</h4>
+                              <p className="text-sm text-gray-600 mt-1">{item.description || 'No description'}</p>
+                              <div className="flex items-center gap-2 mt-2">
+                                <Badge variant="outline" className="text-sm">
+                                  R{Number(item.price).toFixed(2)}
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Stock Information */}
+                          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <span className="text-gray-600">Available:</span>
+                                <span className="ml-1 font-medium">{item.available_stock}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">Current:</span>
+                                <span className="ml-1 font-medium">{item.current_stock}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">Sold:</span>
+                                <span className="ml-1 font-medium text-green-600">{item.total_sold}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">Remaining:</span>
+                                <span className="ml-1 font-medium">{item.current_stock}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Variations */}
+                          {item.variations && item.variations.length > 0 && (
+                            <div className="mt-4">
+                              <h5 className="text-sm font-medium text-gray-700 mb-2">Variations:</h5>
+                              <div className="space-y-2">
+                                {item.variations.map((variation, index) => (
+                                  <div key={variation.id || index} className="text-xs">
+                                    <span className="font-medium text-gray-600">{variation.variation_name}:</span>
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      {variation.variation_options.map((option: any, optIndex: number) => {
+                                        const optionValue = typeof option === 'object' && option.value !== undefined 
+                                          ? option.value 
+                                          : String(option)
+                                        const optionStock = typeof option === 'object' && option.stock !== undefined 
+                                          ? option.stock 
+                                          : null
+                                        
+                                        return (
+                                          <Badge 
+                                            key={optIndex} 
+                                            variant="secondary" 
+                                            className="text-xs"
+                                          >
+                                            {optionValue}
+                                            {optionStock !== null && (
+                                              <span className="ml-1 text-gray-500">({optionStock})</span>
+                                            )}
+                                          </Badge>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Participants Table */}
             <Card>
               <CardHeader>
@@ -519,6 +683,7 @@ export default function ParticipantsDashboard() {
                         <th className="text-left py-3 px-2">Mobile</th>
                         <th className="text-left py-3 px-2">Distance</th>
                         <th className="text-left py-3 px-2">Status</th>
+                        <th className="text-left py-3 px-2">Merch</th>
                         <th className="text-left py-3 px-2">Medical Aid</th>
                         <th className="text-left py-3 px-2">Emergency Contact</th>
                         <th className="text-left py-3 px-2">Registered</th>
@@ -555,6 +720,33 @@ export default function ParticipantsDashboard() {
                             >
                               {participant.status}
                             </Badge>
+                          </td>
+                          <td className="py-3 px-2">
+                            {participant.merchandise && participant.merchandise.length > 0 ? (
+                              <div className="flex items-center gap-1">
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                                <button
+                                  onClick={() => {
+                                    const merchDetails = participant.merchandise.map(m => {
+                                      let details = `${m.merchandise_name} (${m.quantity})`
+                                      if (m.variation_name && m.variations && m.variations.length > 0) {
+                                        const variations = m.variations.map((v: any) => 
+                                          typeof v === 'object' && v.value ? v.value : String(v)
+                                        ).join(', ')
+                                        details += ` - ${m.variation_name}: ${variations}`
+                                      }
+                                      return details
+                                    }).join('\n')
+                                    alert(`Merchandise purchased:\n\n${merchDetails}`)
+                                  }}
+                                  className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                >
+                                  View
+                                </button>
+                              </div>
+                            ) : (
+                              <XCircle className="h-4 w-4 text-gray-400" />
+                            )}
                           </td>
                           <td className="py-3 px-2">
                             {participant.participant_medical_aid_name ? (
