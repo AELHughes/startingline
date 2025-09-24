@@ -197,6 +197,36 @@ export default function MyEventsPage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Merchandise Section */}
+                  {order.merchandise && order.merchandise.length > 0 && (
+                    <div className="space-y-2 pt-4 border-t">
+                      <h4 className="font-medium text-sm text-gray-900">Merchandise:</h4>
+                      {order.merchandise.map((item, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-blue-50 rounded">
+                          <div className="flex items-center gap-3">
+                            {item.image_url && (
+                              <div className="w-8 h-8 rounded overflow-hidden bg-gray-100">
+                                <img
+                                  src={item.image_url}
+                                  alt={item.merchandise_name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            )}
+                            <div>
+                              <span className="text-sm font-medium">{item.merchandise_name}</span>
+                              <p className="text-xs text-gray-600">Qty: {item.quantity}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm font-medium">R{Number(item.total_price).toFixed(2)}</span>
+                            <p className="text-xs text-gray-500">R{Number(item.unit_price).toFixed(2)} each</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
