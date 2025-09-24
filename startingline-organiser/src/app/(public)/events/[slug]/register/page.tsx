@@ -693,6 +693,10 @@ export default function EventRegistrationPage() {
       // Clear the form
       setParticipantForms(prev => prev.map((form, i) => {
         if (i === index) {
+          // Get distance details to reset price to original
+          const distance = registrationDetails?.event?.distances?.find(d => d.id === form.distance_id)
+          const originalPrice = distance?.price ?? 0
+          
           return {
             ...form,
             first_name: '',
@@ -703,7 +707,9 @@ export default function EventRegistrationPage() {
             medical_aid_name: '',
             medical_aid_number: '',
             emergency_contact_name: '',
-            emergency_contact_number: ''
+            emergency_contact_number: '',
+            disabled: false,
+            price: originalPrice
           }
         }
         return form
@@ -735,6 +741,33 @@ export default function EventRegistrationPage() {
     // Fill the form with saved participant data
     setParticipantForms(prev => prev.map((form, i) => {
       if (i === index) {
+        // Get distance details
+        const distance = registrationDetails?.event?.distances?.find(d => d.id === form.distance_id)
+        const originalPrice = distance?.price ?? 0
+        
+        // Calculate age for senior check
+        const birthDate = savedParticipant.date_of_birth ? new Date(savedParticipant.date_of_birth) : null
+        let price = originalPrice
+        
+        if (birthDate) {
+          const today = new Date()
+          let age = today.getFullYear() - birthDate.getFullYear()
+          const monthDiff = today.getMonth() - birthDate.getMonth()
+          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--
+          }
+          
+          // Apply senior discount if applicable
+          if (distance?.free_for_seniors && age >= (distance.senior_age_threshold || 65)) {
+            price = 0
+          }
+        }
+        
+        // Apply disability discount if applicable
+        if (savedParticipant.disabled && distance?.free_for_disability) {
+          price = 0
+        }
+        
         return {
           ...form,
           first_name: savedParticipant.first_name || '',
@@ -745,7 +778,9 @@ export default function EventRegistrationPage() {
           medical_aid_name: savedParticipant.medical_aid_name || '',
           medical_aid_number: savedParticipant.medical_aid_number || '',
           emergency_contact_name: savedParticipant.emergency_contact_name || '',
-          emergency_contact_number: savedParticipant.emergency_contact_number || ''
+          emergency_contact_number: savedParticipant.emergency_contact_number || '',
+          disabled: savedParticipant.disabled || false,
+          price: price
         }
       }
       return form
@@ -1643,23 +1678,28 @@ export default function EventRegistrationPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between items-center text-base">
                     <span>Subtotal</span>
-                    <span>R{Number(participantForms.reduce((total, form) => {
-                      const distance = registrationDetails?.event.distances.find(d => d.id === form.distance_id)
-                      return total + (distance?.price || 0)
-                    }, 0)).toFixed(2)}</span>
+                    <span>R{Number(participantForms?.reduce((total, form) => {
+                      const distance = registrationDetails?.event?.distances?.find(d => d.id === form.distance_id)
+                      const price = distance?.price ?? 0
+                      return total + price
+                    }, 0) ?? 0).toFixed(2)}</span>
                   </div>
                   
                   {/* Show total discounts if any */}
                   {participantForms.some(form => {
-                    const distance = registrationDetails?.event.distances.find(d => d.id === form.distance_id)
-                    return (distance?.price || 0) > (form.price || 0)
+                    const distance = registrationDetails?.event?.distances?.find(d => d.id === form.distance_id)
+                    const originalPrice = distance?.price ?? 0
+                    const currentPrice = form.price ?? 0
+                    return originalPrice > currentPrice
                   }) && (
                     <div className="flex justify-between items-center text-base text-green-600">
                       <span>Total Discounts</span>
-                      <span>-R{Number(participantForms.reduce((total, form) => {
-                        const distance = registrationDetails?.event.distances.find(d => d.id === form.distance_id)
-                        return total + ((distance?.price || 0) - (form.price || 0))
-                      }, 0)).toFixed(2)}</span>
+                      <span>-R{Number(participantForms?.reduce((total, form) => {
+                        const distance = registrationDetails?.event?.distances?.find(d => d.id === form.distance_id)
+                        const originalPrice = distance?.price ?? 0
+                        const currentPrice = form.price ?? 0
+                        return total + (originalPrice - currentPrice)
+                      }, 0) ?? 0).toFixed(2)}</span>
                     </div>
                   )}
                   

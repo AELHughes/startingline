@@ -1061,6 +1061,7 @@ export interface SavedParticipant {
   medical_aid_number: string | null
   emergency_contact_name: string
   emergency_contact_number: string
+  disabled: boolean
   created_at: string
   updated_at: string
 }
