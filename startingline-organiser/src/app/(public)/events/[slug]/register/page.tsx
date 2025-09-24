@@ -1654,28 +1654,33 @@ export default function EventRegistrationPage() {
                                           const quantity = parseInt(e.target.value, 10) || 0
                                           if (quantity > merch.current_stock) return
 
-                                          const updatedMerchandise = [...form.merchandise]
-                                          const existingIndex = updatedMerchandise.findIndex(m => m.merchandise_id === merch.id)
+                                        const updatedMerchandise = [...form.merchandise]
+                                        const existingIndex = updatedMerchandise.findIndex(m => m.merchandise_id === merch.id)
 
-                                          if (quantity === 0 && existingIndex !== -1) {
-                                            updatedMerchandise.splice(existingIndex, 1)
-                                          } else if (quantity > 0) {
-                                            const merchandiseItem = {
-                                              merchandise_id: merch.id,
-                                              name: merch.name,
-                                              unit_price: merch.price,
-                                              quantity,
-                                              variations: participantMerch?.variations || {},
-                                              available_stock: merch.available_stock,
-                                              current_stock: merch.current_stock
-                                            }
-
-                                            if (existingIndex !== -1) {
-                                              updatedMerchandise[existingIndex] = merchandiseItem
-                                            } else {
-                                              updatedMerchandise.push(merchandiseItem)
-                                            }
+                                        if (quantity === 0 && existingIndex !== -1) {
+                                          updatedMerchandise.splice(existingIndex, 1)
+                                        } else if (quantity > 0) {
+                                          const merchandiseItem = {
+                                            merchandise_id: merch.id,
+                                            name: merch.name,
+                                            unit_price: Number(merch.price || 0),
+                                            quantity,
+                                            variations: existingIndex !== -1 
+                                              ? updatedMerchandise[existingIndex].variations || {}
+                                              : {},
+                                            available_stock: merch.available_stock,
+                                            current_stock: merch.current_stock
                                           }
+
+                                          if (existingIndex !== -1) {
+                                            updatedMerchandise[existingIndex] = {
+                                              ...updatedMerchandise[existingIndex],
+                                              ...merchandiseItem
+                                            }
+                                          } else {
+                                            updatedMerchandise.push(merchandiseItem)
+                                          }
+                                        }
 
                                           updateParticipantForm(index, 'merchandise', updatedMerchandise)
                                         }}
@@ -1686,38 +1691,46 @@ export default function EventRegistrationPage() {
                                       </span>
                                     </div>
 
-                                    {participantMerch && participantMerch.quantity > 0 && merch.variations.map((variation, varIndex) => (
-                                      <div key={varIndex} className="flex items-center gap-4">
-                                        <Label htmlFor={`merch_${index}_${merchIndex}_var_${varIndex}`}>
-                                          {variation.variation_name}
-                                        </Label>
-                                        <Select
-                                          value={participantMerch.variations[variation.variation_name] || ''}
-                                          onValueChange={(value) => {
-                                            const updatedMerchandise = [...form.merchandise]
-                                            const item = updatedMerchandise.find(m => m.merchandise_id === merch.id)
-                                            if (item) {
-                                              item.variations = {
-                                                ...item.variations,
-                                                [variation.variation_name]: value
+                                  {participantMerch && participantMerch.quantity > 0 && merch.variations && merch.variations.length > 0 && (
+                                    <div className="mt-4 space-y-4">
+                                      <h5 className="text-sm font-medium text-gray-700">Select Options</h5>
+                                      {merch.variations.map((variation, varIndex) => (
+                                        <div key={varIndex} className="flex items-center gap-4">
+                                          <Label htmlFor={`merch_${index}_${merchIndex}_var_${varIndex}`} className="min-w-[100px]">
+                                            {variation.variation_name}
+                                          </Label>
+                                          <Select
+                                            value={participantMerch.variations?.[variation.variation_name] || ''}
+                                            onValueChange={(value) => {
+                                              const updatedMerchandise = [...form.merchandise]
+                                              const item = updatedMerchandise.find(m => m.merchandise_id === merch.id)
+                                              if (item) {
+                                                item.variations = {
+                                                  ...(item.variations || {}),
+                                                  [variation.variation_name]: value
+                                                }
+                                                updateParticipantForm(index, 'merchandise', updatedMerchandise)
                                               }
-                                              updateParticipantForm(index, 'merchandise', updatedMerchandise)
-                                            }
-                                          }}
-                                        >
-                                          <SelectTrigger id={`merch_${index}_${merchIndex}_var_${varIndex}`}>
-                                            <SelectValue placeholder={`Select ${variation.variation_name}`} />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {variation.variation_options.map((option: string, optIndex: number) => (
-                                              <SelectItem key={optIndex} value={option}>
-                                                {option}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                    ))}
+                                            }}
+                                          >
+                                            <SelectTrigger 
+                                              id={`merch_${index}_${merchIndex}_var_${varIndex}`}
+                                              className="w-[200px]"
+                                            >
+                                              <SelectValue placeholder={`Select ${variation.variation_name}`} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              {Array.isArray(variation.variation_options) ? variation.variation_options.map((option: string, optIndex: number) => (
+                                                <SelectItem key={optIndex} value={option}>
+                                                  {option}
+                                                </SelectItem>
+                                              )) : null}
+                                            </SelectContent>
+                                          </Select>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                   </div>
                                 )}
                               </CardContent>
