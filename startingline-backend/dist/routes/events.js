@@ -773,8 +773,8 @@ router.post('/', auth_local_1.authenticateToken, async (req, res) => {
                     for (const variation of variations) {
                         await supabase.createMerchandiseVariation({
                             merchandise_id: createdMerchandise.id,
-                            variation_name: variation.name,
-                            variation_options: variation.options || []
+                            variation_name: variation.variation_name,
+                            variation_options: variation.variation_options || []
                         });
                     }
                     console.log('✅ Merchandise variations created');
@@ -804,14 +804,153 @@ router.put('/:id', auth_local_1.authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
         const updateData = req.body;
-        const event = await supabase.updateEvent(id, updateData);
+        console.log('🔍 Updating event with data:', updateData);
+        console.log('🔍 Event ID:', id);
+        console.log('🔍 Request headers:', req.headers);
+        console.log('🔍 Request body type:', typeof updateData);
+        console.log('🔍 Request body keys:', Object.keys(updateData));
+        console.log('🔍 Date fields check:', {
+            end_date: updateData.end_date,
+            registration_deadline: updateData.registration_deadline,
+            start_date: updateData.start_date
+        });
+        console.log('🔍 Server restarted with latest changes');
+        const { distances, merchandise, ...eventFields } = updateData;
+        const mappedEventFields = {
+            ...eventFields,
+            primary_image_url: eventFields.image_url,
+            venue_name: eventFields.venue,
+            image_url: undefined,
+            venue: undefined
+        };
+        Object.keys(mappedEventFields).forEach(key => {
+            if (mappedEventFields[key] === undefined) {
+                delete mappedEventFields[key];
+            }
+        });
+        if ('country' in mappedEventFields) {
+            delete mappedEventFields.country;
+        }
+        if ('event_type' in mappedEventFields) {
+            delete mappedEventFields.event_type;
+        }
+        if ('gallery_images' in mappedEventFields) {
+            delete mappedEventFields.gallery_images;
+        }
+        if ('end_date' in mappedEventFields && mappedEventFields.end_date === '') {
+            mappedEventFields.end_date = null;
+        }
+        if ('registration_deadline' in mappedEventFields && mappedEventFields.registration_deadline === '') {
+            mappedEventFields.registration_deadline = null;
+        }
+        Object.keys(mappedEventFields).forEach(key => {
+            if (mappedEventFields[key] === '' && (key.includes('date') || key.includes('deadline'))) {
+                mappedEventFields[key] = null;
+            }
+        });
+        console.log('🔍 Final event update data:', mappedEventFields);
+        const updateFields = Object.keys(mappedEventFields);
+        if (updateFields.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'No valid fields to update'
+            });
+        }
+        const setClause = updateFields.map((field, index) => `${field} = $${index + 2}`).join(', ');
+        const query = `UPDATE events SET ${setClause} WHERE id = $1`;
+        const values = [id, ...updateFields.map(field => mappedEventFields[field])];
+        console.log('🔍 Update query:', query);
+        console.log('🔍 Update values:', values);
+        const result = await database_1.pool.query(query, values);
+        if (result.rowCount === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Event not found'
+            });
+        }
+        console.log('✅ Event updated successfully');
+        if (distances !== undefined) {
+            console.log('🔍 Updating distances:', distances);
+            await database_1.pool.query('DELETE FROM event_distances WHERE event_id = $1', [id]);
+            console.log('✅ Deleted existing distances');
+            if (distances && distances.length > 0) {
+                for (const distance of distances) {
+                    await database_1.pool.query(`
+            INSERT INTO event_distances (
+              event_id, name, distance_km, price, min_age, entry_limit,
+              start_time, free_for_seniors, free_for_disability, senior_age_threshold
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `, [
+                        id,
+                        distance.name,
+                        distance.distance_km,
+                        distance.price,
+                        distance.min_age,
+                        distance.entry_limit,
+                        distance.start_time,
+                        distance.free_for_seniors || false,
+                        distance.free_for_disability || false,
+                        distance.senior_age_threshold || 65
+                    ]);
+                }
+                console.log('✅ Created new distances');
+            }
+        }
+        if (merchandise !== undefined) {
+            console.log('🔍 Updating merchandise:', merchandise);
+            await database_1.pool.query('DELETE FROM merchandise_variations WHERE merchandise_id IN (SELECT id FROM event_merchandise WHERE event_id = $1)', [id]);
+            await database_1.pool.query('DELETE FROM event_merchandise WHERE event_id = $1', [id]);
+            console.log('✅ Deleted existing merchandise');
+            if (merchandise && merchandise.length > 0) {
+                for (const item of merchandise) {
+                    const { variations, ...merchandiseData } = item;
+                    const merchandiseResult = await database_1.pool.query(`
+            INSERT INTO event_merchandise (
+              event_id, name, description, price, image_url
+            ) VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+          `, [
+                        id,
+                        merchandiseData.name,
+                        merchandiseData.description,
+                        merchandiseData.price,
+                        merchandiseData.image_url
+                    ]);
+                    const merchandiseId = merchandiseResult.rows[0].id;
+                    if (variations && variations.length > 0) {
+                        for (const variation of variations) {
+                            await database_1.pool.query(`
+                INSERT INTO merchandise_variations (
+                  merchandise_id, variation_name, variation_options
+                ) VALUES ($1, $2, $3)
+              `, [
+                                merchandiseId,
+                                variation.variation_name,
+                                JSON.stringify(variation.variation_options || [])
+                            ]);
+                        }
+                    }
+                }
+                console.log('✅ Created new merchandise');
+            }
+        }
+        const updatedEventResult = await database_1.pool.query(`
+      SELECT * FROM events WHERE id = $1
+    `, [id]);
+        const updatedEvent = updatedEventResult.rows[0];
         res.json({
             success: true,
-            data: event
+            data: updatedEvent
         });
     }
     catch (error) {
         console.error('Update event error:', error);
+        console.error('Error stack:', error.stack);
+        console.error('Error details:', {
+            message: error.message,
+            name: error.name,
+            code: error.code
+        });
         res.status(500).json({
             success: false,
             error: error.message || 'Failed to update event'

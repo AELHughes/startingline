@@ -941,8 +941,8 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
           for (const variation of variations) {
             await supabase.createMerchandiseVariation({
               merchandise_id: createdMerchandise.id,
-              variation_name: variation.name,
-              variation_options: variation.options || []
+              variation_name: variation.variation_name,
+              variation_options: variation.variation_options || []
             })
           }
           console.log('✅ Merchandise variations created')
@@ -1143,8 +1143,8 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
                 ) VALUES ($1, $2, $3)
               `, [
                 merchandiseId,
-                variation.name,
-                JSON.stringify(variation.options || [])
+                variation.variation_name,
+                JSON.stringify(variation.variation_options || [])
               ])
             }
           }

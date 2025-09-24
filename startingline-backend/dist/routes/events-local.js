@@ -159,9 +159,53 @@ router.get('/my', auth_local_1.authenticateToken, auth_local_1.requireOrganiser,
     `;
         const result = await database_1.pool.query(query, [req.localUser.userId]);
         console.log(`✅ Found ${result.rows.length} events for organizer`);
+        const eventsWithDetails = await Promise.all(result.rows.map(async (event) => {
+            const distancesResult = await database_1.pool.query(`
+          SELECT 
+            ed.*,
+            ed.current_participants,
+            ed.is_full,
+            CASE 
+              WHEN ed.entry_limit IS NULL OR ed.entry_limit = 0 THEN 'unlimited'
+              WHEN ed.is_full THEN 'full'
+              WHEN ed.current_participants >= (ed.entry_limit * 0.9) THEN 'almost_full'
+              ELSE 'available'
+            END as capacity_status,
+            CASE 
+              WHEN ed.entry_limit IS NULL OR ed.entry_limit = 0 THEN 0
+              ELSE ed.entry_limit - ed.current_participants
+            END as available_spots
+          FROM event_distances ed 
+          WHERE ed.event_id = $1 
+          ORDER BY ed.distance_km ASC
+        `, [event.id]);
+            const merchandiseResult = await database_1.pool.query(`
+          SELECT 
+            em.*,
+            COALESCE(
+              json_agg(
+                json_build_object(
+                  'id', mv.id,
+                  'variation_name', mv.variation_name,
+                  'variation_options', mv.variation_options
+                )
+              ) FILTER (WHERE mv.id IS NOT NULL),
+              '[]'::json
+            ) as variations
+          FROM event_merchandise em
+          LEFT JOIN merchandise_variations mv ON em.id = mv.merchandise_id
+          WHERE em.event_id = $1
+          GROUP BY em.id
+        `, [event.id]);
+            return {
+                ...event,
+                distances: distancesResult.rows,
+                merchandise: merchandiseResult.rows
+            };
+        }));
         res.json({
             success: true,
-            data: result.rows
+            data: eventsWithDetails
         });
     }
     catch (error) {
@@ -529,7 +573,14 @@ router.put('/:id', auth_local_1.authenticateToken, async (req, res) => {
         for (const field of allowedFields) {
             if (updates[field] !== undefined) {
                 updateFields.push(`${field} = $${paramCounter}`);
-                updateValues.push(field === 'gallery_images' ? JSON.stringify(updates[field]) : updates[field]);
+                let fieldValue = updates[field];
+                if (field === 'gallery_images') {
+                    fieldValue = JSON.stringify(updates[field]);
+                }
+                else if ((field.includes('date') || field.includes('deadline')) && fieldValue === '') {
+                    fieldValue = null;
+                }
+                updateValues.push(fieldValue);
                 paramCounter++;
             }
         }
@@ -628,6 +679,71 @@ router.put('/:id', auth_local_1.authenticateToken, async (req, res) => {
             }
             catch (notificationError) {
                 console.error('❌ Failed to create edit notifications:', notificationError.message);
+            }
+        }
+        if (updates.distances !== undefined) {
+            console.log('🔍 Updating distances:', updates.distances);
+            await database_1.pool.query('DELETE FROM event_distances WHERE event_id = $1', [id]);
+            console.log('✅ Deleted existing distances');
+            if (updates.distances && updates.distances.length > 0) {
+                for (const distance of updates.distances) {
+                    await database_1.pool.query(`
+            INSERT INTO event_distances (
+              event_id, name, distance_km, price, min_age, entry_limit,
+              start_time, free_for_seniors, free_for_disability, senior_age_threshold
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `, [
+                        id,
+                        distance.name,
+                        distance.distance_km,
+                        distance.price,
+                        distance.min_age,
+                        distance.entry_limit,
+                        distance.start_time,
+                        distance.free_for_seniors || false,
+                        distance.free_for_disability || false,
+                        distance.senior_age_threshold || 65
+                    ]);
+                }
+                console.log('✅ Created new distances');
+            }
+        }
+        if (updates.merchandise !== undefined) {
+            console.log('🔍 Updating merchandise:', updates.merchandise);
+            await database_1.pool.query('DELETE FROM merchandise_variations WHERE merchandise_id IN (SELECT id FROM event_merchandise WHERE event_id = $1)', [id]);
+            await database_1.pool.query('DELETE FROM event_merchandise WHERE event_id = $1', [id]);
+            console.log('✅ Deleted existing merchandise');
+            if (updates.merchandise && updates.merchandise.length > 0) {
+                for (const item of updates.merchandise) {
+                    const { variations, ...merchandiseData } = item;
+                    const merchandiseResult = await database_1.pool.query(`
+            INSERT INTO event_merchandise (
+              event_id, name, description, price, image_url
+            ) VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+          `, [
+                        id,
+                        merchandiseData.name,
+                        merchandiseData.description,
+                        merchandiseData.price,
+                        merchandiseData.image_url
+                    ]);
+                    const merchandiseId = merchandiseResult.rows[0].id;
+                    if (variations && variations.length > 0) {
+                        for (const variation of variations) {
+                            await database_1.pool.query(`
+                INSERT INTO merchandise_variations (
+                  merchandise_id, variation_name, variation_options
+                ) VALUES ($1, $2, $3)
+              `, [
+                                merchandiseId,
+                                variation.variation_name,
+                                JSON.stringify(variation.variation_options || [])
+                            ]);
+                        }
+                    }
+                }
+                console.log('✅ Created new merchandise');
             }
         }
         console.log('✅ Updated event:', updatedEvent.name);
@@ -1467,18 +1583,115 @@ router.get('/:eventId/participant-analytics', auth_local_1.authenticateToken, au
         ed.price as distance_price,
         o.account_holder_first_name,
         o.account_holder_last_name,
-        o.account_holder_email
+        o.account_holder_email,
+        -- Merchandise data aggregation
+        COALESCE(
+          json_agg(
+            CASE WHEN tm.id IS NOT NULL THEN
+              json_build_object(
+                'merchandise_id', tm.merchandise_id,
+                'merchandise_name', em.name,
+                'quantity', tm.quantity,
+                'unit_price', tm.unit_price,
+                'total_price', tm.total_price,
+                'variation_id', tm.variation_id,
+                'variations', COALESCE(mv.variation_options::json, '[]'::json),
+                'variation_name', mv.variation_name
+              )
+            END
+          ) FILTER (WHERE tm.id IS NOT NULL),
+          '[]'::json
+        ) as merchandise
       FROM tickets t
       JOIN event_distances ed ON t.distance_id = ed.id
       JOIN orders o ON t.order_id = o.id
+      LEFT JOIN ticket_merchandise tm ON t.id = tm.ticket_id
+      LEFT JOIN event_merchandise em ON tm.merchandise_id = em.id
+      LEFT JOIN merchandise_variations mv ON tm.variation_id = mv.id
       WHERE t.event_id = $1
+      GROUP BY 
+        t.id, t.ticket_number, t.participant_first_name, t.participant_last_name,
+        t.participant_email, t.participant_mobile, t.participant_date_of_birth,
+        t.participant_disabled, t.participant_medical_aid_name, t.participant_medical_aid_number,
+        t.emergency_contact_name, t.emergency_contact_number, t.amount, t.status,
+        t.created_at, t.requires_temp_license, t.permanent_license_number,
+        ed.name, ed.price, o.account_holder_first_name, o.account_holder_last_name,
+        o.account_holder_email
       ORDER BY t.created_at DESC
+    `, [eventId]);
+        const merchandiseResult = await database_1.pool.query(`
+      SELECT 
+        em.id,
+        em.name,
+        em.description,
+        em.price,
+        em.image_url,
+        em.available_stock,
+        em.current_stock,
+        COALESCE(
+          json_agg(
+            CASE WHEN mv.id IS NOT NULL THEN
+              json_build_object(
+                'id', mv.id,
+                'variation_name', mv.variation_name,
+                'variation_options', mv.variation_options::json
+              )
+            END
+          ) FILTER (WHERE mv.id IS NOT NULL),
+          '[]'::json
+        ) as variations,
+        -- Count how many have been sold (overall)
+        COALESCE(SUM(tm.quantity), 0) as total_sold
+      FROM event_merchandise em
+      LEFT JOIN merchandise_variations mv ON em.id = mv.merchandise_id
+      LEFT JOIN ticket_merchandise tm ON em.id = tm.merchandise_id
+      LEFT JOIN tickets t ON tm.ticket_id = t.id AND t.event_id = $1
+      WHERE em.event_id = $1
+      GROUP BY em.id, em.name, em.description, em.price, em.image_url, em.available_stock, em.current_stock
+      ORDER BY em.name
+    `, [eventId]);
+        const soldVariationsResult = await database_1.pool.query(`
+      SELECT 
+        tm.merchandise_id,
+        mv.id as variation_id,
+        mv.variation_name,
+        mv.variation_options::json as variation_options,
+        SUM(tm.quantity) as total_sold
+      FROM ticket_merchandise tm
+      JOIN merchandise_variations mv ON tm.variation_id = mv.id
+      JOIN tickets t ON tm.ticket_id = t.id
+      WHERE t.event_id = $1
+      GROUP BY tm.merchandise_id, mv.id, mv.variation_name, mv.variation_options
     `, [eventId]);
         const totalEntryLimit = distancesResult.rows.reduce((sum, distance) => {
             return sum + (distance.entry_limit || 0);
         }, 0);
         const totalParticipants = totalParticipantsResult.rows[0];
         const totalActiveParticipants = totalParticipants.active_participants || 0;
+        const processedMerchandise = merchandiseResult.rows.map(item => {
+            const soldVariations = soldVariationsResult.rows.filter(sold => sold.merchandise_id === item.id);
+            const processedVariations = item.variations.map((variation) => {
+                const soldData = soldVariations.find(sold => sold.variation_id === variation.id);
+                const processedOptions = variation.variation_options.map((option) => {
+                    const originalStock = option.stock || 0;
+                    const soldQuantity = soldData ? (soldData.total_sold || 0) : 0;
+                    const remaining = Math.max(0, originalStock - soldQuantity);
+                    return {
+                        ...option,
+                        sold: soldQuantity,
+                        remaining: remaining
+                    };
+                });
+                return {
+                    ...variation,
+                    variation_options: processedOptions
+                };
+            });
+            return {
+                ...item,
+                variations: processedVariations
+            };
+        });
         const analytics = {
             event: {
                 id: event.id,
@@ -1505,7 +1718,8 @@ router.get('/:eventId/participant-analytics', auth_local_1.authenticateToken, au
                 active_participants: parseInt(distance.active_participants) || 0,
                 utilization_percentage: distance.entry_limit > 0 ? Math.round((parseInt(distance.active_participants) / distance.entry_limit) * 100) : 0
             })),
-            participants: participantsResult.rows
+            participants: participantsResult.rows,
+            merchandise: processedMerchandise
         };
         res.json({
             success: true,

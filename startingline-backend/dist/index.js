@@ -19,6 +19,7 @@ const email_settings_1 = __importDefault(require("./routes/email-settings"));
 const debug_1 = __importDefault(require("./routes/debug"));
 const articles_1 = __importDefault(require("./routes/articles"));
 const participant_registration_1 = __importDefault(require("./routes/participant-registration"));
+const user_licenses_1 = __importDefault(require("./routes/user-licenses"));
 const errorHandler_1 = require("./middleware/errorHandler");
 const notFound_1 = require("./middleware/notFound");
 dotenv_1.default.config();
@@ -52,6 +53,7 @@ app.use('/api/admin', email_settings_1.default);
 app.use('/api/debug', debug_1.default);
 app.use('/api/articles', articles_1.default);
 app.use('/api/participant-registration', participant_registration_1.default);
+app.use('/api/user-licenses', user_licenses_1.default);
 app.use(notFound_1.notFound);
 app.use(errorHandler_1.errorHandler);
 app.listen(PORT, async () => {

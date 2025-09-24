@@ -201,17 +201,18 @@ router.get('/event/:eventId/registration-details', async (req, res) => {
         const merchandiseResult = await database_1.pool.query(`
       SELECT 
         em.id, em.name, em.description, em.price, em.image_url,
+        em.available_stock, em.current_stock,
         json_agg(
           json_build_object(
             'id', mv.id,
-            'name', mv.variation_name,
-            'options', mv.variation_options
+            'variation_name', mv.variation_name,
+            'variation_options', mv.variation_options
           )
         ) as variations
       FROM event_merchandise em
       LEFT JOIN merchandise_variations mv ON em.id = mv.merchandise_id
       WHERE em.event_id = $1
-      GROUP BY em.id, em.name, em.description, em.price, em.image_url
+      GROUP BY em.id, em.name, em.description, em.price, em.image_url, em.available_stock, em.current_stock
     `, [eventId]);
         res.json({
             success: true,
@@ -291,6 +292,9 @@ router.post('/save-participant', auth_local_1.authenticateToken, async (req, res
     try {
         const userId = req.localUser.userId;
         const participantData = req.body;
+        console.log('🔍 Save participant - received data:', participantData);
+        console.log('🔍 Save participant - first_name:', participantData.first_name);
+        console.log('🔍 Save participant - last_name:', participantData.last_name);
         const userProfileResult = await database_1.pool.query('SELECT id FROM user_profiles WHERE user_id = $1', [userId]);
         if (userProfileResult.rows.length === 0) {
             return res.status(404).json({
@@ -307,13 +311,13 @@ router.post('/save-participant', auth_local_1.authenticateToken, async (req, res
       RETURNING *
     `, [
             userProfileId,
-            participantData.first_name,
-            participantData.last_name,
-            participantData.email,
-            participantData.mobile,
-            participantData.date_of_birth,
-            participantData.medical_aid_name || null,
-            participantData.medical_aid_number || null,
+            participantData.first_name || participantData.participant_first_name,
+            participantData.last_name || participantData.participant_last_name,
+            participantData.email || participantData.participant_email,
+            participantData.mobile || participantData.participant_mobile,
+            participantData.date_of_birth || participantData.participant_date_of_birth,
+            participantData.medical_aid_name || participantData.participant_medical_aid || null,
+            participantData.medical_aid_number || participantData.participant_medical_aid_number || null,
             participantData.emergency_contact_name,
             participantData.emergency_contact_number
         ]);
@@ -443,6 +447,31 @@ router.post('/register', auth_local_1.optionalAuth, async (req, res) => {
                 error: 'Event ID and participants are required'
             });
         }
+        console.log('🔍 Checking merchandise stock...');
+        for (const participant of orderData.participants) {
+            if (participant.participant.merchandise && participant.participant.merchandise.length > 0) {
+                for (const item of participant.participant.merchandise) {
+                    const stockResult = await client.query('SELECT current_stock FROM event_merchandise WHERE id = $1', [item.merchandise_id]);
+                    if (stockResult.rows.length === 0) {
+                        await client.query('ROLLBACK');
+                        client.release();
+                        return res.status(400).json({
+                            success: false,
+                            error: `Merchandise item ${item.merchandise_id} not found`
+                        });
+                    }
+                    const currentStock = stockResult.rows[0].current_stock;
+                    if (currentStock < item.quantity) {
+                        await client.query('ROLLBACK');
+                        client.release();
+                        return res.status(400).json({
+                            success: false,
+                            error: `Insufficient stock for merchandise item ${item.merchandise_id}`
+                        });
+                    }
+                }
+            }
+        }
         console.log('🔍 Checking capacity for all distances...');
         for (const item of orderData.participants) {
             console.log('🔍 Checking capacity for distance:', item.distance_id);
@@ -505,14 +534,22 @@ router.post('/register', auth_local_1.optionalAuth, async (req, res) => {
             if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
                 age--;
             }
-            let isFree = false;
-            if (item.participant.disabled && distance.free_for_disabled) {
-                isFree = true;
+            let ticketAmount = Number(distance.price);
+            if (item.adjusted_price !== undefined) {
+                ticketAmount = Number(item.adjusted_price);
+                console.log('Using adjusted price from frontend:', ticketAmount);
             }
-            else if (distance.free_for_seniors && age >= distance.senior_age_threshold) {
-                isFree = true;
+            else {
+                let isFree = false;
+                if (item.participant.disabled && distance.free_for_disabled) {
+                    isFree = true;
+                }
+                else if (distance.free_for_seniors && age >= distance.senior_age_threshold) {
+                    isFree = true;
+                }
+                ticketAmount = isFree ? 0 : Number(distance.price);
+                console.log('Calculated price on backend:', ticketAmount);
             }
-            const ticketAmount = isFree ? 0 : Number(distance.price);
             console.log('Ticket amount:', ticketAmount, 'Type:', typeof ticketAmount);
             totalAmount += ticketAmount;
             console.log('Running total:', totalAmount, 'Type:', typeof totalAmount);
@@ -524,8 +561,10 @@ router.post('/register', auth_local_1.optionalAuth, async (req, res) => {
             });
         }
         console.log('Calculated total amount:', totalAmount, 'Type:', typeof totalAmount);
-        const finalTotalAmount = Number(totalAmount);
-        console.log('Final total amount:', finalTotalAmount, 'Type:', typeof finalTotalAmount);
+        const licenseFees = orderData.license_fees || 0;
+        console.log('License fees:', licenseFees, 'Type:', typeof licenseFees);
+        const finalTotalAmount = Number(totalAmount) + Number(licenseFees);
+        console.log('Final total amount (including license fees):', finalTotalAmount, 'Type:', typeof finalTotalAmount);
         console.log('🔍 STEP 2A: Creating order for user ID:', userId);
         console.log('🔍 Order data fields:');
         console.log('  - event_id:', orderData.event_id);
@@ -602,6 +641,14 @@ router.post('/register', auth_local_1.optionalAuth, async (req, res) => {
                     merch.quantity,
                     merch.unit_price,
                     merch.unit_price * merch.quantity
+                ]);
+                await client.query(`
+          UPDATE event_merchandise
+          SET current_stock = current_stock - $1
+          WHERE id = $2
+        `, [
+                    merch.quantity,
+                    merch.merchandise_id
                 ]);
             }
             tickets.push(ticket);
@@ -691,6 +738,20 @@ router.post('/register', auth_local_1.optionalAuth, async (req, res) => {
         console.log('🔍 Order data:', order);
         console.log('🔍 Event data:', event);
         console.log('🔍 Tickets data:', tickets.length, 'tickets');
+        const merchandiseResult = await database_1.pool.query(`
+      SELECT 
+        tm.merchandise_id,
+        tm.quantity,
+        tm.unit_price,
+        tm.total_price,
+        em.name as merchandise_name,
+        em.description,
+        em.image_url
+      FROM ticket_merchandise tm
+      JOIN event_merchandise em ON tm.merchandise_id = em.id
+      JOIN tickets t ON tm.ticket_id = t.id
+      WHERE t.order_id = $1
+    `, [order.id]);
         const responseData = {
             order: {
                 ...order,
@@ -698,7 +759,8 @@ router.post('/register', auth_local_1.optionalAuth, async (req, res) => {
                 start_date: event.start_date,
                 start_time: event.start_time,
                 city: event.city,
-                category: event.category
+                category: event.category,
+                merchandise: merchandiseResult.rows
             },
             tickets: tickets.map(ticket => ({
                 ...ticket,
@@ -835,7 +897,7 @@ router.get('/my-orders', auth_local_1.authenticateToken, async (req, res) => {
             'amount', t.amount,
             'status', t.status
           )
-        ) as tickets
+        ) FILTER (WHERE t.id IS NOT NULL) as tickets
       FROM orders o
       JOIN events e ON o.event_id = e.id
       LEFT JOIN tickets t ON o.id = t.order_id
@@ -843,9 +905,29 @@ router.get('/my-orders', auth_local_1.authenticateToken, async (req, res) => {
       GROUP BY o.id, o.event_id, o.total_amount, o.status, o.created_at, e.name, e.start_date, e.start_time, e.city
       ORDER BY o.created_at DESC
     `, [userId]);
+        const ordersWithMerchandise = await Promise.all(result.rows.map(async (order) => {
+            const merchandiseResult = await database_1.pool.query(`
+          SELECT 
+            tm.merchandise_id,
+            tm.quantity,
+            tm.unit_price,
+            tm.total_price,
+            em.name as merchandise_name,
+            em.description,
+            em.image_url
+          FROM ticket_merchandise tm
+          JOIN event_merchandise em ON tm.merchandise_id = em.id
+          JOIN tickets t ON tm.ticket_id = t.id
+          WHERE t.order_id = $1
+        `, [order.id]);
+            return {
+                ...order,
+                merchandise: merchandiseResult.rows
+            };
+        }));
         res.json({
             success: true,
-            data: result.rows
+            data: ordersWithMerchandise
         });
     }
     catch (error) {
@@ -988,13 +1070,13 @@ router.put('/saved-participants/:participantId', auth_local_1.authenticateToken,
       WHERE id = $10 AND user_profile_id = $11
       RETURNING *
     `, [
-            updateData.participant_first_name,
-            updateData.participant_last_name,
-            updateData.participant_email,
-            updateData.participant_mobile,
-            updateData.participant_date_of_birth,
-            updateData.participant_medical_aid || null,
-            updateData.participant_medical_aid_number || null,
+            updateData.first_name || updateData.participant_first_name,
+            updateData.last_name || updateData.participant_last_name,
+            updateData.email || updateData.participant_email,
+            updateData.mobile || updateData.participant_mobile,
+            updateData.date_of_birth || updateData.participant_date_of_birth,
+            updateData.medical_aid_name || updateData.participant_medical_aid || null,
+            updateData.medical_aid_number || updateData.participant_medical_aid_number || null,
             updateData.emergency_contact_name,
             updateData.emergency_contact_number,
             participantId,
