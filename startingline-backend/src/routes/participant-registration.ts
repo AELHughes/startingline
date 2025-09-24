@@ -948,6 +948,22 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
     console.log('🔍 Event data:', event)
     console.log('🔍 Tickets data:', tickets.length, 'tickets')
     
+    // Get merchandise for this order
+    const merchandiseResult = await pool.query(`
+      SELECT 
+        tm.merchandise_id,
+        tm.quantity,
+        tm.unit_price,
+        tm.total_price,
+        em.name as merchandise_name,
+        em.description,
+        em.image_url
+      FROM ticket_merchandise tm
+      JOIN event_merchandise em ON tm.merchandise_id = em.id
+      JOIN tickets t ON tm.ticket_id = t.id
+      WHERE t.order_id = $1
+    `, [order.id])
+
     const responseData: any = {
       order: {
         ...order,
@@ -955,7 +971,8 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
         start_date: event.start_date,
         start_time: event.start_time,
         city: event.city,
-        category: event.category
+        category: event.category,
+        merchandise: merchandiseResult.rows
       },
       tickets: tickets.map(ticket => ({
         ...ticket,
