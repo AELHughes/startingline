@@ -972,8 +972,8 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
                 ) VALUES ($1, $2, $3)
               `, [
                 merchandiseId,
-                variation.name,
-                JSON.stringify(variation.options || [])
+                variation.variation_name,
+                JSON.stringify(variation.variation_options || [])
               ])
             }
           }
@@ -2057,12 +2057,74 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
         ed.price as distance_price,
         o.account_holder_first_name,
         o.account_holder_last_name,
-        o.account_holder_email
+        o.account_holder_email,
+        -- Merchandise data aggregation
+        COALESCE(
+          json_agg(
+            CASE WHEN tm.id IS NOT NULL THEN
+              json_build_object(
+                'merchandise_id', tm.merchandise_id,
+                'merchandise_name', em.name,
+                'quantity', tm.quantity,
+                'unit_price', tm.unit_price,
+                'total_price', tm.total_price,
+                'variation_id', tm.variation_id,
+                'variations', COALESCE(mv.variation_options, '[]'::json),
+                'variation_name', mv.variation_name
+              )
+            END
+          ) FILTER (WHERE tm.id IS NOT NULL),
+          '[]'::json
+        ) as merchandise
       FROM tickets t
       JOIN event_distances ed ON t.distance_id = ed.id
       JOIN orders o ON t.order_id = o.id
+      LEFT JOIN ticket_merchandise tm ON t.id = tm.ticket_id
+      LEFT JOIN event_merchandise em ON tm.merchandise_id = em.id
+      LEFT JOIN merchandise_variations mv ON tm.variation_id = mv.id
       WHERE t.event_id = $1
+      GROUP BY 
+        t.id, t.ticket_number, t.participant_first_name, t.participant_last_name,
+        t.participant_email, t.participant_mobile, t.participant_date_of_birth,
+        t.participant_disabled, t.participant_medical_aid_name, t.participant_medical_aid_number,
+        t.emergency_contact_name, t.emergency_contact_number, t.amount, t.status,
+        t.created_at, t.requires_temp_license, t.permanent_license_number,
+        ed.name, ed.price, o.account_holder_first_name, o.account_holder_last_name,
+        o.account_holder_email
       ORDER BY t.created_at DESC
+    `, [eventId])
+
+    // Get event merchandise with variations and stock levels
+    const merchandiseResult = await pool.query(`
+      SELECT 
+        em.id,
+        em.name,
+        em.description,
+        em.price,
+        em.image_url,
+        em.available_stock,
+        em.current_stock,
+        COALESCE(
+          json_agg(
+            CASE WHEN mv.id IS NOT NULL THEN
+              json_build_object(
+                'id', mv.id,
+                'variation_name', mv.variation_name,
+                'variation_options', mv.variation_options
+              )
+            END
+          ) FILTER (WHERE mv.id IS NOT NULL),
+          '[]'::json
+        ) as variations,
+        -- Count how many have been sold
+        COALESCE(SUM(tm.quantity), 0) as total_sold
+      FROM event_merchandise em
+      LEFT JOIN merchandise_variations mv ON em.id = mv.merchandise_id
+      LEFT JOIN ticket_merchandise tm ON em.id = tm.merchandise_id
+      LEFT JOIN tickets t ON tm.ticket_id = t.id AND t.event_id = $1
+      WHERE em.event_id = $1
+      GROUP BY em.id, em.name, em.description, em.price, em.image_url, em.available_stock, em.current_stock
+      ORDER BY em.name
     `, [eventId])
 
     // Calculate total entry limit
@@ -2100,7 +2162,8 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
         active_participants: parseInt(distance.active_participants) || 0,
         utilization_percentage: distance.entry_limit > 0 ? Math.round((parseInt(distance.active_participants) / distance.entry_limit) * 100) : 0
       })),
-      participants: participantsResult.rows
+      participants: participantsResult.rows,
+      merchandise: merchandiseResult.rows
     }
 
     res.json({
