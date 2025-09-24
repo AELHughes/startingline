@@ -1386,7 +1386,7 @@ export default function AdminEventDetailPage() {
                                 </div>
                                 <div className="flex flex-col items-end">
                                   <Badge variant="outline" className="text-base font-medium mb-2">
-                                    R {Number(item.base_price).toFixed(2)}
+                                    R {(item.price || item.base_price || 0).toFixed(2)}
                                   </Badge>
                                   <Badge variant={item.current_stock > 0 ? 'default' : 'destructive'} className="text-sm">
                                     {item.current_stock} in stock
