@@ -44,20 +44,24 @@ export async function generateTicketPDF(ticket: Ticket): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 100))
 
     // Generate QR code
-    const qrCodeData = await QRCode.toDataURL(JSON.stringify({
-      ticket_number: ticket.ticket_number,
-      participant_name: `${ticket.participant_first_name} ${ticket.participant_last_name}`,
-      event_name: ticket.event_name,
-      distance_name: ticket.distance_name
-    }))
+    const qrCodeData = await QRCode.toDataURL(ticket.ticket_number, {
+      errorCorrectionLevel: 'H',
+      margin: 2,
+      width: 200,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      }
+    })
 
     // Add QR code to the template
-    const qrCodeElement = document.getElementById('qr-code')
+    const qrCodeElement = iframeDoc.getElementById('qr-code')
     if (qrCodeElement) {
-      const qrImage = document.createElement('img')
+      const qrImage = iframeDoc.createElement('img')
       qrImage.src = qrCodeData
       qrImage.style.width = '100%'
       qrImage.style.height = '100%'
+      qrImage.style.display = 'block'
       qrCodeElement.appendChild(qrImage)
     }
 

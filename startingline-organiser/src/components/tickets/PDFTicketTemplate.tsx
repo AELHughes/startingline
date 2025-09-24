@@ -150,12 +150,26 @@ export default function PDFTicketTemplate({ ticket }: PDFTicketTemplateProps) {
         </div>
       )}
 
-      {/* QR Code Placeholder */}
-      <div id="qr-code" style={{
-        width: '128px',
-        height: '128px',
-        margin: '0 auto 16px'
-      }}></div>
+      {/* QR Code Section */}
+      <div style={{
+        textAlign: 'center',
+        marginBottom: '32px'
+      }}>
+        <div id="qr-code" style={{
+          width: '200px',
+          height: '200px',
+          margin: '0 auto 16px',
+          padding: '8px',
+          border: '1px solid #E5E7EB',
+          borderRadius: '8px',
+          backgroundColor: '#FFFFFF'
+        }}></div>
+        <p style={{
+          fontSize: '16px',
+          fontWeight: '600',
+          color: '#1F2937'
+        }}>Ticket #{ticket.ticket_number}</p>
+      </div>
 
       {/* Footer */}
       <div style={{
