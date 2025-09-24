@@ -51,9 +51,10 @@ interface Merchandise {
   description?: string
   price: number
   image_url?: string
-  available_stock: number
-  current_stock: number
-  variations: Array<{
+  available_stock?: number
+  current_stock?: number
+  variations?: Array<{
+    id?: string
     variation_name: string
     variation_options: string[]
   }>
@@ -1702,11 +1703,17 @@ export default function EventRegistrationPage() {
                                         </div>
 
                                         {/* Variations Selection */}
-                                        {participantMerch?.quantity > 0 && merch.variations?.length > 0 && (
+                                        {participantMerch && participantMerch.quantity > 0 && merch.variations && merch.variations.length > 0 && (
                                           <div className="border-t pt-4 mt-4">
                                             <Label className="block mb-4 text-base font-medium">Select Options</Label>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                              {merch.variations?.map((variation, varIndex) => variation.variation_name && variation.variation_options?.length > 0 && (
+                                              {merch.variations.map((variation, varIndex) => {
+                                                // Skip variations without proper data
+                                                if (!variation.variation_name || !variation.variation_options || variation.variation_options.length === 0) {
+                                                  return null
+                                                }
+                                                
+                                                return (
                                                 <div key={varIndex}>
                                                   <Label 
                                                     htmlFor={`merch_${index}_${merchIndex}_var_${varIndex}`}
@@ -1735,7 +1742,7 @@ export default function EventRegistrationPage() {
                                                       <SelectValue placeholder={`Select ${variation.variation_name}`} />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                      {variation.variation_options?.map((option: string, optIndex: number) => (
+                                                      {variation.variation_options.map((option: string, optIndex: number) => (
                                                         <SelectItem key={optIndex} value={option}>
                                                           {option}
                                                         </SelectItem>
@@ -1743,7 +1750,8 @@ export default function EventRegistrationPage() {
                                                     </SelectContent>
                                                   </Select>
                                                 </div>
-                                              ))}
+                                                )
+                                              })}
                                             </div>
                                           </div>
                                         )}

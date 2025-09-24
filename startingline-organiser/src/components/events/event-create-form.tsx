@@ -187,34 +187,22 @@ export default function EventCreateForm({
         primary_image_url: initialData.primary_image_url || '',
         gallery_images: initialData.gallery_images || [],
         distances: initialData.distances || [],
-        merchandise: (initialData.merchandise || []).map((merch: any) => {
-          console.log('🔍 Processing merchandise:', JSON.stringify(merch, null, 2))
-          const processedMerch = {
-            ...merch,
-            variations: (merch.variations || []).map((variation: any) => {
-              console.log('🔍 Processing variation:', JSON.stringify(variation, null, 2))
-              const processedVariation = {
-                name: variation.variation_name || variation.name || '',
-                options: (variation.variation_options || variation.options || []).map((option: any) => {
-                  console.log('🔍 Processing option:', typeof option, JSON.stringify(option, null, 2))
-                  // Handle both old format (string) and new format (object)
-                  if (typeof option === 'string') {
-                    return { value: option, stock: 0 }
-                  } else if (typeof option === 'object' && option !== null && option.value !== undefined) {
-                    return { value: option.value || '', stock: option.stock || 0 }
-                  } else {
-                    console.warn('🚨 Unexpected option format:', option)
-                    return { value: String(option || ''), stock: 0 }
-                  }
-                })
+        merchandise: (initialData.merchandise || []).map((merch: any) => ({
+          ...merch,
+          variations: (merch.variations || []).map((variation: any) => ({
+            name: variation.variation_name || variation.name || '',
+            options: (variation.variation_options || variation.options || []).map((option: any) => {
+              // Handle both old format (string) and new format (object)
+              if (typeof option === 'string') {
+                return { value: option, stock: 0 }
+              } else if (typeof option === 'object' && option !== null && option.value !== undefined) {
+                return { value: option.value || '', stock: option.stock || 0 }
+              } else {
+                return { value: String(option || ''), stock: 0 }
               }
-              console.log('✅ Processed variation:', JSON.stringify(processedVariation, null, 2))
-              return processedVariation
             })
-          }
-          console.log('✅ Processed merchandise:', JSON.stringify(processedMerch, null, 2))
-          return processedMerch
-        })
+          }))
+        }))
       })
       console.log('✅ Form data set with:', {
         start_date: formatDateForInput(initialData.start_date) || '',
@@ -390,8 +378,8 @@ export default function EventCreateForm({
         }))
       }
 
-      console.log('🚀 Transformed event data for backend:', JSON.stringify(eventData, null, 2))
-      console.log('📦 Merchandise with variations:', JSON.stringify(eventData.merchandise, null, 2))
+      console.log('🚀 Transformed event data for backend:', eventData.name)
+      console.log('📦 Merchandise count:', eventData.merchandise?.length || 0)
 
       let result
       if (isEditing && eventId) {
