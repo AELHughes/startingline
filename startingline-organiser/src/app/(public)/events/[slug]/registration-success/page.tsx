@@ -2,12 +2,46 @@
 
 import React, { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
-import { participantRegistrationApi, type Order } from '@/lib/api'
+import { participantRegistrationApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle, Download, Mail, MessageSquare, Calendar, MapPin, Clock } from 'lucide-react'
+import { CheckCircle, Download, Mail, MessageSquare, Calendar, MapPin, Clock, Package } from 'lucide-react'
 import Link from 'next/link'
+
+// Define Order type with merchandise
+interface Merchandise {
+  merchandise_id: string
+  quantity: number
+  unit_price: number
+  total_price: number
+  merchandise_name: string
+  description?: string
+  image_url?: string
+}
+
+interface Ticket {
+  id: string
+  ticket_number: string
+  participant_name: string
+  participant_email: string
+  amount: string
+  status: string
+}
+
+interface Order {
+  id: string
+  event_id: string
+  total_amount: string
+  status: string
+  created_at: string
+  event_name: string
+  start_date: string
+  start_time: string
+  city: string
+  tickets: Ticket[]
+  merchandise: Merchandise[]
+}
 
 export default function RegistrationSuccessPage() {
   const params = useParams()
@@ -239,6 +273,63 @@ export default function RegistrationSuccessPage() {
           </Card>
         )}
 
+        {/* Merchandise */}
+        {order.merchandise && order.merchandise.length > 0 && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Your Merchandise
+              </CardTitle>
+              <CardDescription>
+                Items you've purchased with your registration.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {order.merchandise.map((item, index) => (
+                  <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center gap-4">
+                      {item.image_url && (
+                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100">
+                          <img
+                            src={item.image_url}
+                            alt={item.merchandise_name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                      <div>
+                        <h4 className="font-semibold">{item.merchandise_name}</h4>
+                        {item.description && (
+                          <p className="text-sm text-gray-600">{item.description}</p>
+                        )}
+                        <p className="text-sm text-gray-500">Quantity: {item.quantity}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold">R{Number(item.total_price).toFixed(2)}</div>
+                      <div className="text-sm text-gray-500">
+                        R{Number(item.unit_price).toFixed(2)} each
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {/* Merchandise Total */}
+                <div className="border-t pt-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold">Merchandise Total:</span>
+                    <span className="font-semibold text-lg">
+                      R{order.merchandise.reduce((total, item) => total + Number(item.total_price), 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Next Steps */}
         <Card className="mb-8">
           <CardHeader>
@@ -284,6 +375,20 @@ export default function RegistrationSuccessPage() {
                   </p>
                 </div>
               </div>
+              
+              {order.merchandise && order.merchandise.length > 0 && (
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Package className="h-4 w-4 text-orange-600" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold">Merchandise Collection</h4>
+                    <p className="text-sm text-gray-600">
+                      Your merchandise will be available for collection at the event registration desk on the day of the event.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

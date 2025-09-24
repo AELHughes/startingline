@@ -282,17 +282,18 @@ router.get('/event/:eventId/registration-details', async (req: Request, res: Res
     const merchandiseResult = await pool.query(`
       SELECT 
         em.id, em.name, em.description, em.price, em.image_url,
+        em.available_stock, em.current_stock,
         json_agg(
           json_build_object(
             'id', mv.id,
-            'name', mv.variation_name,
-            'options', mv.variation_options
+            'variation_name', mv.variation_name,
+            'variation_options', mv.variation_options
           )
         ) as variations
       FROM event_merchandise em
       LEFT JOIN merchandise_variations mv ON em.id = mv.merchandise_id
       WHERE em.event_id = $1
-      GROUP BY em.id, em.name, em.description, em.price, em.image_url
+      GROUP BY em.id, em.name, em.description, em.price, em.image_url, em.available_stock, em.current_stock
     `, [eventId])
 
     res.json({
@@ -587,6 +588,39 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
       } as ApiResponse)
     }
 
+    // Check merchandise stock before processing
+    console.log('🔍 Checking merchandise stock...')
+    for (const participant of orderData.participants) {
+      if (participant.participant.merchandise && participant.participant.merchandise.length > 0) {
+        for (const item of participant.participant.merchandise) {
+          // Get current stock
+          const stockResult = await client.query(
+            'SELECT current_stock FROM event_merchandise WHERE id = $1',
+            [item.merchandise_id]
+          )
+
+          if (stockResult.rows.length === 0) {
+            await client.query('ROLLBACK')
+            client.release()
+            return res.status(400).json({
+              success: false,
+              error: `Merchandise item ${item.merchandise_id} not found`
+            } as ApiResponse)
+          }
+
+          const currentStock = stockResult.rows[0].current_stock
+          if (currentStock < item.quantity) {
+            await client.query('ROLLBACK')
+            client.release()
+            return res.status(400).json({
+              success: false,
+              error: `Insufficient stock for merchandise item ${item.merchandise_id}`
+            } as ApiResponse)
+          }
+        }
+      }
+    }
+
     // Check capacity for each distance before processing
     console.log('🔍 Checking capacity for all distances...')
     for (const item of orderData.participants) {
@@ -777,8 +811,9 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
 
       const ticket = ticketResult.rows[0]
 
-      // Add merchandise if selected
+      // Add merchandise if selected and update stock
       for (const merch of ticketDetail.merchandise) {
+        // Create merchandise order
         await client.query(`
           INSERT INTO ticket_merchandise (
             ticket_id, merchandise_id, variation_id, quantity, unit_price, total_price
@@ -790,6 +825,16 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
           merch.quantity,
           merch.unit_price,
           merch.unit_price * merch.quantity
+        ])
+
+        // Update stock
+        await client.query(`
+          UPDATE event_merchandise
+          SET current_stock = current_stock - $1
+          WHERE id = $2
+        `, [
+          merch.quantity,
+          merch.merchandise_id
         ])
       }
 
@@ -1071,7 +1116,7 @@ router.get('/my-orders', authenticateToken, async (req: Request, res: Response) 
         o.id, o.event_id, o.total_amount, o.status, o.created_at,
         e.name as event_name, e.start_date, e.start_time, e.city,
         json_agg(
-          json_build_object(
+          DISTINCT json_build_object(
             'id', t.id,
             'ticket_number', t.ticket_number,
             'participant_name', t.participant_first_name || ' ' || t.participant_last_name,
@@ -1079,7 +1124,7 @@ router.get('/my-orders', authenticateToken, async (req: Request, res: Response) 
             'amount', t.amount,
             'status', t.status
           )
-        ) as tickets
+        ) FILTER (WHERE t.id IS NOT NULL) as tickets
       FROM orders o
       JOIN events e ON o.event_id = e.id
       LEFT JOIN tickets t ON o.id = t.order_id
@@ -1088,9 +1133,34 @@ router.get('/my-orders', authenticateToken, async (req: Request, res: Response) 
       ORDER BY o.created_at DESC
     `, [userId])
 
+    // Get merchandise for each order
+    const ordersWithMerchandise = await Promise.all(
+      result.rows.map(async (order) => {
+        const merchandiseResult = await pool.query(`
+          SELECT 
+            tm.merchandise_id,
+            tm.quantity,
+            tm.unit_price,
+            tm.total_price,
+            em.name as merchandise_name,
+            em.description,
+            em.image_url
+          FROM ticket_merchandise tm
+          JOIN event_merchandise em ON tm.merchandise_id = em.id
+          JOIN tickets t ON tm.ticket_id = t.id
+          WHERE t.order_id = $1
+        `, [order.id])
+
+        return {
+          ...order,
+          merchandise: merchandiseResult.rows
+        }
+      })
+    )
+
     res.json({
       success: true,
-      data: result.rows
+      data: ordersWithMerchandise
     } as ApiResponse)
 
   } catch (error: any) {
