@@ -1,8 +1,8 @@
-import puppeteer from 'puppeteer'
+import puppeteer, { Browser } from 'puppeteer'
 import { TicketData } from '../types/index'
 
 export async function generatePDFTicket(ticketData: TicketData): Promise<Buffer> {
-  let browser: puppeteer.Browser | null = null
+  let browser: Browser | null = null
   
   try {
     // Launch browser

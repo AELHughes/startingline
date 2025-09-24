@@ -2156,11 +2156,11 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
       const soldVariations = soldVariationsResult.rows.filter(sold => sold.merchandise_id === item.id)
       
       // Process variations to include sold quantities and remaining stock
-      const processedVariations = item.variations.map(variation => {
+      const processedVariations = item.variations.map((variation: any) => {
         const soldData = soldVariations.find(sold => sold.variation_id === variation.id)
         
         // Process variation options to include stock tracking
-        const processedOptions = variation.variation_options.map(option => {
+        const processedOptions = variation.variation_options.map((option: any) => {
           const originalStock = option.stock || 0
           const soldQuantity = soldData ? (soldData.total_sold || 0) : 0
           const remaining = Math.max(0, originalStock - soldQuantity)
