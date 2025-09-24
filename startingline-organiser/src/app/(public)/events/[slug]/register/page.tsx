@@ -56,7 +56,7 @@ interface Merchandise {
   variations?: Array<{
     id?: string
     variation_name: string
-    variation_options: string[]
+    variation_options: any[]
   }>
 }
 
@@ -1619,7 +1619,8 @@ export default function EventRegistrationPage() {
                       <div className="space-y-4">
                         {registrationDetails.event.merchandise.map((merch, merchIndex) => {
                           const participantMerch = form.merchandise.find(m => m.merchandise_id === merch.id)
-                          const isOutOfStock = merch.current_stock <= 0
+                          const merchWithStock = merch as any // Type assertion for stock properties
+                          const isOutOfStock = (merchWithStock.current_stock || 0) <= 0
                           
                           return (
                             <Card key={merchIndex} className={`relative ${isOutOfStock ? 'opacity-60' : ''}`}>
@@ -1658,11 +1659,11 @@ export default function EventRegistrationPage() {
                                               id={`merch_${index}_${merchIndex}_quantity`}
                                               type="number"
                                               min="0"
-                                              max={merch.current_stock}
+                                              max={merchWithStock.current_stock || 0}
                                               value={participantMerch?.quantity || 0}
                                               onChange={(e) => {
                                                 const quantity = parseInt(e.target.value, 10) || 0
-                                                if (quantity > merch.current_stock) return
+                                                if (quantity > (merchWithStock.current_stock || 0)) return
 
                                                 const updatedMerchandise = [...form.merchandise]
                                                 const existingIndex = updatedMerchandise.findIndex(m => m.merchandise_id === merch.id)
@@ -1678,8 +1679,8 @@ export default function EventRegistrationPage() {
                                                     variations: existingIndex !== -1 
                                                       ? updatedMerchandise[existingIndex].variations || {}
                                                       : {},
-                                                    available_stock: merch.available_stock,
-                                                    current_stock: merch.current_stock
+                                                  available_stock: merch.available_stock || 0,
+                                                  current_stock: merch.current_stock || 0
                                                   }
 
                                                   if (existingIndex !== -1) {
@@ -1742,11 +1743,31 @@ export default function EventRegistrationPage() {
                                                       <SelectValue placeholder={`Select ${variation.variation_name}`} />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                      {variation.variation_options.map((option: string, optIndex: number) => (
-                                                        <SelectItem key={optIndex} value={option}>
-                                                          {option}
-                                                        </SelectItem>
-                                                      ))}
+                                                      {variation.variation_options.map((option: any, optIndex: number) => {
+                                                        // Handle both object and string formats
+                                                        const optionValue = typeof option === 'object' && option.value !== undefined 
+                                                          ? option.value 
+                                                          : String(option)
+                                                        const optionStock = typeof option === 'object' && option.stock !== undefined 
+                                                          ? option.stock 
+                                                          : null
+                                                        const isOutOfStock = optionStock !== null && optionStock <= 0
+                                                        
+                                                        return (
+                                                          <SelectItem 
+                                                            key={optIndex} 
+                                                            value={optionValue}
+                                                            disabled={isOutOfStock}
+                                                          >
+                                                            {optionValue}
+                                                            {optionStock !== null && (
+                                                              <span className="text-xs text-gray-500 ml-2">
+                                                                {isOutOfStock ? '(Out of Stock)' : `(${optionStock} left)`}
+                                                              </span>
+                                                            )}
+                                                          </SelectItem>
+                                                        )
+                                                      })}
                                                     </SelectContent>
                                                   </Select>
                                                 </div>
@@ -1873,7 +1894,7 @@ export default function EventRegistrationPage() {
                         
                         <div className="flex justify-between font-semibold border-t pt-1 mt-2">
                           <span>Total</span>
-                          <span>R{Number(currentPrice + (form.merchandise?.reduce((total, item) => total + (Number(item.price || 0) * item.quantity), 0) || 0)).toFixed(2)}</span>
+                          <span>R{Number(currentPrice + (form.merchandise?.reduce((total, item) => total + (Number(item.unit_price || 0) * item.quantity), 0) || 0)).toFixed(2)}</span>
                         </div>
                       </div>
                     </div>
