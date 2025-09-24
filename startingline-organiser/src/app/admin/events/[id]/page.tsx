@@ -1404,8 +1404,13 @@ export default function AdminEventDetailPage() {
                                         <span className="text-sm font-medium text-gray-700">{variation.variation_name}: </span>
                                         <span className="text-sm text-gray-600">
                                           {Array.isArray(variation.variation_options) 
-                                            ? variation.variation_options.join(', ')
-                                            : variation.variation_options}
+                                            ? variation.variation_options.map((option: any) => {
+                                                if (typeof option === 'object' && option.value !== undefined) {
+                                                  return `${option.value} (${option.stock} in stock)`
+                                                }
+                                                return String(option)
+                                              }).join(', ')
+                                            : String(variation.variation_options)}
                                         </span>
                                       </div>
                                     ))}
