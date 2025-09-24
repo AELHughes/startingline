@@ -1695,18 +1695,18 @@ export default function EventRegistrationPage() {
                                               }}
                                               className="w-24"
                                             />
-                                            <span className="text-sm text-gray-600">
-                                              {merch.current_stock} available
-                                            </span>
+                                              <span className="text-sm text-gray-600">
+                                                {merch.current_stock || 0} items available
+                                              </span>
                                           </div>
                                         </div>
 
                                         {/* Variations Selection */}
-                                        {participantMerch && participantMerch.quantity > 0 && Array.isArray(merch.variations) && merch.variations.length > 0 && merch.variations.some(v => v.variation_name && Array.isArray(v.variation_options) && v.variation_options.length > 0) && (
+                                        {participantMerch?.quantity > 0 && merch.variations?.length > 0 && (
                                           <div className="border-t pt-4 mt-4">
                                             <Label className="block mb-4 text-base font-medium">Select Options</Label>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                              {merch.variations.filter(v => v.variation_name && Array.isArray(v.variation_options) && v.variation_options.length > 0).map((variation, varIndex) => (
+                                              {merch.variations?.map((variation, varIndex) => variation.variation_name && variation.variation_options?.length > 0 && (
                                                 <div key={varIndex}>
                                                   <Label 
                                                     htmlFor={`merch_${index}_${merchIndex}_var_${varIndex}`}
@@ -1735,11 +1735,11 @@ export default function EventRegistrationPage() {
                                                       <SelectValue placeholder={`Select ${variation.variation_name}`} />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                      {Array.isArray(variation.variation_options) ? variation.variation_options.map((option: string, optIndex: number) => (
+                                                      {variation.variation_options?.map((option: string, optIndex: number) => (
                                                         <SelectItem key={optIndex} value={option}>
                                                           {option}
                                                         </SelectItem>
-                                                      )) : null}
+                                                      ))}
                                                     </SelectContent>
                                                   </Select>
                                                 </div>
