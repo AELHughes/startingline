@@ -50,10 +50,20 @@ export default function PastEventsPage() {
 
   const downloadTicket = async (ticketId: string) => {
     try {
-      alert('Ticket download functionality will be implemented with PDF generation')
+      // Get ticket details
+      const response = await participantRegistrationApi.getTicket(ticketId)
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to get ticket details')
+      }
+
+      // Import the PDF generator dynamically
+      const { generateTicketPDF } = await import('@/lib/pdfGenerator')
+      
+      // Generate and download the PDF
+      await generateTicketPDF(response.data)
     } catch (error) {
       console.error('Error downloading ticket:', error)
-      alert('Failed to download ticket')
+      alert('Failed to download ticket. Please try again.')
     }
   }
 
