@@ -322,24 +322,45 @@ export default function EventPage() {
                                       {variation.variation_name}
                                     </label>
                                     <div className="grid grid-cols-3 gap-1 mt-1">
-                                      {variation.variation_options.map((option: string, index: number) => (
-                                        <button
-                                          key={`${variation.id}-${index}`}
-                                          className={`p-2 border rounded cursor-pointer transition-all ${
-                                            selectedMerchandise[merch.id] === variation.id 
-                                              ? 'border-blue-500 bg-blue-50' 
-                                              : 'border-gray-200 hover:border-gray-300'
-                                          }`}
-                                          onClick={() => {
-                                            setSelectedMerchandise(prev => ({
-                                              ...prev,
-                                              [merch.id]: variation.id
-                                            }))
-                                          }}
-                                        >
-                                          <span className="text-xs">{option}</span>
-                                        </button>
-                                      ))}
+                                      {variation.variation_options.map((option: any, index: number) => {
+                                        // Handle both object and string formats
+                                        const optionValue = typeof option === 'object' && option.value !== undefined 
+                                          ? option.value 
+                                          : String(option)
+                                        const optionStock = typeof option === 'object' && option.stock !== undefined 
+                                          ? option.stock 
+                                          : null
+                                        const isOutOfStock = optionStock !== null && optionStock <= 0
+                                        
+                                        return (
+                                          <button
+                                            key={`${variation.id}-${index}`}
+                                            disabled={isOutOfStock}
+                                            className={`p-2 border rounded cursor-pointer transition-all ${
+                                              isOutOfStock 
+                                                ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                : selectedMerchandise[merch.id] === variation.id 
+                                                  ? 'border-blue-500 bg-blue-50' 
+                                                  : 'border-gray-200 hover:border-gray-300'
+                                            }`}
+                                            onClick={() => {
+                                              if (!isOutOfStock) {
+                                                setSelectedMerchandise(prev => ({
+                                                  ...prev,
+                                                  [merch.id]: variation.id
+                                                }))
+                                              }
+                                            }}
+                                          >
+                                            <span className="text-xs">{optionValue}</span>
+                                            {optionStock !== null && (
+                                              <span className="text-xs block text-gray-500 mt-1">
+                                                {isOutOfStock ? 'Out of Stock' : `${optionStock} left`}
+                                              </span>
+                                            )}
+                                          </button>
+                                        )
+                                      })}
                                     </div>
                                   </div>
                                 ))}
