@@ -1133,7 +1133,7 @@ router.get('/my-orders', authenticateToken, async (req: Request, res: Response) 
         o.id, o.event_id, o.total_amount, o.status, o.created_at,
         e.name as event_name, e.start_date, e.start_time, e.city,
         json_agg(
-          DISTINCT json_build_object(
+          json_build_object(
             'id', t.id,
             'ticket_number', t.ticket_number,
             'participant_name', t.participant_first_name || ' ' || t.participant_last_name,
