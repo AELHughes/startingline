@@ -2116,7 +2116,7 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
           ) FILTER (WHERE mv.id IS NOT NULL),
           '[]'::json
         ) as variations,
-        -- Count how many have been sold
+        -- Count how many have been sold (overall)
         COALESCE(SUM(tm.quantity), 0) as total_sold
       FROM event_merchandise em
       LEFT JOIN merchandise_variations mv ON em.id = mv.merchandise_id
@@ -2126,6 +2126,21 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
       GROUP BY em.id, em.name, em.description, em.price, em.image_url, em.available_stock, em.current_stock
       ORDER BY em.name
     `, [eventId])
+    
+    // Get sold quantities per variation option
+    const soldVariationsResult = await pool.query(`
+      SELECT 
+        tm.merchandise_id,
+        mv.id as variation_id,
+        mv.variation_name,
+        mv.variation_options::json as variation_options,
+        SUM(tm.quantity) as total_sold
+      FROM ticket_merchandise tm
+      JOIN merchandise_variations mv ON tm.variation_id = mv.id
+      JOIN tickets t ON tm.ticket_id = t.id
+      WHERE t.event_id = $1
+      GROUP BY tm.merchandise_id, mv.id, mv.variation_name, mv.variation_options
+    `, [eventId])
 
     // Calculate total entry limit
     const totalEntryLimit = distancesResult.rows.reduce((sum, distance) => {
@@ -2134,6 +2149,40 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
 
     const totalParticipants = totalParticipantsResult.rows[0]
     const totalActiveParticipants = totalParticipants.active_participants || 0
+
+    // Process merchandise data to include sold quantities per variation
+    const processedMerchandise = merchandiseResult.rows.map(item => {
+      // Get sold data for this merchandise item
+      const soldVariations = soldVariationsResult.rows.filter(sold => sold.merchandise_id === item.id)
+      
+      // Process variations to include sold quantities and remaining stock
+      const processedVariations = item.variations.map(variation => {
+        const soldData = soldVariations.find(sold => sold.variation_id === variation.id)
+        
+        // Process variation options to include stock tracking
+        const processedOptions = variation.variation_options.map(option => {
+          const originalStock = option.stock || 0
+          const soldQuantity = soldData ? (soldData.total_sold || 0) : 0
+          const remaining = Math.max(0, originalStock - soldQuantity)
+          
+          return {
+            ...option,
+            sold: soldQuantity,
+            remaining: remaining
+          }
+        })
+        
+        return {
+          ...variation,
+          variation_options: processedOptions
+        }
+      })
+      
+      return {
+        ...item,
+        variations: processedVariations
+      }
+    })
 
     // Prepare analytics data
     const analytics = {
@@ -2163,7 +2212,7 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
         utilization_percentage: distance.entry_limit > 0 ? Math.round((parseInt(distance.active_participants) / distance.entry_limit) * 100) : 0
       })),
       participants: participantsResult.rows,
-      merchandise: merchandiseResult.rows
+      merchandise: processedMerchandise
     }
 
     res.json({
