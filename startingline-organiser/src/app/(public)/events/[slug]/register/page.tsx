@@ -1627,7 +1627,7 @@ export default function EventRegistrationPage() {
                                   <div>
                                     <h4 className="font-medium">{merch.name}</h4>
                                     <p className="text-sm text-gray-600">{merch.description}</p>
-                                    <p className="text-sm font-medium mt-1">R {merch.price.toFixed(2)}</p>
+                                    <p className="text-sm font-medium mt-1">R {Number(merch.price || 0).toFixed(2)}</p>
                                   </div>
                                   {merch.image_url && (
                                     <img 
@@ -1824,7 +1824,7 @@ export default function EventRegistrationPage() {
                                         </span>
                                       )}
                                     </span>
-                                    <span>R{Number(item.unit_price * item.quantity).toFixed(2)}</span>
+                                    <span>R{Number((Number(item.unit_price || 0) * (item.quantity || 0))).toFixed(2)}</span>
                                   </div>
                                 </div>
                               ))}
@@ -1834,7 +1834,7 @@ export default function EventRegistrationPage() {
                         
                         <div className="flex justify-between font-semibold border-t pt-1 mt-2">
                           <span>Total</span>
-                          <span>R{Number(currentPrice + (form.merchandise?.reduce((total, item) => total + (item.price * item.quantity), 0) || 0)).toFixed(2)}</span>
+                          <span>R{Number(currentPrice + (form.merchandise?.reduce((total, item) => total + (Number(item.price || 0) * item.quantity), 0) || 0)).toFixed(2)}</span>
                         </div>
                       </div>
                     </div>
@@ -1890,7 +1890,7 @@ export default function EventRegistrationPage() {
                   {/* Final Total */}
                   <div className="flex justify-between items-center text-lg font-semibold border-t pt-2">
                     <span>Total</span>
-                    <span>R{calculateTotal().toFixed(2)}</span>
+                    <span>R{Number(calculateTotal() || 0).toFixed(2)}</span>
                   </div>
                 </div>
               </CardContent>
