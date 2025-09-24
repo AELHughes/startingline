@@ -27,9 +27,14 @@ interface EventDistance {
   senior_age_threshold?: number
 }
 
+interface MerchandiseVariationOption {
+  value: string
+  stock: number
+}
+
 interface MerchandiseVariation {
   name: string
-  options: string[]
+  options: MerchandiseVariationOption[]
 }
 
 interface EventMerchandise {
@@ -38,8 +43,6 @@ interface EventMerchandise {
   description?: string
   price: number
   image_url?: string
-  available_stock: number
-  current_stock?: number
   variations: MerchandiseVariation[]
 }
 
@@ -296,10 +299,17 @@ export default function EventCreateForm({
     formData.merchandise.forEach((merch, index) => {
       if (!merch.name.trim()) newErrors[`merch_${index}_name`] = 'Merchandise name is required'
       if (merch.price < 0) newErrors[`merch_${index}_price`] = 'Price cannot be negative'
-      if (!merch.available_stock || merch.available_stock < 0) newErrors[`merch_${index}_stock`] = 'Available stock must be 0 or greater'
-      if (isEditing && merch.current_stock !== undefined && merch.current_stock > merch.available_stock) {
-        newErrors[`merch_${index}_stock`] = 'Available stock cannot be less than current stock'
-      }
+      
+      // Validate variations have stock
+      merch.variations.forEach((variation, vIndex) => {
+        if (variation.name.trim() && variation.options.length > 0) {
+          variation.options.forEach((option, oIndex) => {
+            if (option.value.trim() && option.stock < 0) {
+              newErrors[`merch_${index}_var_${vIndex}_opt_${oIndex}_stock`] = 'Stock cannot be negative'
+            }
+          })
+        }
+      })
     })
 
     setErrors(newErrors)
@@ -463,8 +473,6 @@ export default function EventCreateForm({
           description: '',
           price: 0,
           image_url: '',
-          available_stock: 100,
-          current_stock: 100,
           variations: []
         }
       ]
@@ -496,7 +504,7 @@ export default function EventCreateForm({
               ...merch,
               variations: [
                 ...merch.variations,
-                { name: '', options: [''] }
+                { name: '', options: [{ value: '', stock: 0 }] }
               ]
             }
           : merch
@@ -548,7 +556,7 @@ export default function EventCreateForm({
               ...merch,
               variations: merch.variations.map((variation, vi) =>
                 vi === variationIndex
-                  ? { ...variation, options: [...variation.options, ''] }
+                  ? { ...variation, options: [...variation.options, { value: '', stock: 0 }] }
                   : variation
               )
             }
@@ -582,7 +590,8 @@ export default function EventCreateForm({
     merchIndex: number,
     variationIndex: number,
     optionIndex: number,
-    value: string
+    field: 'value' | 'stock',
+    value: string | number
   ) => {
     setFormData(prev => ({
       ...prev,
@@ -595,7 +604,7 @@ export default function EventCreateForm({
                   ? {
                       ...variation,
                       options: variation.options.map((option, oi) =>
-                        oi === optionIndex ? value : option
+                        oi === optionIndex ? { ...option, [field]: value } : option
                       )
                     }
                   : variation
@@ -1351,7 +1360,7 @@ export default function EventCreateForm({
                           </Button>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <Label htmlFor={`merch_${merchIndex}_name`} className="mb-2 font-medium">Item Name *</Label>
                             <Input
@@ -1383,28 +1392,6 @@ export default function EventCreateForm({
                             )}
                           </div>
 
-                          <div>
-                            <Label htmlFor={`merch_${merchIndex}_stock`} className="mb-2 font-medium">Available Stock *</Label>
-                            <Input
-                              id={`merch_${merchIndex}_stock`}
-                              type="number"
-                              min="0"
-                              value={merch.available_stock || ''}
-                              onChange={(e) => updateMerchandise(merchIndex, 'available_stock', parseInt(e.target.value, 10) || 0)}
-                              placeholder="100"
-                              className={errors[`merch_${merchIndex}_stock`] ? 'border-red-500' : ''}
-                            />
-                            {errors[`merch_${merchIndex}_stock`] && (
-                              <p className="text-sm text-red-500 mt-1">{errors[`merch_${merchIndex}_stock`]}</p>
-                            )}
-                            {isEditing && merch.current_stock !== undefined && (
-                              <div className="mt-2 flex items-center gap-2">
-                                <Badge variant={merch.current_stock > 0 ? 'default' : 'destructive'}>
-                                  {merch.current_stock} in stock
-                                </Badge>
-                              </div>
-                            )}
-                          </div>
                         </div>
 
                         <div className="mt-4">
@@ -1501,14 +1488,22 @@ export default function EventCreateForm({
                                 </div>
 
                                 <div className="space-y-2">
-                                  <Label className="text-sm">Options</Label>
+                                  <Label className="text-sm">Options & Stock</Label>
                                   {(variation.options || []).map((option, optionIndex) => (
                                     <div key={optionIndex} className="flex items-center gap-2">
                                       <Input
-                                        value={option}
-                                        onChange={(e) => updateVariationOption(merchIndex, variationIndex, optionIndex, e.target.value)}
-                                        placeholder="Option value"
+                                        value={option.value}
+                                        onChange={(e) => updateVariationOption(merchIndex, variationIndex, optionIndex, 'value', e.target.value)}
+                                        placeholder="Option value (e.g., Small)"
                                         className="flex-1"
+                                      />
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        value={option.stock}
+                                        onChange={(e) => updateVariationOption(merchIndex, variationIndex, optionIndex, 'stock', parseInt(e.target.value) || 0)}
+                                        placeholder="Stock"
+                                        className="w-20"
                                       />
                                       <Button
                                         type="button"
