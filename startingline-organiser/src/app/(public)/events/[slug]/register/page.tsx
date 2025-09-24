@@ -1679,8 +1679,8 @@ export default function EventRegistrationPage() {
                                                     variations: existingIndex !== -1 
                                                       ? updatedMerchandise[existingIndex].variations || {}
                                                       : {},
-                                                  available_stock: merch.available_stock || 0,
-                                                  current_stock: merch.current_stock || 0
+                                                  available_stock: merchWithStock.available_stock || 0,
+                                                  current_stock: merchWithStock.current_stock || 0
                                                   }
 
                                                   if (existingIndex !== -1) {
