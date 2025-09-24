@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { 
   Users, 
   Calendar, 
@@ -595,56 +596,71 @@ export default function ParticipantsDashboard() {
                             </div>
                           </div>
 
-                          {/* Stock Information */}
-                          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div>
-                                <span className="text-gray-600">Available:</span>
-                                <span className="ml-1 font-medium">{item.available_stock}</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-600">Current:</span>
-                                <span className="ml-1 font-medium">{item.current_stock}</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-600">Sold:</span>
-                                <span className="ml-1 font-medium text-green-600">{item.total_sold}</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-600">Remaining:</span>
-                                <span className="ml-1 font-medium">{item.current_stock}</span>
+                          {/* Stock Information - only show if no variations or as summary */}
+                          {(!item.variations || item.variations.length === 0) && (
+                            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                  <span className="text-gray-600">Available:</span>
+                                  <span className="ml-1 font-medium">{item.available_stock}</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600">Current:</span>
+                                  <span className="ml-1 font-medium">{item.current_stock}</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600">Sold:</span>
+                                  <span className="ml-1 font-medium text-green-600">{item.total_sold}</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600">Remaining:</span>
+                                  <span className="ml-1 font-medium">{item.current_stock}</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
+                          )}
 
-                          {/* Variations */}
+                          {/* Variations with Stock Tracking */}
                           {item.variations && item.variations.length > 0 && (
                             <div className="mt-4">
-                              <h5 className="text-sm font-medium text-gray-700 mb-2">Variations:</h5>
-                              <div className="space-y-2">
+                              <h5 className="text-sm font-medium text-gray-700 mb-3">Stock by Variation:</h5>
+                              <div className="space-y-3">
                                 {item.variations.map((variation, index) => (
-                                  <div key={variation.id || index} className="text-xs">
-                                    <span className="font-medium text-gray-600">{variation.variation_name}:</span>
-                                    <div className="mt-1 flex flex-wrap gap-1">
+                                  <div key={variation.id || index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                                    <h6 className="font-medium text-gray-700 mb-2 text-sm">{variation.variation_name}</h6>
+                                    <div className="grid grid-cols-1 gap-2">
                                       {variation.variation_options.map((option: any, optIndex: number) => {
                                         const optionValue = typeof option === 'object' && option.value !== undefined 
                                           ? option.value 
                                           : String(option)
-                                        const optionStock = typeof option === 'object' && option.stock !== undefined 
+                                        const stock = typeof option === 'object' && option.stock !== undefined 
                                           ? option.stock 
-                                          : null
+                                          : 0
+                                        const sold = typeof option === 'object' && option.sold !== undefined 
+                                          ? option.sold 
+                                          : 0
+                                        const remaining = typeof option === 'object' && option.remaining !== undefined 
+                                          ? option.remaining 
+                                          : stock - sold
                                         
                                         return (
-                                          <Badge 
+                                          <div 
                                             key={optIndex} 
-                                            variant="secondary" 
-                                            className="text-xs"
+                                            className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded text-xs"
                                           >
-                                            {optionValue}
-                                            {optionStock !== null && (
-                                              <span className="ml-1 text-gray-500">({optionStock})</span>
-                                            )}
-                                          </Badge>
+                                            <span className="font-medium">{optionValue}</span>
+                                            <div className="flex items-center gap-3 text-xs">
+                                              <span className="text-gray-600">
+                                                Stock: <span className="font-medium">{stock}</span>
+                                              </span>
+                                              <span className="text-green-600">
+                                                Sold: <span className="font-medium">{sold}</span>
+                                              </span>
+                                              <span className={`font-medium ${remaining === 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                                                Remaining: {remaining}
+                                              </span>
+                                            </div>
+                                          </div>
                                         )
                                       })}
                                     </div>
@@ -725,24 +741,73 @@ export default function ParticipantsDashboard() {
                             {participant.merchandise && participant.merchandise.length > 0 ? (
                               <div className="flex items-center gap-1">
                                 <CheckCircle className="h-4 w-4 text-green-600" />
-                                <button
-                                  onClick={() => {
-                                    const merchDetails = participant.merchandise.map(m => {
-                                      let details = `${m.merchandise_name} (${m.quantity})`
-                                      if (m.variation_name && m.variations && m.variations.length > 0) {
-                                        const variations = m.variations.map((v: any) => 
-                                          typeof v === 'object' && v.value ? v.value : String(v)
-                                        ).join(', ')
-                                        details += ` - ${m.variation_name}: ${variations}`
-                                      }
-                                      return details
-                                    }).join('\n')
-                                    alert(`Merchandise purchased:\n\n${merchDetails}`)
-                                  }}
-                                  className="text-xs text-blue-600 hover:text-blue-800 underline"
-                                >
-                                  View
-                                </button>
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <button className="text-xs text-blue-600 hover:text-blue-800 underline">
+                                      View
+                                    </button>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-md">
+                                    <DialogHeader>
+                                      <DialogTitle className="flex items-center gap-2">
+                                        <ShoppingBag className="h-5 w-5" />
+                                        Merchandise Purchase
+                                      </DialogTitle>
+                                      <DialogDescription>
+                                        Items purchased by {participant.participant_first_name} {participant.participant_last_name}
+                                      </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="space-y-3">
+                                      {participant.merchandise.map((item, merchIndex) => (
+                                        <div key={merchIndex} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <h4 className="font-medium text-sm">{item.merchandise_name}</h4>
+                                            <Badge variant="outline" className="text-xs">
+                                              Qty: {item.quantity}
+                                            </Badge>
+                                          </div>
+                                          
+                                          {item.variation_name && item.variations && item.variations.length > 0 && (
+                                            <div className="text-xs space-y-1">
+                                              <span className="font-medium text-gray-600">{item.variation_name}:</span>
+                                              <div className="flex flex-wrap gap-1">
+                                                {item.variations.map((variation: any, varIndex: number) => {
+                                                  const value = typeof variation === 'object' && variation.value 
+                                                    ? variation.value 
+                                                    : String(variation)
+                                                  return (
+                                                    <Badge key={varIndex} variant="secondary" className="text-xs">
+                                                      {value}
+                                                    </Badge>
+                                                  )
+                                                })}
+                                              </div>
+                                            </div>
+                                          )}
+                                          
+                                          <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-300">
+                                            <span className="text-xs text-gray-600">
+                                              R{Number(item.unit_price).toFixed(2)} each
+                                            </span>
+                                            <span className="text-sm font-medium">
+                                              R{Number(item.total_price).toFixed(2)}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                      
+                                      {/* Total */}
+                                      <div className="border-t pt-3">
+                                        <div className="flex justify-between items-center">
+                                          <span className="font-medium text-sm">Total Merchandise:</span>
+                                          <span className="font-bold text-lg">
+                                            R{participant.merchandise.reduce((total, item) => total + Number(item.total_price), 0).toFixed(2)}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </DialogContent>
+                                </Dialog>
                               </div>
                             ) : (
                               <XCircle className="h-4 w-4 text-gray-400" />
