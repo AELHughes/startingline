@@ -797,7 +797,7 @@ export default function EventCreateForm({
           </TabsList>
 
           {/* Basic Information Tab */}
-          <TabsContent value="basic" className="mt-4 space-y-6">
+          <TabsContent value="basic" className="mt-6 space-y-6">
             <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-1">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
@@ -1057,7 +1057,7 @@ export default function EventCreateForm({
           </TabsContent>
 
           {/* Location Tab */}
-          <TabsContent value="location" className="mt-4 space-y-6">
+          <TabsContent value="location" className="mt-6 space-y-6">
             <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-1">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
@@ -1137,7 +1137,7 @@ export default function EventCreateForm({
           </TabsContent>
 
           {/* Distances Tab */}
-          <TabsContent value="distances" className="mt-4 space-y-6">
+          <TabsContent value="distances" className="mt-6 space-y-6">
             <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-1">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
@@ -1317,7 +1317,7 @@ export default function EventCreateForm({
           </TabsContent>
 
           {/* Merchandise Tab */}
-          <TabsContent value="merchandise" className="mt-4 space-y-6">
+          <TabsContent value="merchandise" className="mt-6 space-y-6">
             <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-1">
                 <InfoIcon className="h-4 w-4 text-amber-600" />
