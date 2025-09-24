@@ -797,7 +797,11 @@ export default function EventCreateForm({
           </TabsList>
 
           {/* Basic Information Tab */}
-          <TabsContent value="basic" className="space-y-6">
+          <TabsContent value="basic" className="mt-4 space-y-6">
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-gray-700">Required Information</h3>
+              <p className="text-sm text-gray-600">Please fill in all required fields marked with *</p>
+            </div>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1050,7 +1054,11 @@ export default function EventCreateForm({
           </TabsContent>
 
           {/* Location Tab */}
-          <TabsContent value="location" className="space-y-6">
+          <TabsContent value="location" className="mt-4 space-y-6">
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-gray-700">Required Information</h3>
+              <p className="text-sm text-gray-600">Please fill in all required fields marked with *</p>
+            </div>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1123,7 +1131,11 @@ export default function EventCreateForm({
           </TabsContent>
 
           {/* Distances Tab */}
-          <TabsContent value="distances" className="space-y-6">
+          <TabsContent value="distances" className="mt-4 space-y-6">
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-gray-700">Required Information</h3>
+              <p className="text-sm text-gray-600">At least one distance must be added with required fields marked with *</p>
+            </div>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1296,7 +1308,11 @@ export default function EventCreateForm({
           </TabsContent>
 
           {/* Merchandise Tab */}
-          <TabsContent value="merchandise" className="space-y-6">
+          <TabsContent value="merchandise" className="mt-4 space-y-6">
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-gray-700">Optional Information</h3>
+              <p className="text-sm text-gray-600">You can add merchandise items for participants to purchase during registration</p>
+            </div>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
