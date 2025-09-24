@@ -43,11 +43,30 @@ export async function generateTicketPDF(ticket: Ticket): Promise<void> {
     // Wait for React to finish rendering
     await new Promise(resolve => setTimeout(resolve, 100))
 
+    // Load logo image
+    const logoImage = new Image()
+    await new Promise((resolve, reject) => {
+      logoImage.onload = resolve
+      logoImage.onerror = reject
+      logoImage.src = '/images/logo.png'  // Make sure this path is correct
+    })
+
+    // Add logo to the template
+    const logoElement = iframeDoc.getElementById('logo')
+    if (logoElement) {
+      const logoImg = iframeDoc.createElement('img')
+      logoImg.src = logoImage.src
+      logoImg.style.width = 'auto'
+      logoImg.style.height = '100%'
+      logoImg.style.objectFit = 'contain'
+      logoElement.appendChild(logoImg)
+    }
+
     // Generate QR code
     const qrCodeData = await QRCode.toDataURL(ticket.ticket_number, {
       errorCorrectionLevel: 'H',
-      margin: 2,
-      width: 200,
+      margin: 1,
+      width: 100,
       color: {
         dark: '#000000',
         light: '#FFFFFF'

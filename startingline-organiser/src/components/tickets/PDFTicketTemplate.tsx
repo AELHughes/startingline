@@ -18,22 +18,35 @@ export default function PDFTicketTemplate({ ticket }: PDFTicketTemplateProps) {
       }}>
       {/* Header */}
       <div style={{
-        borderBottom: '2px solid #1F2937',
-        paddingBottom: '24px',
-        marginBottom: '24px'
+        borderBottom: '1px solid #1F2937',
+        paddingBottom: '16px',
+        marginBottom: '24px',
+        position: 'relative',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start'
       }}>
-        <h1 style={{
-          fontSize: '30px',
-          fontWeight: 'bold',
-          textAlign: 'center',
-          marginBottom: '8px'
-        }}>Event Ticket</h1>
-        <div style={{
-          textAlign: 'center',
-          color: '#4B5563'
-        }}>
-          <p>Ticket #{ticket.ticket_number}</p>
+        <div style={{ flex: 1 }}>
+          <h1 style={{
+            fontSize: '24px',
+            fontWeight: 'bold',
+            marginBottom: '4px'
+          }}>Event Ticket</h1>
+          <div style={{
+            color: '#4B5563',
+            fontSize: '12px'
+          }}>
+            <p>Ticket #{ticket.ticket_number}</p>
+          </div>
         </div>
+        <div id="logo" style={{
+          width: '100px',
+          height: '40px',
+          marginLeft: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}></div>
       </div>
 
       {/* Event Details */}
@@ -153,20 +166,15 @@ export default function PDFTicketTemplate({ ticket }: PDFTicketTemplateProps) {
       {/* QR Code Section */}
       <div style={{
         textAlign: 'center',
-        marginBottom: '32px'
+        marginBottom: '24px'
       }}>
         <div id="qr-code" style={{
-          width: '200px',
-          height: '200px',
-          margin: '0 auto 16px',
-          padding: '8px',
-          border: '1px solid #E5E7EB',
-          borderRadius: '8px',
-          backgroundColor: '#FFFFFF'
+          width: '100px',
+          height: '100px',
+          margin: '0 auto 8px'
         }}></div>
         <p style={{
-          fontSize: '16px',
-          fontWeight: '600',
+          fontSize: '12px',
           color: '#1F2937'
         }}>Ticket #{ticket.ticket_number}</p>
       </div>
