@@ -53,7 +53,7 @@ export async function generateTicketPDF(ticket: Ticket): Promise<void> {
           resolve(undefined)
         }
         logoImage.onerror = (error) => reject(new Error('Failed to load StartingLine logo: ' + error.message))
-        logoImage.src = '/SL_Logo_WtV2.png'
+        logoImage.src = '/Logo.png'
       })
 
       // Only try to add the logo if it loaded successfully
