@@ -121,7 +121,7 @@ export async function generateTicketPDF(ticket: Ticket): Promise<void> {
     )
 
     // Download the PDF
-    pdf.save(`${ticket.event_name} - ${ticket.participant_first_name} ${ticket.participant_last_name} - Ticket.pdf`)
+    pdf.save(`${ticket.event_name} - ${ticket.participant_first_name} ${ticket.participant_last_name} - Ticket #${ticket.ticket_number}.pdf`)
 
     // Clean up
     reactRoot.unmount()
