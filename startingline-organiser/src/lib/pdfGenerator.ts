@@ -43,23 +43,34 @@ export async function generateTicketPDF(ticket: Ticket): Promise<void> {
     // Wait for React to finish rendering
     await new Promise(resolve => setTimeout(resolve, 100))
 
-    // Load logo image
-    const logoImage = new Image()
-    await new Promise((resolve, reject) => {
-      logoImage.onload = resolve
-      logoImage.onerror = reject
-      logoImage.src = '/images/logo.png'  // Make sure this path is correct
-    })
+    // Load and add logo
+    let logoLoaded = false
+    try {
+      const logoImage = new Image()
+      await new Promise((resolve, reject) => {
+        logoImage.onload = () => {
+          logoLoaded = true
+          resolve(undefined)
+        }
+        logoImage.onerror = (error) => reject(new Error('Failed to load StartingLine logo: ' + error.message))
+        logoImage.src = '/SL_Logo_WtV2.png'
+      })
 
-    // Add logo to the template
-    const logoElement = iframeDoc.getElementById('logo')
-    if (logoElement) {
-      const logoImg = iframeDoc.createElement('img')
-      logoImg.src = logoImage.src
-      logoImg.style.width = 'auto'
-      logoImg.style.height = '100%'
-      logoImg.style.objectFit = 'contain'
-      logoElement.appendChild(logoImg)
+      // Only try to add the logo if it loaded successfully
+      if (logoLoaded) {
+        const logoElement = iframeDoc.getElementById('logo')
+        if (logoElement) {
+          const logoImg = iframeDoc.createElement('img')
+          logoImg.src = logoImage.src
+          logoImg.style.width = 'auto'
+          logoImg.style.height = '100%'
+          logoImg.style.objectFit = 'contain'
+          logoElement.appendChild(logoImg)
+        }
+      }
+    } catch (error) {
+      console.warn('Logo loading failed:', error)
+      // Continue without logo rather than failing the whole PDF generation
     }
 
     // Generate QR code
