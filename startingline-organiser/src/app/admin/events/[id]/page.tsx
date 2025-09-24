@@ -1365,39 +1365,55 @@ export default function AdminEventDetailPage() {
                     {event.merchandise && event.merchandise.length > 0 ? (
                       event.merchandise.map((item) => (
                         <div key={item.id} className="p-4 border border-gray-200 rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-semibold text-gray-900">{item.name}</h4>
-                            <Badge variant="outline">R{item.base_price}</Badge>
-                          </div>
-                          <p className="text-sm text-gray-600 mb-3">{item.description || 'No description'}</p>
-                          
-                          {item.image_url && (
-                            <div className="mb-3">
-                              <img
-                                src={item.image_url}
-                                alt={item.name}
-                                className="w-24 h-24 object-cover rounded-lg"
-                              />
-                            </div>
-                          )}
-                          
-                          {item.variations && item.variations.length > 0 && (
-                            <div>
-                              <Label className="text-sm font-medium text-gray-600 mb-2 block">Variations</Label>
-                              <div className="space-y-2">
-                                {item.variations.map((variation) => (
-                                  <div key={variation.id} className="text-sm">
-                                    <span className="font-medium">{variation.variation_name}:</span>
-                                    <span className="ml-2 text-gray-600">
-                                      {Array.isArray(variation.variation_options) 
-                                        ? variation.variation_options.join(', ')
-                                        : variation.variation_options}
-                                    </span>
-                                  </div>
-                                ))}
+                          <div className="flex gap-4">
+                            {/* Image */}
+                            {item.image_url && (
+                              <div className="flex-shrink-0">
+                                <img
+                                  src={item.image_url}
+                                  alt={item.name}
+                                  className="w-32 h-32 object-cover rounded-lg border border-gray-200"
+                                />
                               </div>
+                            )}
+                            
+                            {/* Details */}
+                            <div className="flex-grow">
+                              <div className="flex items-start justify-between mb-2">
+                                <div>
+                                  <h4 className="text-lg font-semibold text-gray-900">{item.name}</h4>
+                                  <p className="text-sm text-gray-600 mt-1">{item.description || 'No description'}</p>
+                                </div>
+                                <div className="flex flex-col items-end">
+                                  <Badge variant="outline" className="text-base font-medium mb-2">
+                                    R {Number(item.base_price).toFixed(2)}
+                                  </Badge>
+                                  <Badge variant={item.current_stock > 0 ? 'default' : 'destructive'} className="text-sm">
+                                    {item.current_stock} in stock
+                                  </Badge>
+                                </div>
+                              </div>
+                              
+                              {/* Variations */}
+                              {item.variations && item.variations.length > 0 && (
+                                <div className="mt-4">
+                                  <Label className="text-sm font-medium text-gray-700 mb-2 block">Available Options</Label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {item.variations.map((variation) => (
+                                      <div key={variation.id} className="bg-gray-50 rounded-lg p-2">
+                                        <span className="text-sm font-medium text-gray-700">{variation.variation_name}: </span>
+                                        <span className="text-sm text-gray-600">
+                                          {Array.isArray(variation.variation_options) 
+                                            ? variation.variation_options.join(', ')
+                                            : variation.variation_options}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                          )}
+                          </div>
                         </div>
                       ))
                     ) : (
