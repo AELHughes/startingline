@@ -657,6 +657,24 @@ export const eventsApi = {
         error: error instanceof Error ? error.message : 'Failed to get participant analytics'
       }
     }
+  },
+
+  // Get event by ID (for admin use) - using the same structure as existing methods
+  getEventById: async (eventId: string): Promise<any> => {
+    try {
+      console.log('🔍 Fetching event details for admin:', eventId)
+      
+      const response = await fetch(`${API_BASE}/api/events/${eventId}`, {
+        headers: getAuthHeaders()
+      })
+
+      const event = await handleApiResponse<Event>(response)
+      console.log('✅ Retrieved event details for admin')
+      return { data: event }
+    } catch (error) {
+      console.error('❌ Get event by ID error:', error)
+      throw error
+    }
   }
 }
 
@@ -1455,6 +1473,7 @@ class ParticipantRegistrationApi {
 
 export const participantRegistrationApi = new ParticipantRegistrationApi()
 
+
 // ============================================
 // API RESPONSE TYPES
 // ============================================
@@ -1464,4 +1483,67 @@ export interface ApiResponse<T = any> {
   data?: T
   error?: string
   message?: string
+}
+
+// Event-related types
+export interface Event {
+  id: string
+  name: string
+  slug?: string
+  category: string
+  status: 'draft' | 'pending_approval' | 'published' | 'cancelled'
+  start_date: string
+  start_time: string
+  venue_name?: string
+  address: string
+  city: string
+  province: string
+  license_required: boolean
+  temp_license_fee?: number
+  license_details?: string
+  primary_image_url?: string
+  image_url?: string
+  gallery_images?: string[]
+  description?: string
+  organiser_id: string
+  organiser_name?: string
+  created_at: string
+  updated_at: string
+  distances?: EventDistance[]
+  merchandise?: Merchandise[]
+  event_type?: string
+  location?: string
+  price?: string
+}
+
+export interface EventDistance {
+  id: string
+  event_id: string
+  name: string
+  distance_km: number
+  price: number
+  min_age?: number
+  entry_limit?: number
+  start_time?: string
+  free_for_seniors: boolean
+  free_for_disability: boolean
+  senior_age_threshold?: number
+}
+
+export interface CreateEventData {
+  name: string
+  category: string
+  description?: string
+  start_date: string
+  start_time: string
+  venue_name?: string
+  address: string
+  city: string
+  province: string
+  license_required: boolean
+  temp_license_fee?: number
+  license_details?: string
+  primary_image_url?: string
+  distances?: Partial<EventDistance>[]
+  merchandise?: Partial<Merchandise>[]
 }

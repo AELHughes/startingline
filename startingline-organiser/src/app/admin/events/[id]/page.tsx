@@ -12,7 +12,6 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { eventsApi } from '@/lib/api'
 import EventAuditTrail from '@/components/events/event-audit-trail'
 import { 
   CheckCircle, 
@@ -37,9 +36,13 @@ import {
   Trash2
 } from 'lucide-react'
 
+// Import the eventsApi back for now to avoid breaking the page
+import { eventsApi } from '@/lib/api'
+
 // Use the existing API service to fetch event details
 const fetchEventDetails = async (eventId: string) => {
-  return await eventsApi.getEventById(eventId)
+  const response = await eventsApi.getEventById(eventId)
+  return response.data
 }
 
 export default function AdminEventDetailPage() {
@@ -309,8 +312,8 @@ export default function AdminEventDetailPage() {
             <p className="text-gray-600">Review event details and provide feedback</p>
           </div>
           <div className="flex items-center space-x-3">
-            <Badge className={getStatusColor(event.status)}>
-              {event.status.replace('_', ' ')}
+            <Badge className={getStatusColor(event.status || 'draft')}>
+              {(event.status || 'draft').replace('_', ' ')}
             </Badge>
             <Button
               variant="outline"
@@ -1386,10 +1389,11 @@ export default function AdminEventDetailPage() {
                                 </div>
                                 <div className="flex flex-col items-end">
                                   <Badge variant="outline" className="text-base font-medium mb-2">
-                                    R {Number(item.price || item.base_price || 0).toFixed(2)}
+                                    R {Number((item as any).price || (item as any).base_price || 0).toFixed(2)}
                                   </Badge>
-                                  <Badge variant={item.current_stock > 0 ? 'default' : 'destructive'} className="text-sm">
-                                    {item.current_stock} in stock
+                                  {/* Stock is now tracked per variation option - see details below */}
+                                  <Badge variant="secondary" className="text-sm">
+                                    Stock per variation
                                   </Badge>
                                 </div>
                               </div>
@@ -1402,16 +1406,34 @@ export default function AdminEventDetailPage() {
                                     {item.variations.map((variation) => (
                                       <div key={variation.id} className="bg-gray-50 rounded-lg p-2">
                                         <span className="text-sm font-medium text-gray-700">{variation.variation_name}: </span>
-                                        <span className="text-sm text-gray-600">
+                                        <div className="space-y-1">
                                           {Array.isArray(variation.variation_options) 
-                                            ? variation.variation_options.map((option: any) => {
+                                            ? variation.variation_options.map((option: any, optIndex: number) => {
                                                 if (typeof option === 'object' && option.value !== undefined) {
-                                                  return `${option.value} (${option.stock} in stock)`
+                                                  const stockText = option.stock !== undefined 
+                                                    ? `${option.stock} available` 
+                                                    : option.current_stock !== undefined 
+                                                    ? `${option.current_stock} available`
+                                                    : 'Stock N/A'
+                                                  return (
+                                                    <div key={optIndex} className="flex justify-between items-center py-1 px-2 bg-white rounded border text-sm">
+                                                      <span className="font-medium">{option.value}</span>
+                                                      <span className="text-green-600">{stockText}</span>
+                                                    </div>
+                                                  )
                                                 }
-                                                return String(option)
-                                              }).join(', ')
-                                            : String(variation.variation_options)}
-                                        </span>
+                                                return (
+                                                  <div key={optIndex} className="py-1 px-2 bg-white rounded border text-sm">
+                                                    {String(option)}
+                                                  </div>
+                                                )
+                                              })
+                                            : (
+                                              <div className="py-1 px-2 bg-white rounded border text-sm">
+                                                {String(variation.variation_options)}
+                                              </div>
+                                            )}
+                                        </div>
                                       </div>
                                     ))}
                                   </div>

@@ -85,8 +85,10 @@ interface ParticipantAnalytics {
       unit_price: number
       total_price: number
       variation_id?: string
-      variations: any[]
+      variation_option_id?: string
+      variation_option_value?: string
       variation_name?: string
+      variations?: any[]
     }>
   }>
   merchandise: Array<{
@@ -195,12 +197,8 @@ export default function ParticipantsDashboard() {
           : ''
         const merchandiseVariations = hasMerchandise
           ? participant.merchandise.map(m => {
-              if (m.variation_name && m.variations && m.variations.length > 0) {
-                // Extract variation values from the variations array
-                const selectedVariations = m.variations.map((v: any) => 
-                  typeof v === 'object' && v.value ? v.value : String(v)
-                ).join(', ')
-                return `${m.merchandise_name}: ${m.variation_name} - ${selectedVariations}`
+              if (m.variation_name && m.variation_option_value) {
+                return `${m.merchandise_name}: ${m.variation_name} - ${m.variation_option_value}`
               }
               return `${m.merchandise_name}: No variations`
             }).join('; ')
@@ -571,7 +569,7 @@ export default function ParticipantsDashboard() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {analytics.merchandise.map((item) => (
                       <Card key={item.id} className="border-l-4 border-l-blue-500">
                         <CardContent className="pt-4">
@@ -626,7 +624,7 @@ export default function ParticipantsDashboard() {
                               <h5 className="text-sm font-medium text-gray-700 mb-3">Stock by Variation:</h5>
                               <div className="space-y-3">
                                 {item.variations.map((variation, index) => (
-                                  <div key={variation.id || index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                                  <div key={`${item.id}-variation-${index}`} className="border border-gray-200 rounded-lg p-3 bg-white">
                                     <h6 className="font-medium text-gray-700 mb-2 text-sm">{variation.variation_name}</h6>
                                     <div className="grid grid-cols-1 gap-2">
                                       {variation.variation_options.map((option: any, optIndex: number) => {
@@ -645,11 +643,11 @@ export default function ParticipantsDashboard() {
                                         
                                         return (
                                           <div 
-                                            key={optIndex} 
-                                            className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded text-xs"
+                                            key={`${item.id}-variation-${index}-option-${optIndex}`} 
+                                            className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded"
                                           >
                                             <span className="font-medium">{optionValue}</span>
-                                            <div className="flex items-center gap-3 text-xs">
+                                            <div className="flex items-center gap-4 text-sm">
                                               <span className="text-gray-600">
                                                 Stock: <span className="font-medium">{stock}</span>
                                               </span>
@@ -767,20 +765,13 @@ export default function ParticipantsDashboard() {
                                             </Badge>
                                           </div>
                                           
-                                          {item.variation_name && item.variations && item.variations.length > 0 && (
+                                          {item.variation_name && item.variation_option_value && (
                                             <div className="text-xs space-y-1">
                                               <span className="font-medium text-gray-600">{item.variation_name}:</span>
                                               <div className="flex flex-wrap gap-1">
-                                                {item.variations.map((variation: any, varIndex: number) => {
-                                                  const value = typeof variation === 'object' && variation.value 
-                                                    ? variation.value 
-                                                    : String(variation)
-                                                  return (
-                                                    <Badge key={varIndex} variant="secondary" className="text-xs">
-                                                      {value}
-                                                    </Badge>
-                                                  )
-                                                })}
+                                                <Badge variant="secondary" className="text-xs">
+                                                  {item.variation_option_value}
+                                                </Badge>
                                               </div>
                                             </div>
                                           )}

@@ -65,8 +65,10 @@ interface MerchandiseSelection {
   name: string
   unit_price: number
   quantity: number
-  variation_id?: string
+  variation_id?: string // Keep for backward compatibility
+  variation_option_id?: string // NEW: For proper stock tracking
   variations: { [key: string]: string }
+  variationQuantities?: { [optionId: string]: number } // NEW: Track quantity per variation option
   available_stock: number
   current_stock: number
 }
@@ -1014,12 +1016,68 @@ export default function EventRegistrationPage() {
             medical_aid_number: form.medical_aid_number,
             emergency_contact_name: form.emergency_contact_name,
             emergency_contact_number: form.emergency_contact_number,
-            merchandise: form.merchandise
+            merchandise: form.merchandise.flatMap(merch => {
+              console.log(`🔍 Processing merchandise: ${merch.name}`, {
+                has_variationQuantities: !!merch.variationQuantities,
+                variationQuantities: merch.variationQuantities,
+                fallback_variation_option_id: merch.variation_option_id,
+                total_quantity: merch.quantity
+              })
+              
+              // If merchandise has variationQuantities, create separate entries for each variation option
+              if (merch.variationQuantities && Object.keys(merch.variationQuantities).length > 0) {
+                const entries = Object.entries(merch.variationQuantities)
+                  .filter(([optionId, quantity]) => quantity && quantity > 0)
+                  .map(([optionId, quantity]) => {
+                    console.log(`  Creating entry for option ${optionId}: quantity ${quantity}`)
+                    return {
+                      merchandise_id: merch.merchandise_id,
+                      variation_id: merch.variation_id,
+                      variation_option_id: optionId, // This should be the specific option ID
+                      quantity: quantity as number,
+                      unit_price: merch.unit_price
+                    }
+                  })
+                console.log(`  Created ${entries.length} entries for ${merch.name}`)
+                return entries
+              } else {
+                // Fallback to old structure for items without variation quantities
+                console.log(`  Using fallback structure for ${merch.name}`)
+                return [{
+                  merchandise_id: merch.merchandise_id,
+                  variation_id: merch.variation_id,
+                  variation_option_id: merch.variation_option_id,
+                  quantity: merch.quantity,
+                  unit_price: merch.unit_price
+                }]
+              }
+            })
           }
         }))
       }
 
       console.log('Registration data being sent:', JSON.stringify(registrationOrderData, null, 2))
+      console.log('🔍 DEBUG: Merchandise variations being sent:')
+      registrationOrderData.participants.forEach((p, i) => {
+        if (p.participant.merchandise && p.participant.merchandise.length > 0) {
+          console.log(`  Participant ${i + 1} merchandise:`, p.participant.merchandise.map(m => ({
+            id: m.merchandise_id,
+            variation_id: m.variation_id,
+            variation_option_id: m.variation_option_id, // Check if this is being set correctly
+            quantity: m.quantity
+          })))
+          
+          // Additional debug: Check each merchandise entry
+          p.participant.merchandise.forEach((m, idx) => {
+            console.log(`    Entry ${idx + 1}:`, {
+              merchandise_id: m.merchandise_id,
+              variation_option_id: m.variation_option_id,
+              has_variation_option_id: !!m.variation_option_id,
+              quantity: m.quantity
+            })
+          })
+        }
+      })
       const response = await participantRegistrationApi.register(registrationOrderData)
       
       if (response.success) {
@@ -1620,7 +1678,19 @@ export default function EventRegistrationPage() {
                         {registrationDetails.event.merchandise.map((merch, merchIndex) => {
                           const participantMerch = form.merchandise.find(m => m.merchandise_id === merch.id)
                           const merchWithStock = merch as any // Type assertion for stock properties
-                          const isOutOfStock = (merchWithStock.current_stock || 0) <= 0
+                          
+                          // Check if merchandise has variations with available stock
+                          let isOutOfStock = false
+                          if (merch.variations && merch.variations.length > 0) {
+                            // For merchandise with variations, check if any variation option has stock
+                            const hasStockInVariations = merch.variations.some((variation: any) => 
+                              variation.variation_options?.some((option: any) => (option.stock || 0) > 0)
+                            )
+                            isOutOfStock = !hasStockInVariations
+                          } else {
+                            // For merchandise without variations, use the old logic
+                            isOutOfStock = (merchWithStock.current_stock || 0) <= 0
+                          }
                           
                           return (
                             <Card key={merchIndex} className={`relative ${isOutOfStock ? 'opacity-60' : ''}`}>
@@ -1649,131 +1719,137 @@ export default function EventRegistrationPage() {
                                       <Badge variant="destructive">Sold Out</Badge>
                                     ) : (
                                       <div className="space-y-6">
-                                        {/* Quantity Selection */}
-                                        <div>
-                                          <Label htmlFor={`merch_${index}_${merchIndex}_quantity`} className="block mb-2">
-                                            Quantity
-                                          </Label>
-                                          <div className="flex items-center gap-4">
-                                            <Input
-                                              id={`merch_${index}_${merchIndex}_quantity`}
-                                              type="number"
-                                              min="0"
-                                              max={merchWithStock.current_stock || 0}
-                                              value={participantMerch?.quantity || 0}
-                                              onChange={(e) => {
-                                                const quantity = parseInt(e.target.value, 10) || 0
-                                                if (quantity > (merchWithStock.current_stock || 0)) return
-
-                                                const updatedMerchandise = [...form.merchandise]
-                                                const existingIndex = updatedMerchandise.findIndex(m => m.merchandise_id === merch.id)
-
-                                                if (quantity === 0 && existingIndex !== -1) {
-                                                  updatedMerchandise.splice(existingIndex, 1)
-                                                } else if (quantity > 0) {
-                                                  const merchandiseItem = {
-                                                    merchandise_id: merch.id,
-                                                    name: merch.name,
-                                                    unit_price: Number(merch.price || 0),
-                                                    quantity,
-                                                    variations: existingIndex !== -1 
-                                                      ? updatedMerchandise[existingIndex].variations || {}
-                                                      : {},
-                                                  available_stock: merchWithStock.available_stock || 0,
-                                                  current_stock: merchWithStock.current_stock || 0
-                                                  }
-
-                                                  if (existingIndex !== -1) {
-                                                    updatedMerchandise[existingIndex] = {
-                                                      ...updatedMerchandise[existingIndex],
-                                                      ...merchandiseItem
-                                                    }
-                                                  } else {
-                                                    updatedMerchandise.push(merchandiseItem)
-                                                  }
-                                                }
-
-                                                updateParticipantForm(index, 'merchandise', updatedMerchandise)
-                                              }}
-                                              className="w-24"
-                                            />
-                                              <span className="text-sm text-gray-600">
-                                                {merch.current_stock || 0} items available
-                                              </span>
-                                          </div>
+                                        {/* Total Stock Info */}
+                                        <div className="text-sm text-gray-600">
+                                          {merch.variations && merch.variations.length > 0 
+                                            ? (() => {
+                                                const totalStock = merch.variations.reduce((total: number, variation: any) => 
+                                                  total + (variation.variation_options?.reduce((varTotal: number, option: any) => 
+                                                    varTotal + (option.stock || 0), 0
+                                                  ) || 0), 0
+                                                )
+                                                return `${totalStock} items available (across all sizes)`
+                                              })()
+                                            : `${(merch as any).current_stock || 0} items available`
+                                          }
                                         </div>
 
-                                        {/* Variations Selection */}
-                                        {participantMerch && participantMerch.quantity > 0 && merch.variations && merch.variations.length > 0 && (
+                                        {/* Variations Selection - E-commerce Style */}
+                                        {merch.variations && merch.variations.length > 0 && (
                                           <div className="border-t pt-4 mt-4">
-                                            <Label className="block mb-4 text-base font-medium">Select Options</Label>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                              {merch.variations.map((variation, varIndex) => {
-                                                // Skip variations without proper data
-                                                if (!variation.variation_name || !variation.variation_options || variation.variation_options.length === 0) {
-                                                  return null
-                                                }
-                                                
-                                                return (
-                                                <div key={varIndex}>
-                                                  <Label 
-                                                    htmlFor={`merch_${index}_${merchIndex}_var_${varIndex}`}
-                                                    className="block text-sm text-gray-600 mb-2"
-                                                  >
-                                                    {variation.variation_name}
-                                                  </Label>
-                                                  <Select
-                                                    value={participantMerch.variations?.[variation.variation_name] || ''}
-                                                    onValueChange={(value) => {
-                                                      const updatedMerchandise = [...form.merchandise]
-                                                      const item = updatedMerchandise.find(m => m.merchandise_id === merch.id)
-                                                      if (item) {
-                                                        item.variations = {
-                                                          ...(item.variations || {}),
-                                                          [variation.variation_name]: value
-                                                        }
-                                                        updateParticipantForm(index, 'merchandise', updatedMerchandise)
-                                                      }
-                                                    }}
-                                                  >
-                                                    <SelectTrigger 
-                                                      id={`merch_${index}_${merchIndex}_var_${varIndex}`}
-                                                      className="w-full"
-                                                    >
-                                                      <SelectValue placeholder={`Select ${variation.variation_name}`} />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                      {variation.variation_options.map((option: any, optIndex: number) => {
-                                                        // Handle both object and string formats
-                                                        const optionValue = typeof option === 'object' && option.value !== undefined 
-                                                          ? option.value 
-                                                          : String(option)
-                                                        const optionStock = typeof option === 'object' && option.stock !== undefined 
-                                                          ? option.stock 
-                                                          : null
-                                                        const isOutOfStock = optionStock !== null && optionStock <= 0
-                                                        
-                                                        return (
-                                                          <SelectItem 
-                                                            key={optIndex} 
-                                                            value={optionValue}
-                                                            disabled={isOutOfStock}
-                                                          >
-                                                            {optionValue}
-                                                            {optionStock !== null && (
-                                                              <span className="text-xs text-gray-500 ml-2">
-                                                                {isOutOfStock ? '(Out of Stock)' : `(${optionStock} left)`}
-                                                              </span>
-                                                            )}
-                                                          </SelectItem>
-                                                        )
-                                                      })}
-                                                    </SelectContent>
-                                                  </Select>
+                                            <Label className="block mb-4 text-base font-medium">Select Quantities by Size</Label>
+                                            {merch.variations.map((variation, varIndex) => {
+                                              // Skip variations without proper data
+                                              if (!variation.variation_name || !variation.variation_options || variation.variation_options.length === 0) {
+                                                return null
+                                              }
+                                              
+                                              return (
+                                                <div key={varIndex} className="space-y-3">
+                                                  <h4 className="text-sm font-medium text-gray-700">{variation.variation_name}</h4>
+                                                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                    {variation.variation_options.map((option: any, optIndex: number) => {
+                                                      const optionValue = typeof option === 'object' && option.value !== undefined 
+                                                        ? option.value 
+                                                        : String(option)
+                                                      const optionStock = typeof option === 'object' && option.stock !== undefined 
+                                                        ? option.stock 
+                                                        : 0
+                                                      const isOutOfStock = optionStock <= 0
+                                                      
+                                                      // Find current quantity for this specific option
+                                                      const currentOptionQuantity = participantMerch?.variationQuantities?.[option.id] || 0
+                                                      
+                                                      return (
+                                                        <div 
+                                                          key={optIndex} 
+                                                          className={`border rounded-lg p-3 ${isOutOfStock ? 'opacity-50 bg-gray-50' : 'bg-white'}`}
+                                                        >
+                                                          <div className="flex justify-between items-center mb-2">
+                                                            <span className="font-medium text-sm">{optionValue}</span>
+                                                            <span className={`text-xs ${isOutOfStock ? 'text-red-500' : 'text-green-600'}`}>
+                                                              {isOutOfStock ? 'Out of Stock' : `${optionStock} available`}
+                                                            </span>
+                                                          </div>
+                                                          <div className="flex items-center gap-2">
+                                                            <Label htmlFor={`option_${option.id}`} className="text-xs text-gray-600">
+                                                              Qty:
+                                                            </Label>
+                                                            <Input
+                                                              id={`option_${option.id}`}
+                                                              type="number"
+                                                              min="0"
+                                                              max={optionStock}
+                                                              value={currentOptionQuantity}
+                                                              disabled={isOutOfStock}
+                                                              onChange={(e) => {
+                                                                const qty = parseInt(e.target.value, 10) || 0
+                                                                if (qty > optionStock) return
+                                                                
+                                                                const updatedMerchandise = [...form.merchandise]
+                                                                let item = updatedMerchandise.find(m => m.merchandise_id === merch.id)
+                                                                
+                                                                if (!item) {
+                                                                  // Create new item if it doesn't exist
+                                                                  item = {
+                                                                    merchandise_id: merch.id,
+                                                                    name: merch.name,
+                                                                    unit_price: Number(merch.price || 0),
+                                                                    quantity: 0,
+                                                                    variations: {},
+                                                                    variationQuantities: {},
+                                                                    available_stock: 0,
+                                                                    current_stock: 0
+                                                                  }
+                                                                  updatedMerchandise.push(item)
+                                                                }
+                                                                
+                                                                // Update variation quantities
+                                                                if (!item.variationQuantities) {
+                                                                  item.variationQuantities = {}
+                                                                }
+                                                                item.variationQuantities[option.id] = qty
+                                                                
+                                                                // Calculate total quantity across all variations
+                                                                const totalQuantity = Object.values(item.variationQuantities).reduce((sum: number, q: any) => sum + (q || 0), 0)
+                                                                item.quantity = totalQuantity
+                                                                
+                                                                // Store variation info for backend submission
+                                                                item.variations = {
+                                                                  ...(item.variations || {}),
+                                                                  [variation.variation_name]: optionValue
+                                                                }
+                                                                item.variation_option_id = option.id
+                                                                item.variation_id = variation.id
+                                                                
+                                                                // Remove item if total quantity is 0
+                                                                if (totalQuantity === 0) {
+                                                                  const itemIndex = updatedMerchandise.findIndex(m => m.merchandise_id === merch.id)
+                                                                  if (itemIndex !== -1) {
+                                                                    updatedMerchandise.splice(itemIndex, 1)
+                                                                  }
+                                                                }
+                                                                
+                                                                updateParticipantForm(index, 'merchandise', updatedMerchandise)
+                                                                
+                                                                console.log(`🔧 Updated variation quantity:`, {
+                                                                  merchandise: merch.name,
+                                                                  option: optionValue,
+                                                                  option_id: option.id,
+                                                                  quantity: qty,
+                                                                  total_quantity: totalQuantity
+                                                                })
+                                                              }}
+                                                              className="w-16 text-center"
+                                                            />
+                                                          </div>
+                                                        </div>
+                                                      )
+                                                    })}
+                                                  </div>
                                                 </div>
-                                                )
-                                              })}
-                                            </div>
+                                              )
+                                            })}
                                           </div>
                                         )}
                                       </div>

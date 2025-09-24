@@ -22,7 +22,8 @@ interface ParticipantData {
   permanent_license_number?: string
   merchandise?: Array<{
     merchandise_id: string
-    variation_id?: string
+    variation_id?: string // Keep for backward compatibility  
+    variation_option_id?: string // New field for proper variation tracking
     quantity: number
     unit_price: number
   }>
@@ -278,22 +279,42 @@ router.get('/event/:eventId/registration-details', async (req: Request, res: Res
       ORDER BY price ASC
     `, [eventId])
 
-    // Get merchandise
+    // Get merchandise with new variation structure
     const merchandiseResult = await pool.query(`
       SELECT 
         em.id, em.name, em.description, em.price, em.image_url,
-        em.available_stock, em.current_stock,
-        json_agg(
-          json_build_object(
-            'id', mv.id,
-            'variation_name', mv.variation_name,
-            'variation_options', mv.variation_options
-          )
+        COALESCE(
+          json_agg(
+            CASE WHEN mvt.id IS NOT NULL THEN
+              json_build_object(
+                'id', mvt.id,
+                'variation_name', mvt.variation_name,
+                'variation_options', mvt.variation_options
+              )
+            END
+          ) FILTER (WHERE mvt.id IS NOT NULL),
+          '[]'::json
         ) as variations
       FROM event_merchandise em
-      LEFT JOIN merchandise_variations mv ON em.id = mv.merchandise_id
+      LEFT JOIN (
+        SELECT 
+          mvt.*,
+          json_agg(
+            json_build_object(
+              'id', mvo.id,
+              'value', mvo.option_value,
+              'stock', mvo.current_stock,
+              'initial_stock', mvo.initial_stock
+            )
+            ORDER BY mvo.option_value
+          ) as variation_options
+        FROM merchandise_variation_types mvt
+        LEFT JOIN merchandise_variation_options mvo ON mvt.id = mvo.variation_type_id
+        GROUP BY mvt.id, mvt.merchandise_id, mvt.variation_name, mvt.created_at, mvt.updated_at
+      ) mvt ON em.id = mvt.merchandise_id
       WHERE em.event_id = $1
-      GROUP BY em.id, em.name, em.description, em.price, em.image_url, em.available_stock, em.current_stock
+      GROUP BY em.id, em.name, em.description, em.price, em.image_url
+      ORDER BY em.name
     `, [eventId])
 
     res.json({
@@ -302,10 +323,7 @@ router.get('/event/:eventId/registration-details', async (req: Request, res: Res
         event: {
           ...event,
           distances: distancesResult.rows,
-          merchandise: merchandiseResult.rows.map(item => ({
-            ...item,
-            variations: item.variations.filter((v: any) => v.id !== null)
-          }))
+          merchandise: merchandiseResult.rows
         }
       }
     } as ApiResponse)
@@ -732,6 +750,61 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
     }
 
     console.log('Calculated total amount:', totalAmount, 'Type:', typeof totalAmount)
+
+    // STEP 2A: Validate merchandise stock before starting transaction
+    console.log('🔍 STEP 2A: Validating merchandise stock')
+    console.log('📦 Received merchandise data:', JSON.stringify(ticketDetails.map(t => t.merchandise), null, 2))
+    
+    for (const ticketDetail of ticketDetails) {
+      for (const merch of ticketDetail.merchandise) {
+        console.log(`🔍 Checking merchandise:`, {
+          merchandise_id: merch.merchandise_id,
+          variation_option_id: merch.variation_option_id,
+          has_variation_option_id: !!merch.variation_option_id,
+          quantity: merch.quantity
+        })
+        if (merch.variation_option_id) {
+          // NEW STRUCTURE: Check stock for specific variation option
+          const stockCheck = await client.query(`
+            SELECT current_stock, option_value 
+            FROM merchandise_variation_options mvo
+            JOIN merchandise_variation_types mvt ON mvo.variation_type_id = mvt.id
+            WHERE mvo.id = $1
+          `, [merch.variation_option_id])
+          
+          if (stockCheck.rows.length === 0) {
+            throw new Error(`Variation option ${merch.variation_option_id} not found`)
+          }
+          
+          const { current_stock, option_value } = stockCheck.rows[0]
+          if (current_stock < merch.quantity) {
+            throw new Error(`Insufficient stock for ${option_value}. Available: ${current_stock}, Requested: ${merch.quantity}`)
+          }
+          
+          console.log(`✅ Stock validation passed for ${option_value}: ${current_stock} >= ${merch.quantity} (using new variation structure)`)
+        } else {
+          // DEPRECATED: Only for merchandise without variations
+          console.log(`⚠️  Warning: No variation_option_id provided for merchandise ${merch.merchandise_id}. This should only happen for merchandise without variations.`)
+          
+          const stockCheck = await client.query(`
+            SELECT current_stock, name 
+            FROM event_merchandise 
+            WHERE id = $1
+          `, [merch.merchandise_id])
+          
+          if (stockCheck.rows.length === 0) {
+            throw new Error(`Merchandise ${merch.merchandise_id} not found`)
+          }
+          
+          const { current_stock, name } = stockCheck.rows[0]
+          if (current_stock < merch.quantity) {
+            throw new Error(`Insufficient stock for merchandise item "${name}" (ID: ${merch.merchandise_id}). Available: ${current_stock}, Requested: ${merch.quantity}. Note: No variation_option_id provided - this merchandise may need to be updated to use the new variation system.`)
+          }
+          
+          console.log(`✅ Stock validation passed for ${name}: ${current_stock} >= ${merch.quantity} (using deprecated stock field - should be updated)`)
+        }
+      }
+    }
     
     // Add license fees to total
     const licenseFees = orderData.license_fees || 0
@@ -813,29 +886,43 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
 
       // Add merchandise if selected and update stock
       for (const merch of ticketDetail.merchandise) {
-        // Create merchandise order
+        // Create merchandise order with new variation structure
         await client.query(`
           INSERT INTO ticket_merchandise (
-            ticket_id, merchandise_id, variation_id, quantity, unit_price, total_price
-          ) VALUES ($1, $2, $3, $4, $5, $6)
+            ticket_id, merchandise_id, variation_id, variation_option_id, quantity, unit_price, total_price
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         `, [
           ticket.id,
           merch.merchandise_id,
-          merch.variation_id || null,
+          merch.variation_id || null, // Keep for backward compatibility
+          merch.variation_option_id || null, // New field for proper tracking
           merch.quantity,
           merch.unit_price,
           merch.unit_price * merch.quantity
         ])
 
-        // Update stock
-        await client.query(`
-          UPDATE event_merchandise
-          SET current_stock = current_stock - $1
-          WHERE id = $2
-        `, [
-          merch.quantity,
-          merch.merchandise_id
-        ])
+        // Update stock - now at the variation option level if specified
+        if (merch.variation_option_id) {
+          // New approach: reduce stock for specific variation option
+          await client.query(`
+            UPDATE merchandise_variation_options
+            SET current_stock = current_stock - $1
+            WHERE id = $2 AND current_stock >= $1
+          `, [
+            merch.quantity,
+            merch.variation_option_id
+          ])
+        } else {
+          // Fallback: old approach for merchandise without variations
+          await client.query(`
+            UPDATE event_merchandise
+            SET current_stock = current_stock - $1
+            WHERE id = $2
+          `, [
+            merch.quantity,
+            merch.merchandise_id
+          ])
+        }
       }
 
       tickets.push(ticket)

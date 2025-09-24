@@ -227,24 +227,42 @@ router.get('/my', authenticateToken, requireOrganiser, async (req: Request, res:
           ORDER BY ed.distance_km ASC
         `, [event.id])
         
-        // Get merchandise
+        // Get merchandise with new variation structure
         const merchandiseResult = await pool.query(`
           SELECT 
             em.*,
             COALESCE(
               json_agg(
-                json_build_object(
-                  'id', mv.id,
-                  'variation_name', mv.variation_name,
-                  'variation_options', mv.variation_options
-                )
-              ) FILTER (WHERE mv.id IS NOT NULL),
+                CASE WHEN mvt.id IS NOT NULL THEN
+                  json_build_object(
+                    'id', mvt.id,
+                    'variation_name', mvt.variation_name,
+                    'variation_options', mvt.variation_options
+                  )
+                END
+              ) FILTER (WHERE mvt.id IS NOT NULL),
               '[]'::json
             ) as variations
           FROM event_merchandise em
-          LEFT JOIN merchandise_variations mv ON em.id = mv.merchandise_id
+          LEFT JOIN (
+            SELECT 
+              mvt.*,
+              json_agg(
+                json_build_object(
+                  'id', mvo.id,
+                  'value', mvo.option_value,
+                  'stock', mvo.current_stock,
+                  'initial_stock', mvo.initial_stock
+                )
+                ORDER BY mvo.option_value
+              ) as variation_options
+            FROM merchandise_variation_types mvt
+            LEFT JOIN merchandise_variation_options mvo ON mvt.id = mvo.variation_type_id
+            GROUP BY mvt.id, mvt.merchandise_id, mvt.variation_name, mvt.created_at, mvt.updated_at
+          ) mvt ON em.id = mvt.merchandise_id
           WHERE em.event_id = $1
-          GROUP BY em.id
+          GROUP BY em.id, em.name, em.description, em.price, em.image_url
+          ORDER BY em.name
         `, [event.id])
         
         return {
@@ -321,21 +339,39 @@ router.get('/:id', optionalAuth, async (req: Request, res: Response) => {
       `, [event.id]),
       pool.query(`
         SELECT 
-          m.*,
+          em.*,
           COALESCE(
             json_agg(
-              json_build_object(
-                'id', mv.id,
-                'variation_name', mv.variation_name,
-                'variation_options', mv.variation_options
-              )
-            ) FILTER (WHERE mv.id IS NOT NULL),
+              CASE WHEN mvt.id IS NOT NULL THEN
+                json_build_object(
+                  'id', mvt.id,
+                  'variation_name', mvt.variation_name,
+                  'variation_options', mvt.variation_options
+                )
+              END
+            ) FILTER (WHERE mvt.id IS NOT NULL),
             '[]'::json
           ) as variations
-        FROM event_merchandise m
-        LEFT JOIN merchandise_variations mv ON m.id = mv.merchandise_id
-        WHERE m.event_id = $1
-        GROUP BY m.id
+        FROM event_merchandise em
+        LEFT JOIN (
+          SELECT 
+            mvt.*,
+            json_agg(
+              json_build_object(
+                'id', mvo.id,
+                'value', mvo.option_value,
+                'stock', mvo.current_stock,
+                'initial_stock', mvo.initial_stock
+              )
+              ORDER BY mvo.option_value
+            ) as variation_options
+          FROM merchandise_variation_types mvt
+          LEFT JOIN merchandise_variation_options mvo ON mvt.id = mvo.variation_type_id
+          GROUP BY mvt.id, mvt.merchandise_id, mvt.variation_name, mvt.created_at, mvt.updated_at
+        ) mvt ON em.id = mvt.merchandise_id
+        WHERE em.event_id = $1
+        GROUP BY em.id, em.name, em.description, em.price, em.image_url, em.available_stock, em.current_stock
+        ORDER BY em.name
       `, [event.id])
     ])
     
@@ -521,17 +557,19 @@ router.post('/', authenticateToken, requireOrganiser, async (req: Request, res: 
     if (eventData.merchandise && eventData.merchandise.length > 0) {
       for (const merch of eventData.merchandise) {
         const merchResult = await client.query(`
-          INSERT INTO event_merchandise (event_id, name, description, price, image_url)
-          VALUES ($1, $2, $3, $4, $5) RETURNING id
+          INSERT INTO event_merchandise (event_id, name, description, price, image_url, available_stock, current_stock)
+          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
         `, [
           newEvent.id,
           merch.name,
           merch.description,
           merch.price,
-          merch.image_url
+          merch.image_url,
+          0, // available_stock - not used in new structure
+          0  // current_stock - not used in new structure
         ])
         
-        // Create variations if provided
+        // Create variations using new structure
         if (merch.variations && merch.variations.length > 0) {
           for (const variation of merch.variations) {
             // Validate variation data
@@ -540,14 +578,34 @@ router.post('/', authenticateToken, requireOrganiser, async (req: Request, res: 
               continue
             }
             
-            await client.query(`
-              INSERT INTO merchandise_variations (merchandise_id, variation_name, variation_options)
-              VALUES ($1, $2, $3)
+            // Create variation type
+            const variationTypeResult = await client.query(`
+              INSERT INTO merchandise_variation_types (merchandise_id, variation_name)
+              VALUES ($1, $2) RETURNING id
             `, [
               merchResult.rows[0].id,
-              variation.variation_name,
-              JSON.stringify(variation.variation_options)
+              variation.variation_name
             ])
+            
+            const variationTypeId = variationTypeResult.rows[0].id
+            
+            // Create variation options with individual stock tracking
+            if (Array.isArray(variation.variation_options)) {
+              for (const option of variation.variation_options) {
+                const optionValue = typeof option === 'object' ? option.value : String(option)
+                const optionStock = typeof option === 'object' ? (option.stock || 0) : 0
+                
+                await client.query(`
+                  INSERT INTO merchandise_variation_options (variation_type_id, option_value, initial_stock, current_stock)
+                  VALUES ($1, $2, $3, $4)
+                `, [
+                  variationTypeId,
+                  optionValue,
+                  optionStock,
+                  optionStock // current_stock starts as initial_stock
+                ])
+              }
+            }
           }
         }
       }
@@ -936,8 +994,16 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
     if (updates.merchandise !== undefined) {
       console.log('🔍 Updating merchandise:', updates.merchandise)
       
-      // Delete existing merchandise and variations
-      await pool.query('DELETE FROM merchandise_variations WHERE merchandise_id IN (SELECT id FROM event_merchandise WHERE event_id = $1)', [id])
+      // Delete existing merchandise and variations using new structure
+      await pool.query(`
+        DELETE FROM merchandise_variation_options 
+        WHERE variation_type_id IN (
+          SELECT mvt.id FROM merchandise_variation_types mvt 
+          JOIN event_merchandise em ON mvt.merchandise_id = em.id 
+          WHERE em.event_id = $1
+        )
+      `, [id])
+      await pool.query('DELETE FROM merchandise_variation_types WHERE merchandise_id IN (SELECT id FROM event_merchandise WHERE event_id = $1)', [id])
       await pool.query('DELETE FROM event_merchandise WHERE event_id = $1', [id])
       console.log('✅ Deleted existing merchandise')
       
@@ -950,31 +1016,52 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
           // Create the merchandise item
           const merchandiseResult = await pool.query(`
             INSERT INTO event_merchandise (
-              event_id, name, description, price, image_url
-            ) VALUES ($1, $2, $3, $4, $5)
+              event_id, name, description, price, image_url, available_stock, current_stock
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id
           `, [
             id,
             merchandiseData.name,
             merchandiseData.description,
             merchandiseData.price,
-            merchandiseData.image_url
+            merchandiseData.image_url,
+            0, // available_stock - not used in new structure
+            0  // current_stock - not used in new structure
           ])
           
           const merchandiseId = merchandiseResult.rows[0].id
           
-          // Create variations if provided
+          // Create variations using new structure
           if (variations && variations.length > 0) {
             for (const variation of variations) {
-              await pool.query(`
-                INSERT INTO merchandise_variations (
-                  merchandise_id, variation_name, variation_options
-                ) VALUES ($1, $2, $3)
+              // Create variation type
+              const variationTypeResult = await pool.query(`
+                INSERT INTO merchandise_variation_types (merchandise_id, variation_name)
+                VALUES ($1, $2) RETURNING id
               `, [
                 merchandiseId,
-                variation.variation_name,
-                JSON.stringify(variation.variation_options || [])
+                variation.variation_name
               ])
+              
+              const variationTypeId = variationTypeResult.rows[0].id
+              
+              // Create variation options with individual stock tracking
+              if (Array.isArray(variation.variation_options)) {
+                for (const option of variation.variation_options) {
+                  const optionValue = typeof option === 'object' ? option.value : String(option)
+                  const optionStock = typeof option === 'object' ? (option.stock || 0) : 0
+                  
+                  await pool.query(`
+                    INSERT INTO merchandise_variation_options (variation_type_id, option_value, initial_stock, current_stock)
+                    VALUES ($1, $2, $3, $4)
+                  `, [
+                    variationTypeId,
+                    optionValue,
+                    optionStock,
+                    optionStock // current_stock starts as initial_stock
+                  ])
+                }
+              }
             }
           }
         }
@@ -1653,23 +1740,39 @@ router.put('/admin/:id/section', authenticateToken, async (req: Request, res: Re
       case 'merchandise':
         // Handle merchandise separately as they're in different tables
         if (data.merchandise && Array.isArray(data.merchandise)) {
-          // Delete existing merchandise and variations
-          await pool.query('DELETE FROM merchandise_variations WHERE merchandise_id IN (SELECT id FROM event_merchandise WHERE event_id = $1)', [id])
+          // Delete existing merchandise and variations using new structure
+          await pool.query(`
+            DELETE FROM merchandise_variation_options 
+            WHERE variation_type_id IN (
+              SELECT mvt.id FROM merchandise_variation_types mvt 
+              JOIN event_merchandise em ON mvt.merchandise_id = em.id 
+              WHERE em.event_id = $1
+            )
+          `, [id])
+          await pool.query('DELETE FROM merchandise_variation_types WHERE merchandise_id IN (SELECT id FROM event_merchandise WHERE event_id = $1)', [id])
           await pool.query('DELETE FROM event_merchandise WHERE event_id = $1', [id])
           
           // Insert new merchandise
           for (const item of data.merchandise) {
             const merchResult = await pool.query(
-              'INSERT INTO event_merchandise (event_id, name, description, price) VALUES ($1, $2, $3, $4) RETURNING id',
-              [id, item.name, item.description, item.base_price || item.price]
+              'INSERT INTO event_merchandise (event_id, name, description, price, available_stock, current_stock) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+              [id, item.name, item.description, item.base_price || item.price, 0, 0]
             )
             
             const merchandiseId = merchResult.rows[0].id
             
-            // Insert variations
+            // Insert variations using new structure
             if (item.variations && Array.isArray(item.variations)) {
               for (const variation of item.variations) {
-                // Ensure variation_options is properly formatted as JSON
+                // Create variation type
+                const variationTypeResult = await pool.query(
+                  'INSERT INTO merchandise_variation_types (merchandise_id, variation_name) VALUES ($1, $2) RETURNING id',
+                  [merchandiseId, variation.variation_name]
+                )
+                
+                const variationTypeId = variationTypeResult.rows[0].id
+                
+                // Ensure variation_options is properly formatted
                 let variationOptions = variation.variation_options
                 if (typeof variationOptions === 'string') {
                   try {
@@ -1682,10 +1785,16 @@ router.put('/admin/:id/section', authenticateToken, async (req: Request, res: Re
                   variationOptions = []
                 }
                 
-                await pool.query(
-                  'INSERT INTO merchandise_variations (merchandise_id, variation_name, variation_options) VALUES ($1, $2, $3)',
-                  [merchandiseId, variation.variation_name, JSON.stringify(variationOptions)]
-                )
+                // Create variation options with individual stock tracking
+                for (const option of variationOptions) {
+                  const optionValue = typeof option === 'object' ? option.value : String(option)
+                  const optionStock = typeof option === 'object' ? (option.stock || 0) : 0
+                  
+                  await pool.query(
+                    'INSERT INTO merchandise_variation_options (variation_type_id, option_value, initial_stock, current_stock) VALUES ($1, $2, $3, $4)',
+                    [variationTypeId, optionValue, optionStock, optionStock]
+                  )
+                }
               }
             }
           }
@@ -2058,7 +2167,7 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
         o.account_holder_first_name,
         o.account_holder_last_name,
         o.account_holder_email,
-        -- Merchandise data aggregation
+        -- Merchandise data aggregation with new variation structure
         COALESCE(
           json_agg(
             CASE WHEN tm.id IS NOT NULL THEN
@@ -2069,8 +2178,9 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
                 'unit_price', tm.unit_price,
                 'total_price', tm.total_price,
                 'variation_id', tm.variation_id,
-                'variations', COALESCE(mv.variation_options::json, '[]'::json),
-                'variation_name', mv.variation_name
+                'variation_option_id', tm.variation_option_id,
+                'variation_option_value', mvo.option_value,
+                'variation_name', mvt.variation_name
               )
             END
           ) FILTER (WHERE tm.id IS NOT NULL),
@@ -2081,7 +2191,8 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
       JOIN orders o ON t.order_id = o.id
       LEFT JOIN ticket_merchandise tm ON t.id = tm.ticket_id
       LEFT JOIN event_merchandise em ON tm.merchandise_id = em.id
-      LEFT JOIN merchandise_variations mv ON tm.variation_id = mv.id
+      LEFT JOIN merchandise_variation_options mvo ON tm.variation_option_id = mvo.id
+      LEFT JOIN merchandise_variation_types mvt ON mvo.variation_type_id = mvt.id
       WHERE t.event_id = $1
       GROUP BY 
         t.id, t.ticket_number, t.participant_first_name, t.participant_last_name,
@@ -2094,53 +2205,70 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
       ORDER BY t.created_at DESC
     `, [eventId])
 
-    // Get event merchandise with variations and stock levels
+    // Get event merchandise with basic info first
     const merchandiseResult = await pool.query(`
       SELECT 
         em.id,
         em.name,
         em.description,
         em.price,
-        em.image_url,
-        em.available_stock,
-        em.current_stock,
-        COALESCE(
-          json_agg(
-            CASE WHEN mv.id IS NOT NULL THEN
-              json_build_object(
-                'id', mv.id,
-                'variation_name', mv.variation_name,
-                'variation_options', mv.variation_options::json
-              )
-            END
-          ) FILTER (WHERE mv.id IS NOT NULL),
-          '[]'::json
-        ) as variations,
-        -- Count how many have been sold (overall)
-        COALESCE(SUM(tm.quantity), 0) as total_sold
+        em.image_url
       FROM event_merchandise em
-      LEFT JOIN merchandise_variations mv ON em.id = mv.merchandise_id
-      LEFT JOIN ticket_merchandise tm ON em.id = tm.merchandise_id
-      LEFT JOIN tickets t ON tm.ticket_id = t.id AND t.event_id = $1
       WHERE em.event_id = $1
-      GROUP BY em.id, em.name, em.description, em.price, em.image_url, em.available_stock, em.current_stock
       ORDER BY em.name
     `, [eventId])
-    
-    // Get sold quantities per variation option
-    const soldVariationsResult = await pool.query(`
-      SELECT 
-        tm.merchandise_id,
-        mv.id as variation_id,
-        mv.variation_name,
-        mv.variation_options::json as variation_options,
-        SUM(tm.quantity) as total_sold
-      FROM ticket_merchandise tm
-      JOIN merchandise_variations mv ON tm.variation_id = mv.id
-      JOIN tickets t ON tm.ticket_id = t.id
-      WHERE t.event_id = $1
-      GROUP BY tm.merchandise_id, mv.id, mv.variation_name, mv.variation_options
-    `, [eventId])
+
+    // Get variations for each merchandise item separately
+    const merchandiseWithVariations = await Promise.all(
+      merchandiseResult.rows.map(async (item) => {
+        // Get variations for this specific merchandise item
+        const variationsResult = await pool.query(`
+          SELECT 
+            mvt.id,
+            mvt.variation_name,
+            json_agg(
+              json_build_object(
+                'id', mvo.id,
+                'value', mvo.option_value,
+                'initial_stock', mvo.initial_stock,
+                'current_stock', mvo.current_stock,
+                'stock', mvo.initial_stock,
+                'sold', COALESCE(sold_counts.sold, 0),
+                'remaining', mvo.current_stock
+              )
+              ORDER BY mvo.option_value
+            ) as variation_options
+          FROM merchandise_variation_types mvt
+          LEFT JOIN merchandise_variation_options mvo ON mvt.id = mvo.variation_type_id
+          LEFT JOIN (
+            SELECT 
+              tm.variation_option_id,
+              SUM(tm.quantity) as sold
+            FROM ticket_merchandise tm
+            JOIN tickets t ON tm.ticket_id = t.id AND t.event_id = $1
+            WHERE tm.merchandise_id = $2
+            GROUP BY tm.variation_option_id
+          ) sold_counts ON mvo.id = sold_counts.variation_option_id
+          WHERE mvt.merchandise_id = $2
+          GROUP BY mvt.id, mvt.variation_name
+          ORDER BY mvt.variation_name
+        `, [eventId, item.id])
+
+        // Get total sold for this merchandise item
+        const totalSoldResult = await pool.query(`
+          SELECT COALESCE(SUM(tm.quantity), 0) as total_sold
+          FROM ticket_merchandise tm
+          JOIN tickets t ON tm.ticket_id = t.id AND t.event_id = $1
+          WHERE tm.merchandise_id = $2
+        `, [eventId, item.id])
+
+        return {
+          ...item,
+          variations: variationsResult.rows,
+          total_sold: totalSoldResult.rows[0].total_sold
+        }
+      })
+    )
 
     // Calculate total entry limit
     const totalEntryLimit = distancesResult.rows.reduce((sum, distance) => {
@@ -2150,39 +2278,8 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
     const totalParticipants = totalParticipantsResult.rows[0]
     const totalActiveParticipants = totalParticipants.active_participants || 0
 
-    // Process merchandise data to include sold quantities per variation
-    const processedMerchandise = merchandiseResult.rows.map(item => {
-      // Get sold data for this merchandise item
-      const soldVariations = soldVariationsResult.rows.filter(sold => sold.merchandise_id === item.id)
-      
-      // Process variations to include sold quantities and remaining stock
-      const processedVariations = item.variations.map((variation: any) => {
-        const soldData = soldVariations.find(sold => sold.variation_id === variation.id)
-        
-        // Process variation options to include stock tracking
-        const processedOptions = variation.variation_options.map((option: any) => {
-          const originalStock = option.stock || 0
-          const soldQuantity = soldData ? (soldData.total_sold || 0) : 0
-          const remaining = Math.max(0, originalStock - soldQuantity)
-          
-          return {
-            ...option,
-            sold: soldQuantity,
-            remaining: remaining
-          }
-        })
-        
-        return {
-          ...variation,
-          variation_options: processedOptions
-        }
-      })
-      
-      return {
-        ...item,
-        variations: processedVariations
-      }
-    })
+    // Use the processed merchandise data (already includes sold quantities and remaining stock)
+    const processedMerchandise = merchandiseWithVariations
 
     // Prepare analytics data
     const analytics = {
