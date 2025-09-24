@@ -1615,7 +1615,7 @@ export default function EventRegistrationPage() {
                   {registrationDetails?.event?.merchandise && registrationDetails.event.merchandise.length > 0 && (
                     <div className="mt-6">
                       <h3 className="text-lg font-semibold mb-4">Add Merchandise</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-4">
                         {registrationDetails.event.merchandise.map((merch, merchIndex) => {
                           const participantMerch = form.merchandise.find(m => m.merchandise_id === merch.id)
                           const isOutOfStock = merch.current_stock <= 0
@@ -1623,116 +1623,134 @@ export default function EventRegistrationPage() {
                           return (
                             <Card key={merchIndex} className={`relative ${isOutOfStock ? 'opacity-60' : ''}`}>
                               <CardContent className="pt-4">
-                                <div className="flex justify-between items-start mb-2">
-                                  <div>
-                                    <h4 className="font-medium">{merch.name}</h4>
-                                    <p className="text-sm text-gray-600">{merch.description}</p>
-                                    <p className="text-sm font-medium mt-1">R {Number(merch.price || 0).toFixed(2)}</p>
-                                  </div>
+                                <div className="flex gap-6">
+                                  {/* Image */}
                                   {merch.image_url && (
-                                    <img 
-                                      src={merch.image_url} 
-                                      alt={merch.name}
-                                      className="w-20 h-20 object-cover rounded"
-                                    />
-                                  )}
-                                </div>
-
-                                {isOutOfStock ? (
-                                  <Badge variant="destructive" className="mt-2">Sold Out</Badge>
-                                ) : (
-                                  <div className="space-y-4">
-                                    <div className="flex items-center gap-4">
-                                      <Label htmlFor={`merch_${index}_${merchIndex}_quantity`}>Quantity</Label>
-                                      <Input
-                                        id={`merch_${index}_${merchIndex}_quantity`}
-                                        type="number"
-                                        min="0"
-                                        max={merch.current_stock}
-                                        value={participantMerch?.quantity || 0}
-                                        onChange={(e) => {
-                                          const quantity = parseInt(e.target.value, 10) || 0
-                                          if (quantity > merch.current_stock) return
-
-                                        const updatedMerchandise = [...form.merchandise]
-                                        const existingIndex = updatedMerchandise.findIndex(m => m.merchandise_id === merch.id)
-
-                                        if (quantity === 0 && existingIndex !== -1) {
-                                          updatedMerchandise.splice(existingIndex, 1)
-                                        } else if (quantity > 0) {
-                                          const merchandiseItem = {
-                                            merchandise_id: merch.id,
-                                            name: merch.name,
-                                            unit_price: Number(merch.price || 0),
-                                            quantity,
-                                            variations: existingIndex !== -1 
-                                              ? updatedMerchandise[existingIndex].variations || {}
-                                              : {},
-                                            available_stock: merch.available_stock,
-                                            current_stock: merch.current_stock
-                                          }
-
-                                          if (existingIndex !== -1) {
-                                            updatedMerchandise[existingIndex] = {
-                                              ...updatedMerchandise[existingIndex],
-                                              ...merchandiseItem
-                                            }
-                                          } else {
-                                            updatedMerchandise.push(merchandiseItem)
-                                          }
-                                        }
-
-                                          updateParticipantForm(index, 'merchandise', updatedMerchandise)
-                                        }}
-                                        className="w-24"
+                                    <div className="flex-shrink-0">
+                                      <img 
+                                        src={merch.image_url} 
+                                        alt={merch.name}
+                                        className="w-32 h-32 object-cover rounded-lg border border-gray-200"
                                       />
-                                      <span className="text-sm text-gray-600">
-                                        {merch.current_stock} available
-                                      </span>
-                                    </div>
-
-                                  {participantMerch && participantMerch.quantity > 0 && merch.variations && merch.variations.length > 0 && (
-                                    <div className="mt-4 space-y-4">
-                                      <h5 className="text-sm font-medium text-gray-700">Select Options</h5>
-                                      {merch.variations.map((variation, varIndex) => (
-                                        <div key={varIndex} className="flex items-center gap-4">
-                                          <Label htmlFor={`merch_${index}_${merchIndex}_var_${varIndex}`} className="min-w-[100px]">
-                                            {variation.variation_name}
-                                          </Label>
-                                          <Select
-                                            value={participantMerch.variations?.[variation.variation_name] || ''}
-                                            onValueChange={(value) => {
-                                              const updatedMerchandise = [...form.merchandise]
-                                              const item = updatedMerchandise.find(m => m.merchandise_id === merch.id)
-                                              if (item) {
-                                                item.variations = {
-                                                  ...(item.variations || {}),
-                                                  [variation.variation_name]: value
-                                                }
-                                                updateParticipantForm(index, 'merchandise', updatedMerchandise)
-                                              }
-                                            }}
-                                          >
-                                            <SelectTrigger 
-                                              id={`merch_${index}_${merchIndex}_var_${varIndex}`}
-                                              className="w-[200px]"
-                                            >
-                                              <SelectValue placeholder={`Select ${variation.variation_name}`} />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              {Array.isArray(variation.variation_options) ? variation.variation_options.map((option: string, optIndex: number) => (
-                                                <SelectItem key={optIndex} value={option}>
-                                                  {option}
-                                                </SelectItem>
-                                              )) : null}
-                                            </SelectContent>
-                                          </Select>
-                                        </div>
-                                      ))}
                                     </div>
                                   )}
+                                  
+                                  {/* Details */}
+                                  <div className="flex-grow space-y-4">
+                                    <div>
+                                      <h4 className="text-lg font-medium">{merch.name}</h4>
+                                      <p className="text-sm text-gray-600 mt-1">{merch.description}</p>
+                                      <p className="text-base font-semibold mt-2">R {Number(merch.price || 0).toFixed(2)}</p>
+                                    </div>
+
+                                    {isOutOfStock ? (
+                                      <Badge variant="destructive">Sold Out</Badge>
+                                    ) : (
+                                      <div className="space-y-6">
+                                        {/* Quantity Selection */}
+                                        <div>
+                                          <Label htmlFor={`merch_${index}_${merchIndex}_quantity`} className="block mb-2">
+                                            Quantity
+                                          </Label>
+                                          <div className="flex items-center gap-4">
+                                            <Input
+                                              id={`merch_${index}_${merchIndex}_quantity`}
+                                              type="number"
+                                              min="0"
+                                              max={merch.current_stock}
+                                              value={participantMerch?.quantity || 0}
+                                              onChange={(e) => {
+                                                const quantity = parseInt(e.target.value, 10) || 0
+                                                if (quantity > merch.current_stock) return
+
+                                                const updatedMerchandise = [...form.merchandise]
+                                                const existingIndex = updatedMerchandise.findIndex(m => m.merchandise_id === merch.id)
+
+                                                if (quantity === 0 && existingIndex !== -1) {
+                                                  updatedMerchandise.splice(existingIndex, 1)
+                                                } else if (quantity > 0) {
+                                                  const merchandiseItem = {
+                                                    merchandise_id: merch.id,
+                                                    name: merch.name,
+                                                    unit_price: Number(merch.price || 0),
+                                                    quantity,
+                                                    variations: existingIndex !== -1 
+                                                      ? updatedMerchandise[existingIndex].variations || {}
+                                                      : {},
+                                                    available_stock: merch.available_stock,
+                                                    current_stock: merch.current_stock
+                                                  }
+
+                                                  if (existingIndex !== -1) {
+                                                    updatedMerchandise[existingIndex] = {
+                                                      ...updatedMerchandise[existingIndex],
+                                                      ...merchandiseItem
+                                                    }
+                                                  } else {
+                                                    updatedMerchandise.push(merchandiseItem)
+                                                  }
+                                                }
+
+                                                updateParticipantForm(index, 'merchandise', updatedMerchandise)
+                                              }}
+                                              className="w-24"
+                                            />
+                                            <span className="text-sm text-gray-600">
+                                              {merch.current_stock} available
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {/* Variations Selection */}
+                                        {participantMerch && participantMerch.quantity > 0 && merch.variations && merch.variations.length > 0 && (
+                                          <div className="border-t pt-4 mt-4">
+                                            <Label className="block mb-4 text-base font-medium">Select Options</Label>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                              {merch.variations.map((variation, varIndex) => (
+                                                <div key={varIndex}>
+                                                  <Label 
+                                                    htmlFor={`merch_${index}_${merchIndex}_var_${varIndex}`}
+                                                    className="block text-sm text-gray-600 mb-2"
+                                                  >
+                                                    {variation.variation_name}
+                                                  </Label>
+                                                  <Select
+                                                    value={participantMerch.variations?.[variation.variation_name] || ''}
+                                                    onValueChange={(value) => {
+                                                      const updatedMerchandise = [...form.merchandise]
+                                                      const item = updatedMerchandise.find(m => m.merchandise_id === merch.id)
+                                                      if (item) {
+                                                        item.variations = {
+                                                          ...(item.variations || {}),
+                                                          [variation.variation_name]: value
+                                                        }
+                                                        updateParticipantForm(index, 'merchandise', updatedMerchandise)
+                                                      }
+                                                    }}
+                                                  >
+                                                    <SelectTrigger 
+                                                      id={`merch_${index}_${merchIndex}_var_${varIndex}`}
+                                                      className="w-full"
+                                                    >
+                                                      <SelectValue placeholder={`Select ${variation.variation_name.toLowerCase()}`} />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                      {Array.isArray(variation.variation_options) ? variation.variation_options.map((option: string, optIndex: number) => (
+                                                        <SelectItem key={optIndex} value={option}>
+                                                          {option}
+                                                        </SelectItem>
+                                                      )) : null}
+                                                    </SelectContent>
+                                                  </Select>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
-                                )}
+                                </div>
                               </CardContent>
                             </Card>
                           )
