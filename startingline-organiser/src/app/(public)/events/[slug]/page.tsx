@@ -145,9 +145,10 @@ export default function EventPage() {
               </CardHeader>
               <CardContent>
                 {event.description ? (
-                  <div className="prose prose-gray max-w-none">
-                    <p className="whitespace-pre-wrap">{event.description}</p>
-                  </div>
+                  <div 
+                    className="prose prose-gray max-w-none prose-headings:text-gray-900 prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-img:rounded-lg"
+                    dangerouslySetInnerHTML={{ __html: event.description }}
+                  />
                 ) : (
                   <p className="text-gray-500 italic">No description available for this event.</p>
                 )}

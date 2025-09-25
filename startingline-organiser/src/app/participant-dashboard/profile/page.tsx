@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
+import { MobileInput } from '@/components/ui/mobile-input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,7 +36,11 @@ export default function ProfilePage() {
     last_name: '',
     email: '',
     phone: '',
-    address: ''
+    address: '',
+    id_document_masked: '',
+    id_document_type: '',
+    gender: '',
+    citizenship_status: ''
   })
 
   const [passwordData, setPasswordData] = useState({
@@ -54,7 +59,11 @@ export default function ProfilePage() {
           last_name: user.last_name || '',
           email: user.email || '',
           phone: user.phone || '',
-          address: ''
+          address: '',
+          id_document_masked: '',
+          id_document_type: '',
+          gender: '',
+          citizenship_status: ''
         })
       }
     } else {
@@ -204,17 +213,13 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <Label htmlFor="phone">Phone Number</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={profileData.phone}
-                    onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
-                    className="pl-10"
-                  />
-                </div>
+                <MobileInput
+                  id="phone"
+                  label="Phone Number"
+                  value={profileData.phone}
+                  onChange={(value) => setProfileData({...profileData, phone: value})}
+                  showValidation={true}
+                />
               </div>
 
               <div>
@@ -229,6 +234,56 @@ export default function ProfilePage() {
                   />
                 </div>
               </div>
+
+              {/* ID Document Information (Read-only) */}
+              {profileData.id_document_masked && (
+                <div className="border-t pt-4">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">Identity Document</h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <Label>Document Number</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={profileData.id_document_masked}
+                          disabled
+                          className="bg-gray-50"
+                        />
+                        <span className="text-xs text-gray-500 px-2 py-1 bg-gray-100 rounded">
+                          {profileData.id_document_type === 'sa_id' ? 'SA ID' : 'Passport'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        For security, only partial information is shown. Contact support to update.
+                      </p>
+                    </div>
+                    
+                    {(profileData.gender || profileData.citizenship_status) && (
+                      <div className="grid grid-cols-2 gap-4">
+                        {profileData.gender && (
+                          <div>
+                            <Label>Gender</Label>
+                            <Input
+                              value={profileData.gender === 'male' ? 'Male' : 'Female'}
+                              disabled
+                              className="bg-gray-50"
+                            />
+                          </div>
+                        )}
+                        {profileData.citizenship_status && (
+                          <div>
+                            <Label>Citizenship</Label>
+                            <Input
+                              value={profileData.citizenship_status === 'citizen' ? 'SA Citizen' : 'Permanent Resident'}
+                              disabled
+                              className="bg-gray-50"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <Button type="submit" disabled={loading} className="w-full">
                 <Save className="w-4 h-4 mr-2" />

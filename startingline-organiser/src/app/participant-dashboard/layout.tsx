@@ -13,7 +13,8 @@ import {
   LogOut,
   Menu,
   X,
-  Trophy
+  Trophy,
+  Award
 } from 'lucide-react'
 import Link from 'next/link'
 

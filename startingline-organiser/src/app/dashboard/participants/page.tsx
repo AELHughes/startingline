@@ -165,6 +165,11 @@ export default function ParticipantsDashboard() {
   const exportToCSV = () => {
     if (!analytics) return
 
+    // Check if the event requires a license by looking at the first participant
+    const eventRequiresLicense = analytics.participants.length > 0 && 
+      (analytics.participants[0].requires_temp_license !== undefined || 
+       analytics.participants[0].permanent_license_number !== undefined)
+
     const headers = [
       'Ticket Number',
       'Participant Name',
@@ -172,6 +177,7 @@ export default function ParticipantsDashboard() {
       'Mobile',
       'Date of Birth',
       'Distance',
+      'Distance km',
       'Price',
       'Status',
       'Disabled',
@@ -187,6 +193,11 @@ export default function ParticipantsDashboard() {
       'Merchandise Variations',
       'Merchandise Total'
     ]
+
+    // Add license column if event requires license
+    if (eventRequiresLicense) {
+      headers.push('License')
+    }
 
     const csvContent = [
       headers.join(','),
@@ -207,13 +218,26 @@ export default function ParticipantsDashboard() {
           ? participant.merchandise.reduce((total, m) => total + Number(m.total_price), 0).toFixed(2)
           : '0.00'
 
-        return [
+        // Prepare license information
+        let licenseInfo = ''
+        if (eventRequiresLicense) {
+          if (participant.requires_temp_license) {
+            licenseInfo = 'Temp License (Y)'
+          } else if (participant.permanent_license_number) {
+            licenseInfo = participant.permanent_license_number
+          } else {
+            licenseInfo = 'TBA'
+          }
+        }
+
+        const row = [
           participant.ticket_number,
           `"${participant.participant_first_name} ${participant.participant_last_name}"`,
           participant.participant_email,
           participant.participant_mobile,
           participant.participant_date_of_birth,
           participant.distance_name,
+          participant.distance_km || '',
           participant.amount,
           participant.status,
           participant.participant_disabled ? 'Yes' : 'No',
@@ -228,7 +252,14 @@ export default function ParticipantsDashboard() {
           `"${merchandiseItems}"`,
           `"${merchandiseVariations}"`,
           merchandiseTotal
-        ].join(',')
+        ]
+
+        // Add license column if event requires license
+        if (eventRequiresLicense) {
+          row.push(`"${licenseInfo}"`)
+        }
+
+        return row.join(',')
       })
     ].join('\n')
 

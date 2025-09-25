@@ -583,7 +583,14 @@ export default function AdminEventDetailPage() {
                     </div>
                     <div>
                       <Label className="text-sm font-medium text-gray-600">Description</Label>
-                      <p className="text-gray-900">{event.description || 'No description provided'}</p>
+                      {event.description ? (
+                        <div 
+                          className="text-gray-900 prose prose-sm max-w-none prose-headings:text-gray-900 prose-a:text-blue-600 prose-img:rounded-lg"
+                          dangerouslySetInnerHTML={{ __html: event.description }}
+                        />
+                      ) : (
+                        <p className="text-gray-900">No description provided</p>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>

@@ -29,8 +29,9 @@
       "@/middleware/*": ["middleware/*"]
     }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*", "@types/**/*"],
+  "exclude": ["node_modules", "dist"],
+  "typeRoots": ["./node_modules/@types", "./@types"]
 }
 
 

@@ -17,6 +17,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
     "@types/bcrypt": "^6.0.0",
+    "@types/dompurify": "^3.0.5",
+    "@types/jsdom": "^21.1.7",
     "@types/multer": "^2.0.0",
     "@types/pg": "^8.15.5",
     "@types/puppeteer": "^5.4.7",
@@ -24,17 +26,21 @@
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "dompurify": "^3.2.7",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "helmet": "^8.1.0",
+    "jsdom": "^27.0.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.6",
     "pg": "^8.16.3",
     "puppeteer": "^24.21.0",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "south-african-id-validator": "^1.0.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

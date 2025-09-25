@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express'
 import { pool, createAuditTrailEntry, getEventAuditTrail, createNotification } from '../lib/database'
 import { authenticateToken, requireOrganiser, requireOrganiserOrAdmin, optionalAuth } from '../middleware/auth-local'
 import type { ApiResponse, Event, CreateEventData } from '../types'
+import { sanitizeHtml } from '../utils/htmlSanitizer'
 
 const router = express.Router()
 
@@ -496,7 +497,7 @@ router.post('/', authenticateToken, requireOrganiser, async (req: Request, res: 
       eventData.license_details,
       eventData.primary_image_url,
       JSON.stringify(eventData.gallery_images || []),
-      eventData.description,
+      sanitizeHtml(eventData.description || ''),
       eventData.status || 'draft'
     ]
     
@@ -789,6 +790,9 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
         // Handle special cases
         if (field === 'gallery_images') {
           fieldValue = JSON.stringify(updates[field])
+        } else if (field === 'description') {
+          // Sanitize HTML content to prevent XSS attacks
+          fieldValue = sanitizeHtml(fieldValue || '')
         } else if ((field.includes('date') || field.includes('deadline')) && fieldValue === '') {
           // Convert empty date strings to null for PostgreSQL compatibility
           fieldValue = null
@@ -1691,7 +1695,7 @@ router.put('/admin/:id/section', authenticateToken, async (req: Request, res: Re
         if (data.name) { updateFields.push('name = $' + (updateValues.length + 1)); updateValues.push(data.name) }
         if (data.category) { updateFields.push('category = $' + (updateValues.length + 1)); updateValues.push(data.category) }
         if (data.event_type) { updateFields.push('event_type = $' + (updateValues.length + 1)); updateValues.push(data.event_type) }
-        if (data.description !== undefined) { updateFields.push('description = $' + (updateValues.length + 1)); updateValues.push(data.description) }
+        if (data.description !== undefined) { updateFields.push('description = $' + (updateValues.length + 1)); updateValues.push(sanitizeHtml(data.description || '')) }
         if (data.start_date) { updateFields.push('start_date = $' + (updateValues.length + 1)); updateValues.push(data.start_date) }
         if (data.end_date) { updateFields.push('end_date = $' + (updateValues.length + 1)); updateValues.push(data.end_date) }
         if (data.start_time) { updateFields.push('start_time = $' + (updateValues.length + 1)); updateValues.push(data.start_time) }
@@ -2163,6 +2167,7 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
         t.requires_temp_license,
         t.permanent_license_number,
         ed.name as distance_name,
+        ed.distance_km,
         ed.price as distance_price,
         o.account_holder_first_name,
         o.account_holder_last_name,
@@ -2200,7 +2205,7 @@ router.get('/:eventId/participant-analytics', authenticateToken, requireOrganise
         t.participant_disabled, t.participant_medical_aid_name, t.participant_medical_aid_number,
         t.emergency_contact_name, t.emergency_contact_number, t.amount, t.status,
         t.created_at, t.requires_temp_license, t.permanent_license_number,
-        ed.name, ed.price, o.account_holder_first_name, o.account_holder_last_name,
+        ed.name, ed.distance_km, ed.price, o.account_holder_first_name, o.account_holder_last_name,
         o.account_holder_email
       ORDER BY t.created_at DESC
     `, [eventId])

@@ -151,9 +151,22 @@ export default function SavedParticipantsModal({
                   <div className="truncate">
                     <span className="text-sm text-gray-500 mr-2">DOB:</span>
                     <span className="text-sm text-gray-900">
-                      {participant.date_of_birth ? new Date(participant.date_of_birth).toLocaleDateString() : 'Not provided'}
+                      {participant.date_of_birth ? new Date(participant.date_of_birth).toLocaleDateString('en-ZA', { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        year: 'numeric' 
+                      }) : 'Not provided'}
                     </span>
                   </div>
+                  {participant.id_document_masked && (
+                    <div className="truncate">
+                      <span className="text-sm text-gray-500 mr-2">ID:</span>
+                      <span className="text-sm text-gray-900 font-mono">{participant.id_document_masked}</span>
+                      <span className="text-xs bg-gray-100 px-1 py-0.5 rounded ml-1">
+                        {participant.id_document_type === 'sa_id' ? 'SA ID' : 'Passport'}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {currentParticipantId === participant.id ? (

@@ -29,6 +29,7 @@ export interface Event {
   latitude?: number
   longitude?: number
   license_required: boolean
+  license_type?: string
   temp_license_fee?: number
   license_details?: string
   primary_image_url?: string
@@ -86,14 +87,15 @@ export interface CreateEventData {
   latitude?: number
   longitude?: number
   license_required: boolean
+  license_type?: string
   temp_license_fee?: number
   license_details?: string
   primary_image_url?: string
   gallery_images?: string[]
   description?: string
   status?: 'draft' | 'pending_approval' | 'published'
-  distances?: any[]
-  merchandise?: any[]
+  distances?: EventDistance[]
+  merchandise?: Merchandise[]
 }
 
 
@@ -659,23 +661,6 @@ export const eventsApi = {
     }
   },
 
-  // Get event by ID (for admin use) - using the same structure as existing methods
-  getEventById: async (eventId: string): Promise<any> => {
-    try {
-      console.log('🔍 Fetching event details for admin:', eventId)
-      
-      const response = await fetch(`${API_BASE}/api/events/${eventId}`, {
-        headers: getAuthHeaders()
-      })
-
-      const event = await handleApiResponse<Event>(response)
-      console.log('✅ Retrieved event details for admin')
-      return { data: event }
-    } catch (error) {
-      console.error('❌ Get event by ID error:', error)
-      throw error
-    }
-  }
 }
 
 // ============================================
@@ -1060,9 +1045,14 @@ export interface ParticipantData {
   medical_aid_number?: string
   emergency_contact_name: string
   emergency_contact_number: string
+  id_document_number?: string
+  id_document_type?: 'sa_id' | 'passport'
+  gender?: 'male' | 'female'
+  citizenship_status?: 'citizen' | 'permanent_resident'
   merchandise?: Array<{
     merchandise_id: string
     variation_id?: string
+    variation_option_id?: string
     quantity: number
     unit_price: number
   }>
@@ -1094,7 +1084,6 @@ export interface OrderData {
 
 export interface SavedParticipant {
   id: string
-  user_profile_id: string
   first_name: string
   last_name: string
   email: string
@@ -1104,9 +1093,29 @@ export interface SavedParticipant {
   medical_aid_number: string | null
   emergency_contact_name: string
   emergency_contact_number: string
-  disabled: boolean
+  id_document_type?: 'sa_id' | 'passport'
+  id_document_masked?: string
+  gender?: 'male' | 'female'
+  citizenship_status?: 'citizen' | 'permanent_resident'
+  created_at: string
+  updated_at?: string
+}
+
+export interface UserLicense {
+  id: string
+  sport_type: string
+  license_number: string
+  license_authority?: string
+  issue_date?: string
+  expiry_date: string
+  is_active: boolean
   created_at: string
   updated_at: string
+}
+
+export interface SportType {
+  value: string
+  label: string
 }
 
 export interface Order {
@@ -1165,6 +1174,42 @@ export interface Ticket {
 }
 
 class ParticipantRegistrationApi {
+  async checkEmailExists(email: string): Promise<{
+    success: boolean
+    data?: {
+      exists: boolean
+      user?: {
+        id: string
+        email: string
+        first_name: string
+        last_name: string
+      }
+    }
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/participant-registration/check-email-exists`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to check email')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Check email exists error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to check email'
+      }
+    }
+  }
+
   async checkParticipantRegistration(eventId: string, participant: { email: string, first_name: string, last_name: string, date_of_birth: string }): Promise<{
     success: boolean
     data?: {
@@ -1288,6 +1333,32 @@ class ParticipantRegistrationApi {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get saved participants'
+      }
+    }
+  }
+
+  async getSavedParticipantForEdit(participantId: string): Promise<{
+    success: boolean
+    data?: SavedParticipant & { id_document_number?: string }
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/participant-registration/saved-participants/${participantId}/edit`, {
+        headers: getAuthHeaders()
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to get participant for editing')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Get participant for edit error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get participant for editing'
       }
     }
   }
@@ -1469,6 +1540,171 @@ class ParticipantRegistrationApi {
       }
     }
   }
+
+  // License Management Methods
+  async getMemberLicenses(participantId: string): Promise<{
+    success: boolean
+    data?: UserLicense[]
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/user-licenses/member/${participantId}`, {
+        headers: getAuthHeaders()
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to get member licenses')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Get member licenses error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get member licenses'
+      }
+    }
+  }
+
+  async createMemberLicense(participantId: string, licenseData: {
+    sport_type: string
+    license_number: string
+    license_authority?: string
+    issue_date?: string
+    expiry_date: string
+  }): Promise<{
+    success: boolean
+    data?: UserLicense
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/user-licenses/member/${participantId}`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(licenseData)
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create license')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Create license error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create license'
+      }
+    }
+  }
+
+  async updateUserLicense(licenseId: string, licenseData: Partial<UserLicense>): Promise<{
+    success: boolean
+    data?: UserLicense
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/user-licenses/${licenseId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(licenseData)
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update license')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Update license error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update license'
+      }
+    }
+  }
+
+  async deleteUserLicense(licenseId: string): Promise<{
+    success: boolean
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/user-licenses/${licenseId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to delete license')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Delete license error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete license'
+      }
+    }
+  }
+
+  async getSportTypes(): Promise<{
+    success: boolean
+    data?: SportType[]
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/user-licenses/sport-types`)
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to get sport types')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Get sport types error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get sport types'
+      }
+    }
+  }
+
+  async getValidMemberLicense(participantId: string, sportType: string): Promise<{
+    success: boolean
+    data?: UserLicense | null
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${API_BASE}/api/user-licenses/member/${participantId}/valid/${sportType}`, {
+        headers: getAuthHeaders()
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to get valid license')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Get valid license error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get valid license'
+      }
+    }
+  }
 }
 
 export const participantRegistrationApi = new ParticipantRegistrationApi()
@@ -1499,6 +1735,7 @@ export interface Event {
   city: string
   province: string
   license_required: boolean
+  license_type?: string
   temp_license_fee?: number
   license_details?: string
   primary_image_url?: string
@@ -1541,9 +1778,10 @@ export interface CreateEventData {
   city: string
   province: string
   license_required: boolean
+  license_type?: string
   temp_license_fee?: number
   license_details?: string
   primary_image_url?: string
-  distances?: Partial<EventDistance>[]
-  merchandise?: Partial<Merchandise>[]
+  distances?: EventDistance[]
+  merchandise?: Merchandise[]
 }

@@ -7,7 +7,7 @@ import { participantRegistrationApi, type Order } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Calendar, MapPin, Clock, Trophy, Users, Download, Eye, AlertCircle } from 'lucide-react'
+import { Calendar, MapPin, Clock, Trophy, Users, Download, Eye, AlertCircle, Award } from 'lucide-react'
 import { format } from 'date-fns'
 import Link from 'next/link'
 
@@ -257,7 +257,7 @@ export default function ParticipantDashboard() {
                 <Link href="/participant-dashboard/members">
                   <Button variant="outline" className="w-full justify-start">
                     <Users className="h-4 w-4 mr-2" />
-                    Manage Members
+                    Manage Members & Licenses
                   </Button>
                 </Link>
                 <Link href="/events">

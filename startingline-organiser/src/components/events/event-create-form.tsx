@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -67,6 +68,7 @@ interface FormData {
 
   // Licensing
   license_required: boolean
+  license_type?: string
   temp_license_fee?: number
   license_details?: string
 
@@ -130,6 +132,7 @@ export default function EventCreateForm({
     city: '',
     province: '',
     license_required: false,
+    license_type: '',
     temp_license_fee: 0,
     license_details: '',
     primary_image_url: '',
@@ -320,6 +323,12 @@ export default function EventCreateForm({
         }
       })
     })
+
+    // License validation
+    if (formData.license_required) {
+      if (!formData.license_type) newErrors.license_type = 'License type is required when license is required'
+      if (!formData.temp_license_fee || formData.temp_license_fee <= 0) newErrors.temp_license_fee = 'Temporary license fee must be greater than 0'
+    }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -985,9 +994,29 @@ export default function EventCreateForm({
                   </div>
 
                   {formData.license_required && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
                       <div>
-                        <Label htmlFor="temp_license_fee" className="mb-2 font-medium text-gray-700">License Fee (R)</Label>
+                        <Label htmlFor="license_type" className="mb-2 font-medium text-gray-700">License Type *</Label>
+                        <Select
+                          value={formData.license_type}
+                          onValueChange={(value) => setFormData(prev => ({ ...prev, license_type: value }))}
+                        >
+                          <SelectTrigger className={`bg-white ${errors.license_type ? 'border-red-500' : ''}`}>
+                            <SelectValue placeholder="Select license type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="road_running">Road Running</SelectItem>
+                            <SelectItem value="road_cycling">Road Cycling</SelectItem>
+                            <SelectItem value="trail_running">Trail Running</SelectItem>
+                            <SelectItem value="mountain_biking">Mountain Biking</SelectItem>
+                            <SelectItem value="triathlon">Triathlon</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {errors.license_type && <p className="text-red-500 text-sm mt-1">{errors.license_type}</p>}
+                      </div>
+
+                      <div>
+                        <Label htmlFor="temp_license_fee" className="mb-2 font-medium text-gray-700">Temp License Fee (R)</Label>
                         <Input
                           id="temp_license_fee"
                           type="number"
@@ -996,11 +1025,12 @@ export default function EventCreateForm({
                           value={formData.temp_license_fee || ''}
                           onChange={(e) => setFormData(prev => ({ ...prev, temp_license_fee: parseFloat(e.target.value) || 0 }))}
                           placeholder="0.00"
-                          className="bg-white"
+                          className={`bg-white ${errors.temp_license_fee ? 'border-red-500' : ''}`}
                         />
+                        {errors.temp_license_fee && <p className="text-red-500 text-sm mt-1">{errors.temp_license_fee}</p>}
                       </div>
 
-                      <div>
+                      <div className="md:col-span-3">
                         <Label htmlFor="license_details" className="mb-2 font-medium text-gray-700">License Details</Label>
                         <Textarea
                           id="license_details"
@@ -1017,12 +1047,11 @@ export default function EventCreateForm({
 
                 <div>
                   <Label htmlFor="description" className="mb-2 font-medium">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Describe your event..."
-                    rows={4}
+                  <RichTextEditor
+                    content={formData.description || ''}
+                    onChange={(content) => setFormData(prev => ({ ...prev, description: content }))}
+                    placeholder="Describe your event... You can format text, add links, and embed images."
+                    className="mt-2"
                   />
                 </div>
 

@@ -274,8 +274,8 @@ export default function EventsPage() {
                 {event.description && (
                   <div className="mt-4">
                     <p className="text-gray-700 line-clamp-2">
-                      {event.description.substring(0, 150)}
-                      {event.description.length > 150 && '...'}
+                      {event.description.replace(/<[^>]*>/g, '').substring(0, 150)}
+                      {event.description.replace(/<[^>]*>/g, '').length > 150 && '...'}
                     </p>
                   </div>
                 )}

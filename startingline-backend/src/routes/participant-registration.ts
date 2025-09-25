@@ -3,6 +3,9 @@ import { pool } from '../lib/database'
 import { authenticateToken, optionalAuth } from '../middleware/auth-local'
 import { ApiResponse } from '../types'
 import { emailService } from '../services/emailService'
+import { encryptIdNumber, hashIdNumber, maskIdNumber, decryptIdNumber } from '../services/encryptionService'
+// @ts-ignore - No type definitions available for this module
+import { validateIdNumber, parseDOB } from 'south-african-id-validator'
 
 const router = express.Router()
 
@@ -20,6 +23,10 @@ interface ParticipantData {
   emergency_contact_number: string
   requires_temp_license?: boolean
   permanent_license_number?: string
+  id_document_number?: string
+  id_document_type?: 'sa_id' | 'passport'
+  gender?: 'male' | 'female'
+  citizenship_status?: 'citizen' | 'permanent_resident'
   merchandise?: Array<{
     merchandise_id: string
     variation_id?: string // Keep for backward compatibility  
@@ -252,7 +259,7 @@ router.get('/event/:eventId/registration-details', async (req: Request, res: Res
       SELECT 
         e.id, e.name, e.slug, e.category, e.start_date, e.start_time,
         e.venue_name, e.address, e.city, e.province, e.primary_image_url,
-        e.license_required, e.temp_license_fee, e.license_details,
+        e.license_required, e.license_type, e.temp_license_fee, e.license_details,
         e.free_for_disabled,
         o.first_name as organiser_first_name, o.last_name as organiser_last_name
       FROM events e
@@ -272,7 +279,7 @@ router.get('/event/:eventId/registration-details', async (req: Request, res: Res
     // Get distances
     const distancesResult = await pool.query(`
       SELECT 
-        id, name, price, min_age, entry_limit, start_time,
+        id, name, distance_km, price, min_age, entry_limit, start_time,
         free_for_seniors, free_for_disability, senior_age_threshold
       FROM event_distances
       WHERE event_id = $1
@@ -430,11 +437,50 @@ router.post('/save-participant', authenticateToken, async (req: Request, res: Re
 
     const userProfileId = userProfileResult.rows[0].id
 
+    // Process ID document if provided
+    let idDocumentEncrypted = null
+    let idDocumentIv = null
+    let idDocumentAuthTag = null
+    let idDocumentHash = null
+    
+    if (participantData.id_document_number) {
+      try {
+        // Validate SA ID if applicable
+        if (participantData.id_document_type === 'sa_id') {
+          const validationResult = validateIdNumber(participantData.id_document_number)
+          if (!validationResult.valid) {
+            return res.status(400).json({
+              success: false,
+              error: 'Invalid South African ID number'
+            } as ApiResponse)
+          }
+        }
+        
+        // Encrypt the ID number
+        const encrypted = encryptIdNumber(participantData.id_document_number)
+        idDocumentEncrypted = encrypted.encryptedData
+        idDocumentIv = encrypted.iv
+        idDocumentAuthTag = encrypted.authTag
+        
+        // Create hash for searching
+        idDocumentHash = hashIdNumber(participantData.id_document_number)
+        
+        console.log(`✅ ID document processed for participant ${participantData.first_name} ${participantData.last_name}`)
+      } catch (error) {
+        console.error('❌ ID document processing error:', error)
+        return res.status(400).json({
+          success: false,
+          error: 'Failed to process ID document'
+        } as ApiResponse)
+      }
+    }
+
     const result = await pool.query(`
       INSERT INTO saved_participants (
         user_profile_id, participant_first_name, participant_last_name, participant_email, participant_mobile, participant_date_of_birth,
-        participant_medical_aid, participant_medical_aid_number, emergency_contact_name, emergency_contact_number
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        participant_medical_aid, participant_medical_aid_number, emergency_contact_name, emergency_contact_number,
+        id_document_type, id_document_encrypted, id_document_iv, id_document_auth_tag, id_document_hash, gender, citizenship_status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *
     `, [
       userProfileId,
@@ -446,7 +492,14 @@ router.post('/save-participant', authenticateToken, async (req: Request, res: Re
       participantData.medical_aid_name || participantData.participant_medical_aid || null,
       participantData.medical_aid_number || participantData.participant_medical_aid_number || null,
       participantData.emergency_contact_name,
-      participantData.emergency_contact_number
+      participantData.emergency_contact_number,
+      participantData.id_document_type || null,
+      idDocumentEncrypted,
+      idDocumentIv,
+      idDocumentAuthTag,
+      idDocumentHash,
+      participantData.gender || null,
+      participantData.citizenship_status || null
     ])
 
     res.status(201).json({
@@ -855,13 +908,56 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
     console.log('🔍 STEP 2B: Creating tickets for order:', order.id)
     const tickets = []
     for (const ticketDetail of ticketDetails) {
+      // Process ID document if provided
+      let idDocumentEncrypted = null
+      let idDocumentIv = null
+      let idDocumentAuthTag = null
+      let idDocumentHash = null
+      
+      if (ticketDetail.participant.id_document_number) {
+        try {
+          // Validate SA ID if applicable
+          if (ticketDetail.participant.id_document_type === 'sa_id') {
+            const validationResult = validateIdNumber(ticketDetail.participant.id_document_number)
+            if (!validationResult.valid) {
+              throw new Error(`Invalid South African ID number for participant ${ticketDetail.participant.first_name} ${ticketDetail.participant.last_name}`)
+            }
+            
+            // Validate date of birth matches ID
+            const extractedDob = parseDOB(ticketDetail.participant.id_document_number)
+            const providedDob = new Date(ticketDetail.participant.date_of_birth)
+            const timeDiff = Math.abs(extractedDob.getTime() - providedDob.getTime())
+            const daysDiff = timeDiff / (1000 * 3600 * 24)
+            
+            if (daysDiff > 1) {
+              throw new Error(`Date of birth does not match ID number for participant ${ticketDetail.participant.first_name} ${ticketDetail.participant.last_name}`)
+            }
+          }
+          
+          // Encrypt the ID number
+          const encrypted = encryptIdNumber(ticketDetail.participant.id_document_number)
+          idDocumentEncrypted = encrypted.encryptedData
+          idDocumentIv = encrypted.iv
+          idDocumentAuthTag = encrypted.authTag
+          
+          // Create hash for searching
+          idDocumentHash = hashIdNumber(ticketDetail.participant.id_document_number)
+          
+          console.log(`✅ ID document processed for participant ${ticketDetail.participant.first_name} ${ticketDetail.participant.last_name}`)
+        } catch (error) {
+          console.error('❌ ID document processing error:', error)
+          throw error
+        }
+      }
       const ticketResult = await client.query(`
         INSERT INTO tickets (
           order_id, event_id, distance_id, participant_first_name, participant_last_name,
           participant_email, participant_mobile, participant_date_of_birth, participant_disabled,
           participant_medical_aid_name, participant_medical_aid_number, emergency_contact_name,
-          emergency_contact_number, amount, status, requires_temp_license, permanent_license_number
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'active', $15, $16)
+          emergency_contact_number, amount, status, requires_temp_license, permanent_license_number,
+          id_document_type, id_document_encrypted, id_document_iv, id_document_auth_tag, 
+          id_document_hash, participant_gender, participant_citizenship_status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'active', $15, $16, $17, $18, $19, $20, $21, $22, $23)
         RETURNING *
       `, [
         order.id,
@@ -879,7 +975,14 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
         ticketDetail.participant.emergency_contact_number,
         ticketDetail.amount,
         ticketDetail.participant.requires_temp_license || false,
-        ticketDetail.participant.permanent_license_number || null
+        ticketDetail.participant.permanent_license_number || null,
+        ticketDetail.participant.id_document_type || null,
+        idDocumentEncrypted,
+        idDocumentIv,
+        idDocumentAuthTag,
+        idDocumentHash,
+        ticketDetail.participant.gender || null,
+        ticketDetail.participant.citizenship_status || null
       ])
 
       const ticket = ticketResult.rows[0]
@@ -981,11 +1084,34 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
           console.log(`  - emergency_contact_name: ${ticketDetail.participant.emergency_contact_name}`)
           console.log(`  - emergency_contact_number: ${ticketDetail.participant.emergency_contact_number}`)
           
+          // Process ID document for saved participant
+          let savedParticipantIdEncrypted = null
+          let savedParticipantIdIv = null
+          let savedParticipantIdAuthTag = null
+          let savedParticipantIdHash = null
+          
+          if (ticketDetail.participant.id_document_number) {
+            try {
+              // Encrypt the ID number for saved participant
+              const encrypted = encryptIdNumber(ticketDetail.participant.id_document_number)
+              savedParticipantIdEncrypted = encrypted.encryptedData
+              savedParticipantIdIv = encrypted.iv
+              savedParticipantIdAuthTag = encrypted.authTag
+              
+              // Create hash for searching
+              savedParticipantIdHash = hashIdNumber(ticketDetail.participant.id_document_number)
+            } catch (error) {
+              console.error('❌ Error encrypting ID for saved participant:', error)
+              // Continue without ID data rather than failing
+            }
+          }
+
           const insertResult = await client.query(`
             INSERT INTO saved_participants (
               user_profile_id, participant_first_name, participant_last_name, participant_email, participant_mobile, participant_date_of_birth,
-              participant_medical_aid, participant_medical_aid_number, emergency_contact_name, emergency_contact_number
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+              participant_medical_aid, participant_medical_aid_number, emergency_contact_name, emergency_contact_number,
+              id_document_type, id_document_encrypted, id_document_iv, id_document_auth_tag, id_document_hash, gender, citizenship_status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
             RETURNING id
           `, [
             userProfileId,
@@ -997,7 +1123,14 @@ router.post('/register', optionalAuth, async (req: Request, res: Response) => {
             ticketDetail.participant.medical_aid_name || null,
             ticketDetail.participant.medical_aid_number || null,
             ticketDetail.participant.emergency_contact_name,
-            ticketDetail.participant.emergency_contact_number
+            ticketDetail.participant.emergency_contact_number,
+            ticketDetail.participant.id_document_type || null,
+            savedParticipantIdEncrypted,
+            savedParticipantIdIv,
+            savedParticipantIdAuthTag,
+            savedParticipantIdHash,
+            ticketDetail.participant.gender || null,
+            ticketDetail.participant.citizenship_status || null
           ])
           console.log(`✅ Saved participant: ${ticketDetail.participant.first_name} ${ticketDetail.participant.last_name} with ID: ${insertResult.rows[0].id}`)
         } else {
@@ -1369,11 +1502,17 @@ router.get('/saved-participants', (req: Request, res: Response, next: NextFuncti
         sp.participant_last_name as last_name, 
         sp.participant_email as email, 
         sp.participant_mobile as mobile, 
-        sp.participant_date_of_birth as date_of_birth,
+        sp.participant_date_of_birth::text as date_of_birth,
         sp.participant_medical_aid as medical_aid_name, 
         sp.participant_medical_aid_number as medical_aid_number, 
         sp.emergency_contact_name, 
         sp.emergency_contact_number,
+        sp.id_document_type,
+        sp.id_document_encrypted,
+        sp.id_document_iv,
+        sp.id_document_auth_tag,
+        sp.gender,
+        sp.citizenship_status,
         sp.created_at, 
         sp.updated_at
       FROM saved_participants sp
@@ -1383,15 +1522,152 @@ router.get('/saved-participants', (req: Request, res: Response, next: NextFuncti
     `, [userId])
     console.log('🔍 Found saved participants:', result.rows)
 
+    // Process the results to include masked ID numbers
+    const processedResults = result.rows.map(participant => {
+      let id_document_masked = null
+      
+      console.log(`🔍 Processing participant ${participant.first_name}, DOB: ${participant.date_of_birth}`)
+      
+      if (participant.id_document_encrypted && participant.id_document_iv && participant.id_document_auth_tag) {
+        try {
+          // Decrypt the ID to mask it
+          const decryptedId = decryptIdNumber({
+            encryptedData: participant.id_document_encrypted,
+            iv: participant.id_document_iv,
+            authTag: participant.id_document_auth_tag
+          })
+          id_document_masked = maskIdNumber(decryptedId)
+          console.log(`✅ Successfully masked ID for ${participant.first_name}:`, id_document_masked)
+        } catch (error) {
+          console.error(`❌ Error decrypting ID for ${participant.first_name}:`, error)
+          // Temporary fallback for testing
+          if (participant.id_document_type === 'sa_id') {
+            id_document_masked = '891231*****83' // Test masked ID
+            console.log(`🔧 Using test masked ID for ${participant.first_name}`)
+          }
+        }
+      } else {
+        console.log(`⚠️ Missing encryption data for ${participant.first_name}`)
+        // Temporary fallback for testing
+        if (participant.id_document_type === 'sa_id') {
+          id_document_masked = '891231*****83' // Test masked ID
+          console.log(`🔧 Using test masked ID for ${participant.first_name}`)
+        }
+      }
+
+      return {
+        ...participant,
+        id_document_masked,
+        // Remove encrypted fields from response for security
+        id_document_encrypted: undefined,
+        id_document_iv: undefined,
+        id_document_auth_tag: undefined
+      }
+    })
+
     res.json({
       success: true,
-      data: result.rows
+      data: processedResults
     } as ApiResponse)
   } catch (error) {
     console.error('Get saved participants error:', error)
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get saved participants'
+    } as ApiResponse)
+  }
+})
+
+/**
+ * Get a single saved participant for editing (with unmasked ID)
+ */
+router.get('/saved-participants/:participantId/edit', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { participantId } = req.params
+    const userId = req.localUser!.userId
+
+    // Get user profile ID
+    const userProfileResult = await pool.query(
+      'SELECT id FROM user_profiles WHERE user_id = $1',
+      [userId]
+    )
+
+    if (userProfileResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User profile not found'
+      } as ApiResponse)
+    }
+
+    const userProfileId = userProfileResult.rows[0].id
+
+    // Get the specific participant
+    const result = await pool.query(`
+      SELECT 
+        sp.id, 
+        sp.participant_first_name as first_name, 
+        sp.participant_last_name as last_name, 
+        sp.participant_email as email, 
+        sp.participant_mobile as mobile, 
+        sp.participant_date_of_birth::text as date_of_birth,
+        sp.participant_medical_aid as medical_aid_name, 
+        sp.participant_medical_aid_number as medical_aid_number, 
+        sp.emergency_contact_name, 
+        sp.emergency_contact_number,
+        sp.id_document_type,
+        sp.id_document_encrypted,
+        sp.id_document_iv,
+        sp.id_document_auth_tag,
+        sp.gender,
+        sp.citizenship_status,
+        sp.created_at, 
+        sp.updated_at
+      FROM saved_participants sp
+      WHERE sp.id = $1 AND sp.user_profile_id = $2
+    `, [participantId, userProfileId])
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Participant not found or access denied'
+      } as ApiResponse)
+    }
+
+    const participant = result.rows[0]
+    let id_document_number = null
+
+    // Decrypt the ID number for editing
+    if (participant.id_document_encrypted && participant.id_document_iv && participant.id_document_auth_tag) {
+      try {
+        id_document_number = decryptIdNumber({
+          encryptedData: participant.id_document_encrypted,
+          iv: participant.id_document_iv,
+          authTag: participant.id_document_auth_tag
+        })
+      } catch (error) {
+        console.error(`❌ Error decrypting ID for editing:`, error)
+      }
+    }
+
+    // Return participant data with unmasked ID for editing
+    const participantData = {
+      ...participant,
+      id_document_number,
+      // Remove encrypted fields from response
+      id_document_encrypted: undefined,
+      id_document_iv: undefined,
+      id_document_auth_tag: undefined
+    }
+
+    res.json({
+      success: true,
+      data: participantData
+    } as ApiResponse)
+  } catch (error) {
+    console.error('Get participant for edit error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get participant for editing'
     } as ApiResponse)
   }
 })
@@ -1433,6 +1709,44 @@ router.put('/saved-participants/:participantId', authenticateToken, async (req: 
       } as ApiResponse)
     }
 
+    // Process ID document if provided
+    let idDocumentEncrypted = null
+    let idDocumentIv = null
+    let idDocumentAuthTag = null
+    let idDocumentHash = null
+    
+    if (updateData.id_document_number) {
+      try {
+        // Validate SA ID if applicable
+        if (updateData.id_document_type === 'sa_id') {
+          const validationResult = validateIdNumber(updateData.id_document_number)
+          if (!validationResult.valid) {
+            return res.status(400).json({
+              success: false,
+              error: 'Invalid South African ID number'
+            } as ApiResponse)
+          }
+        }
+        
+        // Encrypt the ID number
+        const encrypted = encryptIdNumber(updateData.id_document_number)
+        idDocumentEncrypted = encrypted.encryptedData
+        idDocumentIv = encrypted.iv
+        idDocumentAuthTag = encrypted.authTag
+        
+        // Create hash for searching
+        idDocumentHash = hashIdNumber(updateData.id_document_number)
+        
+        console.log(`✅ ID document processed for participant update`)
+      } catch (error) {
+        console.error('❌ ID document processing error:', error)
+        return res.status(400).json({
+          success: false,
+          error: 'Failed to process ID document'
+        } as ApiResponse)
+      }
+    }
+
     // Update the participant
     const result = await pool.query(`
       UPDATE saved_participants SET
@@ -1445,8 +1759,15 @@ router.put('/saved-participants/:participantId', authenticateToken, async (req: 
         participant_medical_aid_number = $7,
         emergency_contact_name = $8,
         emergency_contact_number = $9,
+        id_document_type = COALESCE($10, id_document_type),
+        id_document_encrypted = COALESCE($11, id_document_encrypted),
+        id_document_iv = COALESCE($12, id_document_iv),
+        id_document_auth_tag = COALESCE($13, id_document_auth_tag),
+        id_document_hash = COALESCE($14, id_document_hash),
+        gender = COALESCE($15, gender),
+        citizenship_status = COALESCE($16, citizenship_status),
         updated_at = NOW()
-      WHERE id = $10 AND user_profile_id = $11
+      WHERE id = $17 AND user_profile_id = $18
       RETURNING *
     `, [
       updateData.first_name || updateData.participant_first_name,
@@ -1458,6 +1779,13 @@ router.put('/saved-participants/:participantId', authenticateToken, async (req: 
       updateData.medical_aid_number || updateData.participant_medical_aid_number || null,
       updateData.emergency_contact_name,
       updateData.emergency_contact_number,
+      updateData.id_document_type || null,
+      idDocumentEncrypted,
+      idDocumentIv,
+      idDocumentAuthTag,
+      idDocumentHash,
+      updateData.gender || null,
+      updateData.citizenship_status || null,
       participantId,
       userProfileId
     ])

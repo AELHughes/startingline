@@ -1,9 +1,9 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
-import { participantRegistrationApi, type RegistrationDetails, type ParticipantData, type OrderData, type SavedParticipant } from '@/lib/api'
+import { participantRegistrationApi, type RegistrationDetails, type ParticipantData, type OrderData, type SavedParticipant, type UserLicense } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import SavedParticipantsModal from '@/components/events/saved-participants-modal'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { IdNumberInput } from '@/components/ui/id-number-input'
+import { MobileInput } from '@/components/ui/mobile-input'
+import { validateDateOfBirthMatch, IdValidationResult } from '@/utils/idValidation'
+import { validateSAMobileNumber } from '@/lib/validation'
 import { 
   Calendar, 
   MapPin, 
@@ -33,7 +37,8 @@ import {
   CheckCircle,
   ShoppingCart,
   Eye,
-  EyeOff
+  EyeOff,
+  Award
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -79,14 +84,25 @@ interface ParticipantFormData extends ParticipantData {
   price: number
   min_age?: number
   merchandise: MerchandiseSelection[]
+  
+  // Error fields
   ageError?: string
   firstNameError?: string
   lastNameError?: string
   emailError?: string
   mobileError?: string
   dateOfBirthError?: string
+  idDocumentError?: string
   emergencyContactNameError?: string
   emergencyContactNumberError?: string
+  
+  // License-related fields
+  license_number?: string
+  license_authority?: string
+  license_expiry_date?: string
+  needs_temp_license?: boolean
+  temp_license_fee?: number
+  valid_license?: UserLicense | null
 }
 
 // Custom Password Input Component
@@ -170,6 +186,16 @@ export default function EventRegistrationPage() {
   })
   const [loginError, setLoginError] = useState('')
   const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const [emailValidation, setEmailValidation] = useState<{
+    isChecking: boolean
+    exists: boolean
+    message: string
+    user?: { first_name: string, last_name: string }
+  }>({
+    isChecking: false,
+    exists: false,
+    message: ''
+  })
   
   // Password visibility state
   const [showLoginPassword, setShowLoginPassword] = useState(false)
@@ -184,6 +210,23 @@ export default function EventRegistrationPage() {
       }
     }
   }, [slug, user])
+
+  // Email validation effect with debouncing
+  useEffect(() => {
+    if (accountHolderForm.email && accountHolderOption === 'new') {
+      const timeoutId = setTimeout(() => {
+        validateAccountEmail(accountHolderForm.email)
+      }, 500) // 500ms debounce
+
+      return () => clearTimeout(timeoutId)
+    } else {
+      setEmailValidation({
+        isChecking: false,
+        exists: false,
+        message: ''
+      })
+    }
+  }, [accountHolderForm.email, accountHolderOption])
 
   const fetchRegistrationDetails = async () => {
     try {
@@ -200,6 +243,13 @@ export default function EventRegistrationPage() {
       const response = await participantRegistrationApi.getRegistrationDetails(eventId)
       
       if (response.success && response.data) {
+        console.log('🔍 Registration details loaded:', response.data)
+        console.log('🔍 Event license info:', {
+          license_required: response.data.event.license_required,
+          license_type: response.data.event.license_type,
+          temp_license_fee: response.data.event.temp_license_fee
+        })
+        console.log('🔍 Distance data:', response.data.event.distances)
         setRegistrationDetails(response.data)
         // Initialize order data with event info
         setOrderData({
@@ -431,9 +481,20 @@ export default function EventRegistrationPage() {
             disabled: false,
             medical_aid_name: '',
             medical_aid_number: '',
+            id_document_number: '',
+            id_document_type: undefined,
+            gender: undefined,
+            citizenship_status: undefined,
             emergency_contact_name: orderData.emergency_contact_name || '',
             emergency_contact_number: orderData.emergency_contact_number || '',
-            merchandise: []
+            merchandise: [],
+            // Initialize license fields
+            license_number: '',
+            license_authority: '',
+            license_expiry_date: '',
+            needs_temp_license: false,
+            temp_license_fee: registrationDetails?.event.temp_license_fee || 0,
+            valid_license: null
           })
         }
       }
@@ -601,6 +662,59 @@ export default function EventRegistrationPage() {
     }))
   }
 
+  // Switch to login mode with pre-filled email
+  const switchToLoginMode = (email: string) => {
+    setAccountHolderOption('login')
+    setLoginForm({ email, password: '' }) // Pre-fill email and clear password
+    setEmailValidation({ isChecking: false, exists: false, message: '' })
+    setLoginError('') // Clear any existing login errors
+  }
+
+  // Email validation for account holder
+  const validateAccountEmail = async (email: string) => {
+    if (!email || !email.includes('@')) {
+      setEmailValidation({
+        isChecking: false,
+        exists: false,
+        message: ''
+      })
+      return
+    }
+
+    setEmailValidation(prev => ({ ...prev, isChecking: true }))
+
+    try {
+      const result = await participantRegistrationApi.checkEmailExists(email)
+      
+      if (result.success && result.data) {
+        if (result.data.exists && result.data.user) {
+          setEmailValidation({
+            isChecking: false,
+            exists: true,
+            message: `We found an account associated with ${email}.`,
+            user: {
+              first_name: result.data.user.first_name,
+              last_name: result.data.user.last_name
+            }
+          })
+        } else {
+          setEmailValidation({
+            isChecking: false,
+            exists: false,
+            message: ''
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Email validation error:', error)
+      setEmailValidation({
+        isChecking: false,
+        exists: false,
+        message: ''
+      })
+    }
+  }
+
   const handleAccountHolderSubmit = async () => {
     if (user) {
       proceedToParticipants()
@@ -714,6 +828,101 @@ export default function EventRegistrationPage() {
     }
   }
 
+  const savePermanentLicense = async (index: number) => {
+    const form = participantForms[index]
+    
+    // Only save if we have a license number and a saved participant
+    if (!form.license_number || !registrationDetails?.event.license_type) {
+      return
+    }
+
+    // Find the saved participant for this form
+    const allocation = participantAllocations.find(a => a.participantIndex === index)
+    if (!allocation) {
+      return // No saved participant selected
+    }
+
+    try {
+      // Check if this license already exists for this participant
+      const existingLicenses = await participantRegistrationApi.getMemberLicenses(allocation.participantId)
+      
+      if (existingLicenses.success && existingLicenses.data) {
+        const existingLicense = existingLicenses.data.find(
+          license => license.sport_type === registrationDetails.event.license_type && 
+                    license.license_number === form.license_number
+        )
+        
+        if (existingLicense) {
+          console.log('License already exists for this participant')
+          return
+        }
+      }
+
+      // Save the new license
+      const licenseData = {
+        sport_type: registrationDetails.event.license_type,
+        license_number: form.license_number,
+        license_authority: form.license_authority || '',
+        expiry_date: form.license_expiry_date || new Date(new Date().getFullYear() + 1, 11, 31).toISOString().split('T')[0] // Default to end of next year
+      }
+
+      const result = await participantRegistrationApi.createMemberLicense(allocation.participantId, licenseData)
+      
+      if (result.success) {
+        console.log('✅ Permanent license saved for participant')
+        // Update the form to show this as a valid license
+        updateParticipantForm(index, 'valid_license', result.data)
+      } else {
+        console.error('Failed to save permanent license:', result.error)
+      }
+    } catch (error) {
+      console.error('Error saving permanent license:', error)
+    }
+  }
+
+  const checkParticipantLicense = async (index: number, participantId: string) => {
+    // Only check if event requires a license
+    if (!registrationDetails?.event.license_required || !registrationDetails?.event.license_type) {
+      console.log('🔍 License check skipped - event does not require license or license_type missing')
+      return
+    }
+
+    console.log('🔍 Checking license for participant:', participantId, 'sport type:', registrationDetails.event.license_type)
+
+    try {
+      // Check for valid license for this participant and sport type
+      const licenseResponse = await participantRegistrationApi.getValidMemberLicense(
+        participantId, 
+        registrationDetails.event.license_type
+      )
+
+      console.log('🔍 License response:', licenseResponse)
+
+      if (licenseResponse.success && licenseResponse.data) {
+        // Valid license found - populate license fields
+        updateParticipantForm(index, 'valid_license', licenseResponse.data)
+        updateParticipantForm(index, 'license_number', licenseResponse.data.license_number)
+        updateParticipantForm(index, 'license_authority', licenseResponse.data.license_authority || '')
+        updateParticipantForm(index, 'license_expiry_date', licenseResponse.data.expiry_date)
+        updateParticipantForm(index, 'needs_temp_license', false)
+        updateParticipantForm(index, 'temp_license_fee', 0)
+      } else {
+        // No valid license found - offer temp license option
+        updateParticipantForm(index, 'valid_license', null)
+        updateParticipantForm(index, 'license_number', '')
+        updateParticipantForm(index, 'license_authority', '')
+        updateParticipantForm(index, 'license_expiry_date', '')
+        updateParticipantForm(index, 'needs_temp_license', false) // Default to false, user can select
+        updateParticipantForm(index, 'temp_license_fee', registrationDetails.event.temp_license_fee || 0)
+      }
+    } catch (error) {
+      console.error('Error checking participant license:', error)
+      // On error, default to no license
+      updateParticipantForm(index, 'valid_license', null)
+      updateParticipantForm(index, 'needs_temp_license', false)
+    }
+  }
+
   const loadSavedParticipant = async (index: number, savedParticipant: SavedParticipant | null) => {
     // Clear any existing modal error
     setModalError('')
@@ -738,7 +947,18 @@ export default function EventRegistrationPage() {
             emergency_contact_name: '',
             emergency_contact_number: '',
             disabled: false,
-            price: originalPrice
+            id_document_number: '',
+            id_document_type: undefined,
+            gender: undefined,
+            citizenship_status: undefined,
+            price: originalPrice,
+            // Clear license fields when participant is deselected
+            license_number: '',
+            license_authority: '',
+            license_expiry_date: '',
+            needs_temp_license: false,
+            temp_license_fee: registrationDetails?.event.temp_license_fee || 0,
+            valid_license: null
           }
         }
         return form
@@ -792,23 +1012,40 @@ export default function EventRegistrationPage() {
           }
         }
         
-        // Apply disability discount if applicable
-        if (savedParticipant.disabled && distance?.free_for_disability) {
-          price = 0
-        }
+        // Note: Disability discount would need to be re-applied manually
+        // as we don't store disability status in saved participants
         
+        // Format date properly to avoid timezone issues
+        let formattedDate = ''
+        if (savedParticipant.date_of_birth) {
+          // Handle both date string formats
+          if (savedParticipant.date_of_birth.includes('T')) {
+            // ISO format with time - extract just the date part
+            formattedDate = savedParticipant.date_of_birth.split('T')[0]
+          } else if (savedParticipant.date_of_birth.includes('-')) {
+            // Simple date format - use as is
+            formattedDate = savedParticipant.date_of_birth
+          }
+        }
+
+        console.log('✅ Loading saved participant:', `${savedParticipant.first_name} ${savedParticipant.last_name}`, 'DOB:', formattedDate)
+
         return {
           ...form,
           first_name: savedParticipant.first_name || '',
           last_name: savedParticipant.last_name || '',
           email: savedParticipant.email || '',
           mobile: savedParticipant.mobile || '',
-          date_of_birth: savedParticipant.date_of_birth ? new Date(savedParticipant.date_of_birth).toISOString().split('T')[0] : '',
+          date_of_birth: formattedDate,
           medical_aid_name: savedParticipant.medical_aid_name || '',
           medical_aid_number: savedParticipant.medical_aid_number || '',
           emergency_contact_name: savedParticipant.emergency_contact_name || '',
           emergency_contact_number: savedParticipant.emergency_contact_number || '',
-          disabled: savedParticipant.disabled || false,
+          disabled: false, // Don't load disabled status from saved participant
+          id_document_number: savedParticipant.id_document_masked || '', // Show masked ID for reference
+          id_document_type: savedParticipant.id_document_type,
+          gender: savedParticipant.gender,
+          citizenship_status: savedParticipant.citizenship_status,
           price: price
         }
       }
@@ -820,6 +1057,9 @@ export default function EventRegistrationPage() {
       const withoutCurrent = prev.filter(a => a.participantIndex !== index)
       return [...withoutCurrent, { participantId: savedParticipant.id, participantIndex: index }]
     })
+    
+    // Check for valid license if event requires one
+    await checkParticipantLicense(index, savedParticipant.id)
     
     // Validate age
     setTimeout(() => {
@@ -906,6 +1146,17 @@ export default function EventRegistrationPage() {
         }
       }
       
+      // Skip ID validation if it's a masked ID from saved member
+      if (!form.id_document_number) {
+        updatedForm.idDocumentError = 'ID number or passport is required'
+        hasErrors = true
+      } else if (form.id_document_number.includes('*')) {
+        // Masked ID from saved member - already validated
+        updatedForm.idDocumentError = undefined
+      } else {
+        updatedForm.idDocumentError = undefined
+      }
+      
       if (!form.emergency_contact_name) {
         updatedForm.emergencyContactNameError = 'Emergency contact name is required'
         hasErrors = true
@@ -917,7 +1168,13 @@ export default function EventRegistrationPage() {
         updatedForm.emergencyContactNumberError = 'Emergency contact number is required'
         hasErrors = true
       } else {
-        updatedForm.emergencyContactNumberError = undefined
+        const mobileValidation = validateSAMobileNumber(form.emergency_contact_number)
+        if (!mobileValidation.isValid) {
+          updatedForm.emergencyContactNumberError = mobileValidation.error
+          hasErrors = true
+        } else {
+          updatedForm.emergencyContactNumberError = undefined
+        }
       }
       
       return updatedForm
@@ -983,6 +1240,10 @@ export default function EventRegistrationPage() {
       form.merchandise?.forEach(merch => {
         total += (Number(merch.unit_price) || 0) * (Number(merch.quantity) || 0)
       })
+      // Add temporary license fee if selected
+      if (form.needs_temp_license) {
+        total += Number(form.temp_license_fee) || 0
+      }
     })
     return total
   }
@@ -1016,6 +1277,8 @@ export default function EventRegistrationPage() {
             medical_aid_number: form.medical_aid_number,
             emergency_contact_name: form.emergency_contact_name,
             emergency_contact_number: form.emergency_contact_number,
+            requires_temp_license: form.needs_temp_license || false,
+            permanent_license_number: form.needs_temp_license ? null : (form.license_number || null),
             merchandise: form.merchandise.flatMap(merch => {
               console.log(`🔍 Processing merchandise: ${merch.name}`, {
                 has_variationQuantities: !!merch.variationQuantities,
@@ -1220,8 +1483,13 @@ export default function EventRegistrationPage() {
               {event.distances.map((distance) => (
                 <div key={distance.id} className="flex items-center justify-between p-4 border rounded-lg">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-lg">{distance.name}</h3>
-                    <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="font-semibold text-lg">{distance.name}</h3>
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200 px-3 py-1 rounded-full font-medium">
+                        {distance.distance_km}km
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-gray-600">
                       <span>R{distance.price}</span>
                       {distance.min_age && <span>Min age: {distance.min_age}</span>}
                       {distance.entry_limit && <span>Limit: {distance.entry_limit}</span>}
@@ -1277,7 +1545,10 @@ export default function EventRegistrationPage() {
                     <div className="flex space-x-4">
                       <Button
                         variant={accountHolderOption === 'login' ? 'default' : 'outline'}
-                        onClick={() => setAccountHolderOption('login')}
+                        onClick={() => {
+                          setAccountHolderOption('login')
+                          setEmailValidation({ isChecking: false, exists: false, message: '' })
+                        }}
                         className="flex-1"
                       >
                         I have an account
@@ -1333,41 +1604,84 @@ export default function EventRegistrationPage() {
                           An account will be created for you during checkout. Fill in your details below.
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor="account_first_name">First Name *</Label>
-                            <Input
-                              id="account_first_name"
-                              value={accountHolderForm.first_name}
-                              onChange={(e) => setAccountHolderForm(prev => ({ ...prev, first_name: e.target.value }))}
-                              required
-                            />
+                          <div className="space-y-2">
+                            <Label htmlFor="account_first_name" className="text-sm font-medium text-gray-700">
+                              First Name <span className="text-red-500">*</span>
+                            </Label>
+                            <div className="relative">
+                              <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                              <Input
+                                id="account_first_name"
+                                value={accountHolderForm.first_name}
+                                onChange={(e) => setAccountHolderForm(prev => ({ ...prev, first_name: e.target.value }))}
+                                required
+                                className="pl-10 h-11"
+                                placeholder="Enter first name"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <Label htmlFor="account_last_name">Last Name *</Label>
-                            <Input
-                              id="account_last_name"
-                              value={accountHolderForm.last_name}
-                              onChange={(e) => setAccountHolderForm(prev => ({ ...prev, last_name: e.target.value }))}
-                              required
-                            />
+                          <div className="space-y-2">
+                            <Label htmlFor="account_last_name" className="text-sm font-medium text-gray-700">
+                              Last Name <span className="text-red-500">*</span>
+                            </Label>
+                            <div className="relative">
+                              <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                              <Input
+                                id="account_last_name"
+                                value={accountHolderForm.last_name}
+                                onChange={(e) => setAccountHolderForm(prev => ({ ...prev, last_name: e.target.value }))}
+                                required
+                                className="pl-10 h-11"
+                                placeholder="Enter last name"
+                              />
+                            </div>
                           </div>
                           <div>
                             <Label htmlFor="account_email">Email *</Label>
-                            <Input
-                              id="account_email"
-                              type="email"
-                              value={accountHolderForm.email}
-                              onChange={(e) => setAccountHolderForm(prev => ({ ...prev, email: e.target.value }))}
-                              required
-                            />
+                            <div className="relative">
+                              <Input
+                                id="account_email"
+                                type="email"
+                                value={accountHolderForm.email}
+                                onChange={(e) => setAccountHolderForm(prev => ({ ...prev, email: e.target.value }))}
+                                required
+                                className={emailValidation.exists ? 'border-orange-500 focus:border-orange-500' : ''}
+                              />
+                              {emailValidation.isChecking && (
+                                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                  <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+                                </div>
+                              )}
+                            </div>
+                            {emailValidation.exists && emailValidation.message && (
+                              <Alert className="mt-2 border-orange-200 bg-orange-50">
+                                <AlertCircle className="h-4 w-4 text-orange-600" />
+                                <AlertDescription className="text-orange-800">
+                                  We found an account associated with this email address.
+                                  <div className="mt-3 space-y-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={() => switchToLoginMode(accountHolderForm.email)}
+                                      className="bg-orange-600 hover:bg-orange-700 text-white"
+                                    >
+                                      Log in with this email
+                                    </Button>
+                                    <div className="text-sm text-orange-700">
+                                      or use a different email address
+                                    </div>
+                                  </div>
+                                </AlertDescription>
+                              </Alert>
+                            )}
                           </div>
                           <div>
-                            <Label htmlFor="account_mobile">Mobile Number *</Label>
-                            <Input
+                            <MobileInput
                               id="account_mobile"
+                              label="Mobile Number"
                               value={accountHolderForm.mobile}
-                              onChange={(e) => setAccountHolderForm(prev => ({ ...prev, mobile: e.target.value }))}
+                              onChange={(value) => setAccountHolderForm(prev => ({ ...prev, mobile: value }))}
                               required
+                              showValidation={true}
                             />
                           </div>
                           <div>
@@ -1434,6 +1748,8 @@ export default function EventRegistrationPage() {
                     onClick={handleAccountHolderSubmit}
                     disabled={
                       isLoggingIn || 
+                      emailValidation.isChecking ||
+                      emailValidation.exists ||
                       (!user && accountHolderOption === 'login' && (!loginForm.email || !loginForm.password)) ||
                       (!user && accountHolderOption === 'new' && (!accountHolderForm.first_name || !accountHolderForm.last_name || !accountHolderForm.email || !accountHolderForm.mobile || !accountHolderForm.password))
                     }
@@ -1474,7 +1790,15 @@ export default function EventRegistrationPage() {
                   <div className="flex items-center justify-between pr-10">
                     <div>
                       <CardTitle className="text-lg">Participant {index + 1}</CardTitle>
-                      <CardDescription>{form.distance_name} - R{Number(form.price).toFixed(2)}</CardDescription>
+                      <div className="flex items-center gap-3 mb-1">
+                        <CardDescription>{form.distance_name} - R{Number(form.price).toFixed(2)}</CardDescription>
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200 px-2 py-0.5 rounded-full text-xs font-medium">
+                          {(() => {
+                            const distance = registrationDetails?.event.distances.find(d => d.id === form.distance_id)
+                            return distance?.distance_km ? `${distance.distance_km}km` : ''
+                          })()}
+                        </Badge>
+                      </div>
                       {form.min_age && (
                         <p className="text-xs text-gray-500 mt-1">Minimum age: {form.min_age} years</p>
                       )}
@@ -1509,108 +1833,247 @@ export default function EventRegistrationPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor={`first_name_${index}`}>First Name *</Label>
-                      <Input
-                        id={`first_name_${index}`}
-                        value={form.first_name}
-                        onChange={(e) => updateParticipantForm(index, 'first_name', e.target.value)}
-                        required
-                        className={form.firstNameError ? 'border-red-500' : ''}
-                      />
+                <CardContent className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor={`first_name_${index}`} className="text-sm font-medium text-gray-700">
+                        First Name <span className="text-red-500">*</span>
+                      </Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          id={`first_name_${index}`}
+                          value={form.first_name}
+                          onChange={(e) => updateParticipantForm(index, 'first_name', e.target.value)}
+                          required
+                          className={`pl-10 h-11 ${form.firstNameError ? 'border-red-500' : ''}`}
+                          placeholder="Enter first name"
+                        />
+                      </div>
                       {form.firstNameError && (
                         <p className="text-red-500 text-sm mt-1">{form.firstNameError}</p>
                       )}
                     </div>
-                    <div>
-                      <Label htmlFor={`last_name_${index}`}>Last Name *</Label>
-                      <Input
-                        id={`last_name_${index}`}
-                        value={form.last_name}
-                        onChange={(e) => updateParticipantForm(index, 'last_name', e.target.value)}
-                        required
-                        className={form.lastNameError ? 'border-red-500' : ''}
-                      />
+                    <div className="space-y-2">
+                      <Label htmlFor={`last_name_${index}`} className="text-sm font-medium text-gray-700">
+                        Last Name <span className="text-red-500">*</span>
+                      </Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          id={`last_name_${index}`}
+                          value={form.last_name}
+                          onChange={(e) => updateParticipantForm(index, 'last_name', e.target.value)}
+                          required
+                          className={`pl-10 h-11 ${form.lastNameError ? 'border-red-500' : ''}`}
+                          placeholder="Enter last name"
+                        />
+                      </div>
                       {form.lastNameError && (
                         <p className="text-red-500 text-sm mt-1">{form.lastNameError}</p>
                       )}
                     </div>
-                    <div>
-                      <Label htmlFor={`email_${index}`}>Email *</Label>
-                      <Input
-                        id={`email_${index}`}
-                        type="email"
-                        value={form.email}
-                        onChange={(e) => updateParticipantForm(index, 'email', e.target.value)}
-                        required
-                        className={form.emailError ? 'border-red-500' : ''}
-                      />
+                    <div className="space-y-2">
+                      <Label htmlFor={`email_${index}`} className="text-sm font-medium text-gray-700">
+                        Email <span className="text-red-500">*</span>
+                      </Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          id={`email_${index}`}
+                          type="email"
+                          value={form.email}
+                          onChange={(e) => updateParticipantForm(index, 'email', e.target.value)}
+                          required
+                          className={`pl-10 h-11 ${form.emailError ? 'border-red-500' : ''}`}
+                          placeholder="Enter email address"
+                        />
+                      </div>
                       {form.emailError && (
                         <p className="text-red-500 text-sm mt-1">{form.emailError}</p>
                       )}
                     </div>
                     <div>
-                      <Label htmlFor={`mobile_${index}`}>Mobile Number *</Label>
-                      <Input
+                      <MobileInput
                         id={`mobile_${index}`}
+                        label="Mobile Number"
                         value={form.mobile}
-                        onChange={(e) => updateParticipantForm(index, 'mobile', e.target.value)}
-                        required
-                        className={form.mobileError ? 'border-red-500' : ''}
-                      />
-                      {form.mobileError && (
-                        <p className="text-red-500 text-sm mt-1">{form.mobileError}</p>
-                      )}
-                    </div>
-                    <div>
-                      <Label htmlFor={`date_of_birth_${index}`}>Date of Birth *</Label>
-                      <Input
-                        id={`date_of_birth_${index}`}
-                        type="date"
-                        value={form.date_of_birth}
-                        onChange={(e) => {
-                          const value = e.target.value
-                          console.log('🔍 Date of birth changed for index:', index, 'to:', value)
-                          
-                          // Get the current form data
-                          const currentForm = participantForms[index]
-                          
-                          // Validate age immediately
-                          const ageError = validateAge(value, currentForm.min_age)
-                          console.log('🔍 Age validation result:', { ageError, min_age: currentForm.min_age })
-                          
-                          // Update form with validation result
-                          updateParticipantForm(index, 'date_of_birth', value)
-                          if (ageError) {
-                            updateParticipantForm(index, 'ageError', ageError)
-                            setError('One or more participants do not meet the minimum age requirement')
+                        onChange={(value) => updateParticipantForm(index, 'mobile', value)}
+                        onValidationChange={(isValid, error) => {
+                          if (!isValid && error) {
+                            updateParticipantForm(index, 'mobileError', error)
                           } else {
-                            updateParticipantForm(index, 'ageError', undefined)
-                            // Only clear error if no other age errors exist
-                            const otherFormsWithAgeErrors = participantForms.some((f, idx) => idx !== index && f.ageError)
-                            if (!otherFormsWithAgeErrors) {
-                              setError('')
-                            }
+                            updateParticipantForm(index, 'mobileError', '')
                           }
                         }}
-                        onBlur={() => {
-                          console.log('🔍 Date of birth onBlur triggered for index:', index)
-                          validateParticipantAge(index)
-                          // Check for duplicate after age validation
-                          setTimeout(() => {
-                            checkForDuplicateParticipant(index)
-                          }, 100)
-                        }}
                         required
-                        className={form.dateOfBirthError || form.ageError ? 'border-red-500' : ''}
+                        showValidation={true}
                       />
-                      {form.dateOfBirthError && (
-                        <p className="text-red-500 text-sm mt-1">{form.dateOfBirthError}</p>
-                      )}
-                      {form.ageError && (
-                        <p className="text-red-500 text-sm mt-1">{form.ageError}</p>
+                    </div>
+                  </div>
+                  
+                  {/* ID Number / Passport Section */}
+                  <div>
+                    {/* Check if this is a masked ID from saved member */}
+                    {form.id_document_number && form.id_document_number.includes('*') ? (
+                      // Read-only masked ID display
+                      <div className="space-y-2">
+                        <Label htmlFor={`id_document_${index}`} className="text-sm font-medium text-gray-700">
+                          ID Number / Passport <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            id={`id_document_${index}`}
+                            type="text"
+                            value={form.id_document_number}
+                            readOnly
+                            className="bg-gray-50 font-mono h-11"
+                          />
+                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                          </div>
+                        </div>
+                        <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                          <p className="text-green-800 text-sm">
+                            <CheckCircle className="inline h-4 w-4 mr-1" />
+                            ID verified from saved member
+                            {form.id_document_type && (
+                              <span className="ml-2 text-xs bg-green-100 px-2 py-1 rounded">
+                                {form.id_document_type === 'sa_id' ? 'SA ID' : 'Passport'}
+                              </span>
+                            )}
+                            {form.gender && (
+                              <span className="ml-1 text-xs bg-green-100 px-2 py-1 rounded">
+                                {form.gender === 'male' ? 'Male' : 'Female'}
+                              </span>
+                            )}
+                            {form.citizenship_status && (
+                              <span className="ml-1 text-xs bg-green-100 px-2 py-1 rounded">
+                                {form.citizenship_status === 'citizen' ? 'SA Citizen' : 'Permanent Resident'}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-green-700 text-xs mt-1">
+                            This information is from your saved member profile and has been verified.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      // Editable ID input for new entries
+                      <div>
+                        <IdNumberInput
+                          value={form.id_document_number || ''}
+                          onChange={(value) => updateParticipantForm(index, 'id_document_number', value)}
+                          onValidationResult={(result: IdValidationResult) => {
+                            // Update document type and extracted info
+                            updateParticipantForm(index, 'id_document_type', result.type === 'unknown' ? undefined : result.type)
+                            if (result.gender) {
+                              updateParticipantForm(index, 'gender', result.gender)
+                            }
+                            if (result.citizenship) {
+                              updateParticipantForm(index, 'citizenship_status', result.citizenship)
+                            }
+                            
+                            // Set validation error if invalid
+                            if (!result.isValid && result.error) {
+                              updateParticipantForm(index, 'idDocumentError', result.error)
+                            } else {
+                              updateParticipantForm(index, 'idDocumentError', undefined)
+                            }
+                          }}
+                          onDateOfBirthExtracted={(dateOfBirth) => {
+                            // Auto-populate date of birth from SA ID
+                            updateParticipantForm(index, 'date_of_birth', dateOfBirth)
+                            
+                            // Validate age immediately
+                            const ageError = validateAge(dateOfBirth, form.min_age)
+                            if (ageError) {
+                              updateParticipantForm(index, 'ageError', ageError)
+                              setError('One or more participants do not meet the minimum age requirement')
+                            } else {
+                              updateParticipantForm(index, 'ageError', undefined)
+                            }
+                          }}
+                          required
+                          className={form.idDocumentError ? 'border-red-500' : ''}
+                        />
+                        {form.idDocumentError && (
+                          <p className="text-red-500 text-sm mt-1">{form.idDocumentError}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor={`date_of_birth_${index}`} className="text-sm font-medium text-gray-700 mb-2 block">
+                        Date of Birth <span className="text-red-500">*</span>
+                      </Label>
+                      {/* Check if this is from a saved member (has masked ID) */}
+                      {form.id_document_number && form.id_document_number.includes('*') ? (
+                        // Read-only date of birth from saved member
+                        <div className="relative">
+                          <Input
+                            id={`date_of_birth_${index}`}
+                            type="date"
+                            value={form.date_of_birth}
+                            readOnly
+                            className="bg-gray-50 h-11"
+                          />
+                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                          </div>
+                        </div>
+                      ) : (
+                        // Editable date of birth for new entries
+                        <div>
+                          <Input
+                            id={`date_of_birth_${index}`}
+                            type="date"
+                            value={form.date_of_birth}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              console.log('🔍 Date of birth changed for index:', index, 'to:', value)
+                              
+                              // Get the current form data
+                              const currentForm = participantForms[index]
+                              
+                              // Validate age immediately
+                              const ageError = validateAge(value, currentForm.min_age)
+                              console.log('🔍 Age validation result:', { ageError, min_age: currentForm.min_age })
+                              
+                              // Update form with validation result
+                              updateParticipantForm(index, 'date_of_birth', value)
+                              if (ageError) {
+                                updateParticipantForm(index, 'ageError', ageError)
+                                setError('One or more participants do not meet the minimum age requirement')
+                              } else {
+                                updateParticipantForm(index, 'ageError', undefined)
+                                // Only clear error if no other age errors exist
+                                const otherFormsWithAgeErrors = participantForms.some((f, idx) => idx !== index && f.ageError)
+                                if (!otherFormsWithAgeErrors) {
+                                  setError('')
+                                }
+                              }
+                            }}
+                            onBlur={() => {
+                              console.log('🔍 Date of birth onBlur triggered for index:', index)
+                              validateParticipantAge(index)
+                              // Check for duplicate after age validation
+                              setTimeout(() => {
+                                checkForDuplicateParticipant(index)
+                              }, 100)
+                            }}
+                            required
+                            className={`h-11 ${form.dateOfBirthError || form.ageError ? 'border-red-500' : ''}`}
+                          />
+                          {form.dateOfBirthError && (
+                            <p className="text-red-500 text-sm mt-1">{form.dateOfBirthError}</p>
+                          )}
+                          {form.ageError && (
+                            <p className="text-red-500 text-sm mt-1">{form.ageError}</p>
+                          )}
+                        </div>
                       )}
                     </div>
                     <div className="flex items-center space-x-2">
@@ -1625,50 +2088,167 @@ export default function EventRegistrationPage() {
 
                   <Separator />
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor={`medical_aid_name_${index}`}>Medical Aid Name</Label>
-                      <Input
-                        id={`medical_aid_name_${index}`}
-                        value={form.medical_aid_name}
-                        onChange={(e) => updateParticipantForm(index, 'medical_aid_name', e.target.value)}
-                      />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor={`medical_aid_name_${index}`} className="text-sm font-medium text-gray-700">
+                        Medical Aid Name
+                      </Label>
+                      <div className="relative">
+                        <Heart className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          id={`medical_aid_name_${index}`}
+                          value={form.medical_aid_name || ''}
+                          onChange={(e) => updateParticipantForm(index, 'medical_aid_name', e.target.value)}
+                          className="pl-10 h-11"
+                          placeholder="Enter medical aid name"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <Label htmlFor={`medical_aid_number_${index}`}>Medical Aid Number</Label>
-                      <Input
-                        id={`medical_aid_number_${index}`}
-                        value={form.medical_aid_number}
-                        onChange={(e) => updateParticipantForm(index, 'medical_aid_number', e.target.value)}
-                      />
+                    <div className="space-y-2">
+                      <Label htmlFor={`medical_aid_number_${index}`} className="text-sm font-medium text-gray-700">
+                        Medical Aid Number
+                      </Label>
+                      <div className="relative">
+                        <Heart className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          id={`medical_aid_number_${index}`}
+                          value={form.medical_aid_number || ''}
+                          onChange={(e) => updateParticipantForm(index, 'medical_aid_number', e.target.value)}
+                          className="pl-10 h-11"
+                          placeholder="Enter medical aid number"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <Label htmlFor={`emergency_contact_name_${index}`}>Emergency Contact Name *</Label>
-                      <Input
-                        id={`emergency_contact_name_${index}`}
-                        value={form.emergency_contact_name}
-                        onChange={(e) => updateParticipantForm(index, 'emergency_contact_name', e.target.value)}
-                        required
-                        className={form.emergencyContactNameError ? 'border-red-500' : ''}
-                      />
+                    <div className="space-y-2">
+                      <Label htmlFor={`emergency_contact_name_${index}`} className="text-sm font-medium text-gray-700">
+                        Emergency Contact Name <span className="text-red-500">*</span>
+                      </Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          id={`emergency_contact_name_${index}`}
+                          value={form.emergency_contact_name || ''}
+                          onChange={(e) => updateParticipantForm(index, 'emergency_contact_name', e.target.value)}
+                          required
+                          className={`pl-10 h-11 ${form.emergencyContactNameError ? 'border-red-500' : ''}`}
+                          placeholder="Enter emergency contact name"
+                        />
+                      </div>
                       {form.emergencyContactNameError && (
                         <p className="text-red-500 text-sm mt-1">{form.emergencyContactNameError}</p>
                       )}
                     </div>
                     <div>
-                      <Label htmlFor={`emergency_contact_number_${index}`}>Emergency Contact Number *</Label>
-                      <Input
+                      <MobileInput
                         id={`emergency_contact_number_${index}`}
+                        label="Emergency Contact Number"
                         value={form.emergency_contact_number}
-                        onChange={(e) => updateParticipantForm(index, 'emergency_contact_number', e.target.value)}
+                        onChange={(value) => updateParticipantForm(index, 'emergency_contact_number', value)}
+                        onValidationChange={(isValid, error) => {
+                          if (!isValid && error) {
+                            updateParticipantForm(index, 'emergencyContactNumberError', error)
+                          } else {
+                            updateParticipantForm(index, 'emergencyContactNumberError', '')
+                          }
+                        }}
                         required
-                        className={form.emergencyContactNumberError ? 'border-red-500' : ''}
+                        showValidation={true}
                       />
-                      {form.emergencyContactNumberError && (
-                        <p className="text-red-500 text-sm mt-1">{form.emergencyContactNumberError}</p>
-                      )}
                     </div>
                   </div>
+
+                  {/* License Section - Only show if event requires license */}
+                  {registrationDetails?.event.license_required && (
+                    <>
+                      <Separator />
+                      
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <Award className="w-5 h-5 text-blue-600" />
+                          <h3 className="text-lg font-medium">Sport License Required</h3>
+                        </div>
+                        
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                          <p className="text-sm text-blue-800 mb-3">
+                            This event requires a valid {registrationDetails.event.license_type?.replace('_', ' ')} license.
+                            {registrationDetails.event.license_details && (
+                              <span className="block mt-1 text-blue-700">{registrationDetails.event.license_details}</span>
+                            )}
+                          </p>
+                          
+                          {form.valid_license ? (
+                            // Show valid license information
+                            <div className="bg-green-50 p-3 rounded border border-green-200">
+                              <div className="flex items-center gap-2 mb-2">
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                                <span className="text-sm font-medium text-green-800">Valid License Found</span>
+                              </div>
+                              <div className="text-sm text-green-700 space-y-1">
+                                <div><strong>License Number:</strong> {form.license_number}</div>
+                                {form.license_authority && (
+                                  <div><strong>Authority:</strong> {form.license_authority}</div>
+                                )}
+                                <div><strong>Expires:</strong> {form.license_expiry_date ? new Date(form.license_expiry_date).toLocaleDateString() : 'N/A'}</div>
+                              </div>
+                            </div>
+                          ) : (
+                            // Show license input or temp license option
+                            <div className="space-y-3">
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`needs_temp_license_${index}`}
+                                  checked={form.needs_temp_license || false}
+                                  onCheckedChange={(checked) => {
+                                    updateParticipantForm(index, 'needs_temp_license', checked)
+                                    // Update price when temp license is selected/deselected
+                                    const currentPrice = form.price || 0
+                                    const tempFee = Number(form.temp_license_fee) || 0
+                                    if (checked) {
+                                      updateParticipantForm(index, 'price', currentPrice + tempFee)
+                                    } else {
+                                      updateParticipantForm(index, 'price', Math.max(0, currentPrice - tempFee))
+                                    }
+                                  }}
+                                />
+                                <Label htmlFor={`needs_temp_license_${index}`} className="text-sm">
+                                  Purchase temporary license (R{Number(form.temp_license_fee || 0).toFixed(2)})
+                                </Label>
+                              </div>
+                              
+                              {!form.needs_temp_license && (
+                                <div className="space-y-2">
+                                  <Label htmlFor={`license_number_${index}`}>Permanent License Number</Label>
+                                  <Input
+                                    id={`license_number_${index}`}
+                                    value={form.license_number || ''}
+                                    onChange={(e) => updateParticipantForm(index, 'license_number', e.target.value)}
+                                    onBlur={() => savePermanentLicense(index)}
+                                    placeholder="Enter your license number"
+                                  />
+                                  <p className="text-xs text-gray-600">
+                                    If you have a permanent license, enter it here. Otherwise, select the temporary license option above.
+                                  </p>
+                                </div>
+                              )}
+                              
+                              {form.needs_temp_license && (
+                                <div className="bg-orange-50 p-3 rounded border border-orange-200">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <AlertCircle className="w-4 h-4 text-orange-600" />
+                                    <span className="text-sm font-medium text-orange-800">Temporary License</span>
+                                  </div>
+                                  <p className="text-xs text-orange-700">
+                                    A temporary license fee of R{Number(form.temp_license_fee || 0).toFixed(2)} will be added to your registration.
+                                    This license is valid only for this event.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   {/* Merchandise Section */}
                   {registrationDetails?.event?.merchandise && registrationDetails.event.merchandise.length > 0 && (
@@ -2021,6 +2601,16 @@ export default function EventRegistrationPage() {
                         }, 0) ?? 0).toFixed(2)}</span>
                       </div>
                     </>
+                  )}
+
+                  {/* Temporary License Fees */}
+                  {participantForms.some(form => form.needs_temp_license) && (
+                    <div className="flex justify-between items-center text-base border-t pt-2">
+                      <span>Temporary License Fees</span>
+                      <span>R{Number(participantForms?.reduce((total, form) => {
+                        return total + (form.needs_temp_license ? (Number(form.temp_license_fee) || 0) : 0)
+                      }, 0) ?? 0).toFixed(2)}</span>
+                    </div>
                   )}
                   
                   {/* Final Total */}
